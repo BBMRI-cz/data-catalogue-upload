@@ -1,18 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 import os
 from typing import Any, cast
 
 import requests
 
-from application.dto import (
-    build_clinical_catalogue_dto,
-    build_material_catalogue_dto,
-    build_personal_catalogue_dto,
-    build_radiology_catalogue_dto,
-    build_sequencing_catalogue_dto,
-    build_wsi_catalogue_dto,
-)
 from domain.models import PatientAggregate
 
 
@@ -105,21 +98,19 @@ class HttpCatalogueGateway:
                         "sample_id": sample.sample_id,
                         "predictive_number": sample.predictive_number,
                         "bioptic_number": sample.bioptic_number,
-                        "material": build_material_catalogue_dto(sample),
-                        "sequencing": build_sequencing_catalogue_dto(sample.sequencing)
+                        "material": asdict(sample.material)
+                        if sample.material
+                        else None,
+                        "sequencing": [asdict(entry) for entry in sample.sequencing]
                         if sample.sequencing
                         else None,
-                        "wsi": build_wsi_catalogue_dto(sample.wsi)
-                        if sample.wsi
-                        else None,
+                        "wsi": asdict(sample.wsi) if sample.wsi else None,
                     }
                     for sample in patient.samples
                 ],
-                "radiology": [
-                    build_radiology_catalogue_dto(entry) for entry in patient.radiology
-                ],
-                "personal": build_personal_catalogue_dto(patient),
-                "clinical": build_clinical_catalogue_dto(patient),
+                "radiology": [asdict(entry) for entry in patient.radiology],
+                "personal": asdict(patient.personal) if patient.personal else None,
+                "clinical": asdict(patient.clinical) if patient.clinical else None,
                 "payload": patient.payload,
             },
         )

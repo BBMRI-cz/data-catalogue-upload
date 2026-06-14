@@ -79,7 +79,7 @@ class WsiBuilder:
             payload,
             [
                 "assay_identifier",
-                "slide_container_identifier",
+                "has_input_slide_container",
                 "staining_method",
                 "assay_type",
                 "whole_slide_imaging",
@@ -94,7 +94,7 @@ class WsiBuilder:
         )
         return SlidePreparationAssay(
             assay_identifier=payload.get("assay_identifier"),
-            slide_container_identifier=payload.get("slide_container_identifier"),
+            has_input_slide_container=payload.get("has_input_slide_container"),
             staining_method=payload.get("staining_method"),
             assay_type=payload.get("assay_type"),
             whole_slide_imaging=self._build_whole_slide_imaging(

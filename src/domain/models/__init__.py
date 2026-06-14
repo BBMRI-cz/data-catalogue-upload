@@ -1,29 +1,38 @@
-from domain.models import (
-    Analysis,
-    CatalogueOperation,
+from domain.models.clinical import (
     Clinical,
-    CtSeries,
-    DxSeries,
-    FixedBlock,
-    ImagingSeriesBase,
-    ImagingStudy,
     Material,
-    MgSeries,
-    MrSeries,
     PatientAggregate,
     Personal,
-    PlannedOperation,
-    RadiologyData,
     Sample,
+)
+from domain.models.radiology import (
+    CtSeries,
+    DxSeries,
+    ImagingSeriesBase,
+    ImagingStudy,
+    MgSeries,
+    MrSeries,
+    RadiologyData,
+    UsSeries,
+)
+from domain.models.sequencing import (
+    Analysis,
     SamplePreparation,
     Sequencing,
-    SequencingEntry,
     SequencingData,
-    SlideContainer,
-    SlidePreparationAssay,
+    SequencingEntry,
+)
+from domain.models.sync import (
+    CatalogueOperation,
+    now_utc,
+    PlannedOperation,
     SyncState,
     SyncStatus,
-    UsSeries,
+)
+from domain.models.wsi import (
+    FixedBlock,
+    SlideContainer,
+    SlidePreparationAssay,
     WholeSlideImaging,
     WsiData,
 )
@@ -47,8 +56,8 @@ __all__ = [
     "Sample",
     "SamplePreparation",
     "Sequencing",
-    "SequencingEntry",
     "SequencingData",
+    "SequencingEntry",
     "SlideContainer",
     "SlidePreparationAssay",
     "SyncState",
@@ -56,4 +65,5 @@ __all__ = [
     "UsSeries",
     "WholeSlideImaging",
     "WsiData",
+    "now_utc",
 ]

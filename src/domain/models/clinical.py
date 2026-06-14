@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+import hashlib
+import json
 
-from domain.models import Clinical, Material, PatientAggregate, Personal, Sample
+from domain.models.radiology import RadiologyData
+from domain.models.sequencing import SequencingData
+from domain.models.wsi import WsiData
 
 
 @dataclass(frozen=True)
-class PersonalDto:
+class Personal:
     personal_identifier: str | None = None
     year_of_birth: int | None = None
-    sex_at_birth: str | None = None
+    gender_at_birth: str | None = None
     gender_identity: str | None = None
 
 
 @dataclass(frozen=True)
-class ClinicalDto:
+class Clinical:
     clinical_identifier: str | None = None
     belongs_to_person: str | None = None
     clinical_diagnosis: list[str] | None = None
@@ -24,7 +27,7 @@ class ClinicalDto:
 
 
 @dataclass(frozen=True)
-class MaterialDto:
+class Material:
     material_identifier: str | None = None
     collected_from_person: str | None = None
     belongs_to_diagnosis: list[str] | None = None
@@ -44,34 +47,30 @@ class MaterialDto:
     derived_from: str | None = None
 
 
-def _personal_to_dto(personal: Personal | None) -> PersonalDto | None:
-    if personal is None:
-        return None
-    return PersonalDto(**asdict(personal))
+@dataclass(frozen=True)
+class Sample:
+    sample_id: str
+    predictive_number: str | None
+    bioptic_number: str | None
+    payload: dict
+    material: Material | None = None
+    sequencing: SequencingData | None = None
+    wsi: WsiData | None = None
 
 
-def _clinical_to_dto(clinical: Clinical | None) -> ClinicalDto | None:
-    if clinical is None:
-        return None
-    return ClinicalDto(**asdict(clinical))
+@dataclass(frozen=True)
+class PatientAggregate:
+    patient_id: str
+    accession_numbers: list[str]
+    personal: Personal | None
+    clinical: Clinical | None
+    samples: list[Sample]
+    payload: dict
+    radiology: RadiologyData
 
+    def is_upload_eligible(self) -> bool:
+        return len(self.samples) > 0
 
-def material_to_dto(material: Material | None) -> MaterialDto | None:
-    if material is None:
-        return None
-    return MaterialDto(**asdict(material))
-
-
-def build_personal_catalogue_dto(patient: PatientAggregate) -> dict[str, Any] | None:
-    personal = _personal_to_dto(patient.personal)
-    return asdict(personal) if personal else None
-
-
-def build_clinical_catalogue_dto(patient: PatientAggregate) -> dict[str, Any] | None:
-    clinical = _clinical_to_dto(patient.clinical)
-    return asdict(clinical) if clinical else None
-
-
-def build_material_catalogue_dto(sample: Sample) -> dict[str, Any] | None:
-    material = material_to_dto(sample.material)
-    return asdict(material) if material else None
+    def source_fingerprint(self) -> str:
+        serialized = json.dumps(asdict(self), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

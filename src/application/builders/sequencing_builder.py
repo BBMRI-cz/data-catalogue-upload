@@ -3,9 +3,9 @@ from __future__ import annotations
 from domain.models import (
     Analysis,
     SamplePreparation,
-    SequencingEntry,
+    Sequencing,
     SequencingData,
-    SequencingRun,
+    SequencingEntry,
 )
 from domain.utils import as_list, has_any_keys, resolve_source_id
 
@@ -70,13 +70,13 @@ class SequencingBuilder:
             target_enrichment_kit=payload.get("target_enrichment_kit"),
             full_sequence_genes=payload.get("full_sequence_genes"),
             partial_sequence_genes=payload.get("partial_sequence_genes"),
-            umi=payload.get("umi"),
+            umis_present=payload.get("umis_present"),
             intended_insert_size=payload.get("intended_insert_size"),
             intended_read_length=payload.get("intended_read_length"),
-            sequencing_run=sequencing_run,
+            sequencing=sequencing_run,
         )
 
-    def _build_sequencing_run(self, payload: object) -> SequencingRun | None:
+    def _build_sequencing_run(self, payload: object) -> Sequencing | None:
         if not isinstance(payload, dict) or not payload:
             return None
         if not has_any_keys(
@@ -86,7 +86,7 @@ class SequencingBuilder:
                 "belongs_to_sample_preparation",
                 "sequencing_date",
                 "sequencing_platform",
-                "instrument_model",
+                "sequencing_instrument_model",
                 "sequencing_method",
                 "analysis",
             ],
@@ -97,19 +97,19 @@ class SequencingBuilder:
             for item in as_list(payload.get("analysis"))
             if isinstance(item, dict)
         ]
-        return SequencingRun(
+        return Sequencing(
             sequencing_identifier=payload.get("sequencing_identifier"),
             belongs_to_sample_preparation=payload.get("belongs_to_sample_preparation"),
             sequencing_date=payload.get("sequencing_date"),
             sequencing_platform=payload.get("sequencing_platform"),
-            instrument_model=payload.get("instrument_model"),
+            sequencing_instrument_model=payload.get("sequencing_instrument_model"),
             sequencing_method=payload.get("sequencing_method"),
             median_read_depth=payload.get("median_read_depth"),
             observed_read_length=payload.get("observed_read_length"),
             observed_insert_size=payload.get("observed_insert_size"),
-            percent_q30=payload.get("percent_q30"),
-            percent_tr20=payload.get("percent_tr20"),
-            sequencing_quality_metrics=payload.get("sequencing_quality_metrics"),
+            percentage_q30=payload.get("percentage_q30"),
+            percentage_tr20=payload.get("percentage_tr20"),
+            other_quality_metrics=payload.get("other_quality_metrics"),
             analysis=analysis[0] if analysis else None,
         )
 
@@ -117,12 +117,12 @@ class SequencingBuilder:
         return Analysis(
             analysis_identifier=payload.get("analysis_identifier"),
             belongs_to_sequencing=payload.get("belongs_to_sequencing"),
-            physical_location=payload.get("physical_location"),
-            abstract_location=payload.get("abstract_location"),
-            data_formats=payload.get("data_formats"),
-            algorithms=payload.get("algorithms"),
-            reference_genome=payload.get("reference_genome"),
-            bioinformatic_protocol=payload.get("bioinformatic_protocol"),
+            physical_data_location=payload.get("physical_data_location"),
+            abstract_data_location=payload.get("abstract_data_location"),
+            data_formats_stored=payload.get("data_formats_stored"),
+            algorithms_used=payload.get("algorithms_used"),
+            reference_genome_used=payload.get("reference_genome_used"),
+            bioinformatic_protocol_used=payload.get("bioinformatic_protocol_used"),
             bioinformatic_protocol_deviation=payload.get(
                 "bioinformatic_protocol_deviation"
             ),
