@@ -8,7 +8,7 @@ class ClinicalBuilder:
         return Personal(
             personal_identifier=payload.get("personal_identifier"),
             year_of_birth=payload.get("year_of_birth"),
-            sex_at_birth=payload.get("sex_at_birth"),
+            gender_at_birth=payload.get("gender_at_birth"),
             gender_identity=payload.get("gender_identity"),
         )
 

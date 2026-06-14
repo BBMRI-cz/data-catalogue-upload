@@ -1,6 +1,18 @@
 from typing import Protocol
 
-from domain.models import PatientAggregate, PlannedOperation, SyncState
+from domain.models import (
+    AnyOperation,
+    Clinical,
+    EntitySyncState,
+    ImagingStudy,
+    PatientAggregate,
+    PatientSyncState,
+    PatientSyncStates,
+    Personal,
+    Sample,
+    SequencingData,
+    WsiData,
+)
 
 
 class SourceDataGateway(Protocol):
@@ -14,22 +26,36 @@ class SourceDataGateway(Protocol):
 
 
 class CatalogueGateway(Protocol):
-    def upsert_patient(self, patient: PatientAggregate) -> str: ...
+    def upsert_patient(
+        self, patient_id: str, personal: Personal | None, clinical: Clinical | None
+    ) -> str: ...
 
-    def delete_patient(self, entity_key: str, remote_id: str | None) -> None: ...
+    def upsert_sample(self, sample: Sample, patient_id: str) -> str: ...
+
+    def upsert_sequencing(self, sequencing: SequencingData, sample_id: str) -> str: ...
+
+    def upsert_wsi(self, wsi: WsiData, sample_id: str) -> str: ...
+
+    def upsert_imaging_study(self, study: ImagingStudy, patient_id: str) -> str: ...
+
+    def delete(
+        self, entity_type: str, entity_key: str, remote_id: str | None
+    ) -> None: ...
 
 
 class SyncStateRepository(Protocol):
-    def get(self, entity_type: str, entity_key: str) -> SyncState | None: ...
+    def get_all_for_patient(self, patient_id: str) -> PatientSyncStates: ...
 
-    def save(self, state: SyncState) -> None: ...
+    def save(self, state: EntitySyncState) -> None: ...
 
-    def mark_missing_as_deleted(
-        self, entity_type: str, seen_keys: set[str], run_id: str
-    ) -> list[SyncState]: ...
+    def soft_delete_children(self, parent_key: str, run_id: str) -> None: ...
+
+    def mark_missing_patients_as_deleted(
+        self, seen_ids: set[str], run_id: str
+    ) -> list[PatientSyncState]: ...
 
 
 class SyncPlanner(Protocol):
-    def plan_patient(
-        self, patient: PatientAggregate, current: SyncState | None
-    ) -> PlannedOperation: ...
+    def plan(
+        self, aggregate: PatientAggregate, existing: PatientSyncStates
+    ) -> list[AnyOperation]: ...

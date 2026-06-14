@@ -1,45 +1,55 @@
-from domain.models import (
-    Analysis,
-    AnyOperation,
+from domain.models.patient import (
     Clinical,
+    PatientAggregate,
+    Personal,
+)
+from domain.models.radiology import (
     CtSeries,
     DxSeries,
-    EntitySyncState,
-    FixedBlock,
     ImagingSeriesBase,
     ImagingStudy,
-    ImagingStudyOperation,
-    ImagingStudySyncState,
-    Material,
     MgSeries,
     MrSeries,
-    OperationBase,
-    PatientAggregate,
-    PatientOperation,
-    PatientSyncState,
-    PatientSyncStates,
-    Personal,
     RadiologyData,
+    UsSeries,
+)
+from domain.models.sample import (
+    Material,
     Sample,
-    SampleOperation,
+)
+from domain.models.sequencing import (
+    Analysis,
     SamplePreparation,
-    SampleSyncState,
     Sequencing,
     SequencingData,
     SequencingEntry,
+)
+from domain.models.sync import (
+    AnyOperation,
+    EntitySyncState,
+    ImagingStudyOperation,
+    ImagingStudySyncState,
+    OperationBase,
+    PatientOperation,
+    PatientSyncState,
+    PatientSyncStates,
+    SampleOperation,
+    SampleSyncState,
     SequencingOperation,
     SequencingSyncState,
-    SlideContainer,
-    SlidePreparationAssay,
     SyncOp,
     SyncStatus,
-    UsSeries,
-    WholeSlideImaging,
-    WsiData,
     WsiOperation,
     WsiSyncState,
     compute_fingerprint,
     now_utc,
+)
+from domain.models.wsi import (
+    FixedBlock,
+    SlideContainer,
+    SlidePreparationAssay,
+    WholeSlideImaging,
+    WsiData,
 )
 
 __all__ = [

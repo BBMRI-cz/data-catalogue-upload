@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import uuid
+
 from application.builders.clinical_builder import ClinicalBuilder
 from application.builders.radiology_builder import RadiologyBuilder
 from application.builders.sequencing_builder import SequencingBuilder
@@ -13,14 +14,21 @@ from application.interfaces.ports import (
     SyncStateRepository,
 )
 from domain.models import (
-    CatalogueOperation,
+    AnyOperation,
+    ImagingStudyOperation,
     PatientAggregate,
+    PatientOperation,
     RadiologyData,
     Sample,
-    SyncState,
+    SampleOperation,
+    SequencingOperation,
+    SyncOp,
     SyncStatus,
+    WsiOperation,
     now_utc,
 )
+
+_DELETE_ENTITY_TYPE = "patient"
 
 
 @dataclass
@@ -60,72 +68,94 @@ class CatalogueSyncService:
         summary = RunSummary(run_id=run_id)
         raw_patients = self.source_gateway.fetch_patients()
 
-        seen_keys: set[str] = set()
+        seen_patient_ids: set[str] = set()
         for raw_patient in raw_patients:
-            patient = self._build_patient_aggregate(raw_patient)
+            aggregate = self._build_patient_aggregate(raw_patient)
             summary.scanned += 1
-            seen_keys.add(patient.patient_id)
+            seen_patient_ids.add(aggregate.patient_id)
 
-            existing = self.state_repository.get("patient", patient.patient_id)
-            operation = self.planner.plan_patient(patient, existing)
-            if operation.operation == CatalogueOperation.SKIP:
-                summary.skipped += 1
-                continue
+            existing = self.state_repository.get_all_for_patient(aggregate.patient_id)
+            for operation in self.planner.plan(aggregate, existing):
+                self._execute(operation, run_id, summary)
 
-            summary.changed += 1
-            try:
-                if operation.operation in (
-                    CatalogueOperation.CREATE,
-                    CatalogueOperation.UPDATE,
-                ):
-                    remote_id = self.catalogue_gateway.upsert_patient(patient)
-                    summary.uploaded += 1
-                    self.state_repository.save(
-                        SyncState(
-                            entity_type="patient",
-                            entity_key=patient.patient_id,
-                            source_fingerprint=operation.source_fingerprint or "",
-                            catalogue_remote_id=remote_id,
-                            status=SyncStatus.SYNCED,
-                            is_deleted=False,
-                            last_seen_at=now_utc(),
-                            last_synced_at=now_utc(),
-                            last_error=None,
-                            run_id=run_id,
-                        )
-                    )
-            except Exception as exc:  # prototype: keep run moving
-                summary.failed += 1
-                self.state_repository.save(
-                    SyncState(
-                        entity_type="patient",
-                        entity_key=patient.patient_id,
-                        source_fingerprint=operation.source_fingerprint or "",
-                        catalogue_remote_id=existing.catalogue_remote_id
-                        if existing
-                        else None,
-                        status=SyncStatus.FAILED,
-                        is_deleted=False,
-                        last_seen_at=now_utc(),
-                        last_synced_at=existing.last_synced_at if existing else None,
-                        last_error=str(exc),
-                        run_id=run_id,
-                    )
-                )
+        self._delete_missing_patients(seen_patient_ids, run_id, summary)
+        return summary
 
-        missing_states = self.state_repository.mark_missing_as_deleted(
-            entity_type="patient", seen_keys=seen_keys, run_id=run_id
+    def _delete_missing_patients(
+        self, seen_patient_ids: set[str], run_id: str, summary: RunSummary
+    ) -> None:
+        missing = self.state_repository.mark_missing_patients_as_deleted(
+            seen_patient_ids, run_id
         )
-        for state in missing_states:
+        for state in missing:
             try:
-                self.catalogue_gateway.delete_patient(
-                    state.entity_key, state.catalogue_remote_id
+                self.catalogue_gateway.delete(
+                    _DELETE_ENTITY_TYPE, state.patient_id, state.catalogue_remote_id
                 )
                 summary.deleted += 1
-            except Exception:
+            except Exception:  # prototype: keep run moving
                 summary.failed += 1
+            # children are soft-deleted in the DB only, no gateway calls
+            self.state_repository.soft_delete_children(state.patient_id, run_id)
 
-        return summary
+    def _execute(
+        self, operation: AnyOperation, run_id: str, summary: RunSummary
+    ) -> None:
+        operation.state.run_id = run_id
+
+        if operation.op == SyncOp.SKIP:
+            summary.skipped += 1
+            self.state_repository.save(operation.state)
+            return
+
+        if operation.op == SyncOp.DELETE:
+            # soft delete: state already marked deleted by the planner, DB only
+            summary.deleted += 1
+            self.state_repository.save(operation.state)
+            return
+
+        summary.changed += 1
+        try:
+            remote_id = self._upsert(operation)
+            operation.state.catalogue_remote_id = remote_id
+            operation.state.status = SyncStatus.SYNCED
+            operation.state.is_deleted = False
+            operation.state.last_synced_at = now_utc()
+            summary.uploaded += 1
+            self.state_repository.save(operation.state)
+        except Exception as exc:  # prototype: keep run moving
+            summary.failed += 1
+            operation.state.status = SyncStatus.FAILED
+            operation.state.last_error = str(exc)
+            self.state_repository.save(operation.state)
+
+    def _upsert(self, operation: AnyOperation) -> str:
+        if isinstance(operation, PatientOperation):
+            personal, clinical = operation.entity if operation.entity else (None, None)
+            return self.catalogue_gateway.upsert_patient(
+                operation.state.patient_id, personal, clinical
+            )
+        if isinstance(operation, SampleOperation):
+            assert operation.entity is not None
+            return self.catalogue_gateway.upsert_sample(
+                operation.entity, operation.state.patient_id
+            )
+        if isinstance(operation, SequencingOperation):
+            assert operation.entity is not None
+            return self.catalogue_gateway.upsert_sequencing(
+                operation.entity, operation.state.sample_id
+            )
+        if isinstance(operation, WsiOperation):
+            assert operation.entity is not None
+            return self.catalogue_gateway.upsert_wsi(
+                operation.entity, operation.state.sample_id
+            )
+        if isinstance(operation, ImagingStudyOperation):
+            assert operation.entity is not None
+            return self.catalogue_gateway.upsert_imaging_study(
+                operation.entity, operation.state.patient_id
+            )
+        raise TypeError(f"Unsupported operation type: {type(operation)!r}")
 
     def _build_patient_aggregate(self, raw_patient: dict) -> PatientAggregate:
         personal = self.clinical_builder.build_personal(raw_patient)
