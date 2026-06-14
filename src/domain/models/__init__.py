@@ -1,9 +1,7 @@
-from domain.models.clinical import (
+from domain.models.patient import (
     Clinical,
-    Material,
     PatientAggregate,
     Personal,
-    Sample,
 )
 from domain.models.radiology import (
     CtSeries,
@@ -15,6 +13,10 @@ from domain.models.radiology import (
     RadiologyData,
     UsSeries,
 )
+from domain.models.sample import (
+    Material,
+    Sample,
+)
 from domain.models.sequencing import (
     Analysis,
     SamplePreparation,
@@ -23,11 +25,24 @@ from domain.models.sequencing import (
     SequencingEntry,
 )
 from domain.models.sync import (
-    CatalogueOperation,
-    now_utc,
-    PlannedOperation,
-    SyncState,
+    AnyOperation,
+    EntitySyncState,
+    ImagingStudyOperation,
+    ImagingStudySyncState,
+    OperationBase,
+    PatientOperation,
+    PatientSyncState,
+    PatientSyncStates,
+    SampleOperation,
+    SampleSyncState,
+    SequencingOperation,
+    SequencingSyncState,
+    SyncOp,
     SyncStatus,
+    WsiOperation,
+    WsiSyncState,
+    compute_fingerprint,
+    now_utc,
 )
 from domain.models.wsi import (
     FixedBlock,
@@ -39,31 +54,44 @@ from domain.models.wsi import (
 
 __all__ = [
     "Analysis",
-    "CatalogueOperation",
+    "AnyOperation",
     "Clinical",
     "CtSeries",
     "DxSeries",
+    "EntitySyncState",
     "FixedBlock",
     "ImagingSeriesBase",
     "ImagingStudy",
+    "ImagingStudyOperation",
+    "ImagingStudySyncState",
     "Material",
     "MgSeries",
     "MrSeries",
+    "OperationBase",
     "PatientAggregate",
+    "PatientOperation",
+    "PatientSyncState",
+    "PatientSyncStates",
     "Personal",
-    "PlannedOperation",
     "RadiologyData",
     "Sample",
+    "SampleOperation",
     "SamplePreparation",
+    "SampleSyncState",
     "Sequencing",
     "SequencingData",
     "SequencingEntry",
+    "SequencingOperation",
+    "SequencingSyncState",
     "SlideContainer",
     "SlidePreparationAssay",
-    "SyncState",
+    "SyncOp",
     "SyncStatus",
     "UsSeries",
     "WholeSlideImaging",
     "WsiData",
+    "WsiOperation",
+    "WsiSyncState",
+    "compute_fingerprint",
     "now_utc",
 ]

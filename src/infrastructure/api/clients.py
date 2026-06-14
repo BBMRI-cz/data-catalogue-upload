@@ -6,7 +6,14 @@ from typing import Any, cast
 
 import requests
 
-from domain.models import PatientAggregate
+from domain.models import (
+    Clinical,
+    ImagingStudy,
+    Personal,
+    Sample,
+    SequencingData,
+    WsiData,
+)
 
 
 class ApiClient:
@@ -84,44 +91,79 @@ class HttpSourceDataGateway:
 
 
 class HttpCatalogueGateway:
+    """Per-entity catalogue gateway.
+
+    Each FAIR Genomes table has its own catalogue endpoint. Full per-table
+    wiring is a follow-up; for now each method posts to its entity path and
+    falls back to the source key when the catalogue does not echo an id.
+    """
+
     def __init__(self, catalogue_client: ApiClient) -> None:
         self.catalogue_client = catalogue_client
 
-    def upsert_patient(self, patient: PatientAggregate) -> str:
+    def upsert_patient(
+        self, patient_id: str, personal: Personal | None, clinical: Clinical | None
+    ) -> str:
         response = self.catalogue_client.post(
             "/patients/upsert",
             payload={
-                "external_id": patient.patient_id,
-                "accession_numbers": patient.accession_numbers,
-                "samples": [
-                    {
-                        "sample_id": sample.sample_id,
-                        "predictive_number": sample.predictive_number,
-                        "bioptic_number": sample.bioptic_number,
-                        "material": asdict(sample.material)
-                        if sample.material
-                        else None,
-                        "sequencing": [asdict(entry) for entry in sample.sequencing]
-                        if sample.sequencing
-                        else None,
-                        "wsi": asdict(sample.wsi) if sample.wsi else None,
-                    }
-                    for sample in patient.samples
-                ],
-                "radiology": [asdict(entry) for entry in patient.radiology],
-                "personal": asdict(patient.personal) if patient.personal else None,
-                "clinical": asdict(patient.clinical) if patient.clinical else None,
-                "payload": patient.payload,
+                "external_id": patient_id,
+                "personal": asdict(personal) if personal else None,
+                "clinical": asdict(clinical) if clinical else None,
             },
         )
-        remote_id = response.get("id") or response.get("patient_id")
-        if not remote_id:
-            raise RuntimeError("Catalogue upsert response does not include id")
-        return str(remote_id)
+        return self._remote_id(response, fallback=patient_id)
 
-    def delete_patient(self, entity_key: str, remote_id: str | None) -> None:
+    def upsert_sample(self, sample: Sample, patient_id: str) -> str:
+        response = self.catalogue_client.post(
+            "/samples/upsert",
+            payload={
+                "external_id": sample.sample_id,
+                "patient_id": patient_id,
+                "predictive_number": sample.predictive_number,
+                "bioptic_number": sample.bioptic_number,
+                "material": asdict(sample.material) if sample.material else None,
+            },
+        )
+        return self._remote_id(response, fallback=sample.sample_id)
+
+    def upsert_sequencing(self, sequencing: SequencingData, sample_id: str) -> str:
+        first = sequencing[0] if sequencing else None
+        fallback = first.predictive_number if first else sample_id
+        response = self.catalogue_client.post(
+            "/sequencing/upsert",
+            payload={
+                "sample_id": sample_id,
+                "entries": [asdict(entry) for entry in sequencing],
+            },
+        )
+        return self._remote_id(response, fallback=fallback)
+
+    def upsert_wsi(self, wsi: WsiData, sample_id: str) -> str:
+        response = self.catalogue_client.post(
+            "/wsi/upsert",
+            payload={"sample_id": sample_id, "wsi": asdict(wsi)},
+        )
+        return self._remote_id(response, fallback=sample_id)
+
+    def upsert_imaging_study(self, study: ImagingStudy, patient_id: str) -> str:
+        response = self.catalogue_client.post(
+            "/imaging-studies/upsert",
+            payload={"patient_id": patient_id, "imaging_study": asdict(study)},
+        )
+        return self._remote_id(response, fallback=study.accession_number)
+
+    def delete(self, entity_type: str, entity_key: str, remote_id: str | None) -> None:
         target_id = remote_id or entity_key
-        self.catalogue_client.delete(f"/patients/{target_id}")
+        self.catalogue_client.delete(f"/{entity_type}/{target_id}")
+
+    @staticmethod
+    def _remote_id(response: Any, fallback: str) -> str:
+        if isinstance(response, dict):
+            remote_id = response.get("id") or response.get("external_id")
+            if remote_id:
+                return str(remote_id)
+        return fallback
 
 
 def build_source_gateway_from_env() -> HttpSourceDataGateway:

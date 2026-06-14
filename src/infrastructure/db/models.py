@@ -1,8 +1,24 @@
+from __future__ import annotations
+
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String, Text, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 
 class Base(DeclarativeBase):
@@ -34,12 +50,9 @@ class SyncRunORM(Base):
     failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
-class SyncStateORM(Base):
-    __tablename__ = "sync_state"
+class _SyncStateColumns:
+    """Shared sync-state columns mixed into every per-boundary table."""
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    entity_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    entity_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
     source_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
     catalogue_remote_id: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[SyncStatusDB] = mapped_column(
@@ -54,3 +67,76 @@ class SyncStateORM(Base):
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     run_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+
+
+class PatientSyncStateORM(_SyncStateColumns, Base):
+    __tablename__ = "patient_sync_state"
+
+    patient_id: Mapped[str] = mapped_column(String, primary_key=True)
+
+    samples: Mapped[list[SampleSyncStateORM]] = relationship(back_populates="patient")
+    imaging_studies: Mapped[list[ImagingStudySyncStateORM]] = relationship(
+        back_populates="patient"
+    )
+
+
+class SampleSyncStateORM(_SyncStateColumns, Base):
+    __tablename__ = "sample_sync_state"
+
+    sample_id: Mapped[str] = mapped_column(String, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("patient_sync_state.patient_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    patient: Mapped[PatientSyncStateORM] = relationship(back_populates="samples")
+    sequencing: Mapped[list[SequencingSyncStateORM]] = relationship(
+        back_populates="sample"
+    )
+    wsi: Mapped[list[WsiSyncStateORM]] = relationship(back_populates="sample")
+
+
+class SequencingSyncStateORM(_SyncStateColumns, Base):
+    __tablename__ = "sequencing_sync_state"
+
+    predictive_number: Mapped[str] = mapped_column(String, primary_key=True)
+    sample_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("sample_sync_state.sample_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    sample: Mapped[SampleSyncStateORM] = relationship(back_populates="sequencing")
+
+
+class WsiSyncStateORM(_SyncStateColumns, Base):
+    __tablename__ = "wsi_sync_state"
+
+    bioptic_number: Mapped[str] = mapped_column(String, primary_key=True)
+    sample_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("sample_sync_state.sample_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    sample: Mapped[SampleSyncStateORM] = relationship(back_populates="wsi")
+
+
+class ImagingStudySyncStateORM(_SyncStateColumns, Base):
+    __tablename__ = "imaging_study_sync_state"
+
+    accession_number: Mapped[str] = mapped_column(String, primary_key=True)
+    patient_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("patient_sync_state.patient_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    patient: Mapped[PatientSyncStateORM] = relationship(
+        back_populates="imaging_studies"
+    )
