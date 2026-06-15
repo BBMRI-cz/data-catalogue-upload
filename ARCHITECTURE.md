@@ -1,6 +1,11 @@
 # Architecture Overview
 
-This service synchronizes patient-related data from multiple source systems into the data catalogue.
+> This repository is a **uv-workspace monorepo**. Members live under `apps/`: the `uploader` sync job and
+> the source API services (starting with `biobank_api`). This document describes the **uploader** and the
+> end-to-end data flow; each API service follows the same hexagonal layering within its own member. See
+> [`AGENTS.md`](AGENTS.md) for the workspace layout.
+
+The uploader synchronizes patient-related data from multiple source systems into the data catalogue.
 
 At a high level:
 - each source system exposes its own API,
@@ -44,7 +49,7 @@ In one sentence: for each patient, the sync job reads from all source APIs, aggr
 
 ## Code structure (hexagonal / layered)
 
-The code under `src/` is organized into three layers with a strict dependency direction: `infrastructure` -> `application` -> `domain`. The domain layer has no outward dependencies.
+The uploader's code under `apps/uploader/src/uploader/` is organized into three layers with a strict dependency direction: `infrastructure` -> `application` -> `domain`. The domain layer has no outward dependencies.
 
 ```mermaid
 flowchart TD
@@ -81,11 +86,11 @@ flowchart TD
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| Domain | `src/domain/` | Pure dataclass models and `compute_fingerprint`. No I/O, no framework imports. |
-| Application | `src/application/` | Orchestration (`sync_service.py`), planning (`sync_planner.py`), `builders/`, and the `interfaces/ports.py` Protocols. |
-| Infrastructure | `src/infrastructure/` | Adapters implementing the ports: HTTP gateways (`api/clients.py`) and DB ORM + repositories (`db/`). |
+| Domain | `apps/uploader/src/uploader/domain/` | Pure dataclass models and `compute_fingerprint`. No I/O, no framework imports. |
+| Application | `apps/uploader/src/uploader/application/` | Orchestration (`sync_service.py`), planning (`sync_planner.py`), `builders/`, and the `interfaces/ports.py` Protocols. |
+| Infrastructure | `apps/uploader/src/uploader/infrastructure/` | Adapters implementing the ports: HTTP gateways (`api/clients.py`) and DB ORM + repositories (`db/`). |
 
-The ports in `src/application/interfaces/ports.py` (`SourceDataGateway`, `CatalogueGateway`, `SyncStateRepository`, `SyncPlanner`) are `typing.Protocol`s. Infrastructure provides concrete implementations, and `main.py` wires them together from environment variables.
+The ports in `apps/uploader/src/uploader/application/interfaces/ports.py` (`SourceDataGateway`, `CatalogueGateway`, `SyncStateRepository`, `SyncPlanner`) are `typing.Protocol`s. Infrastructure provides concrete implementations, and `main.py` wires them together from environment variables.
 
 ## Sync flow
 
@@ -125,7 +130,7 @@ Upload eligibility: a patient is only uploaded if it has at least one sample (`P
 
 ## Sync state machine
 
-Two enums in `src/domain/models/sync.py` drive change detection. They are distinct concepts:
+Two enums in `apps/uploader/src/uploader/domain/models/sync.py` drive change detection. They are distinct concepts:
 
 - **`SyncOp`** is the *decision* the planner makes for an entity on this run: `CREATE`, `UPDATE`, `SKIP`, or `DELETE`.
 - **`SyncStatus`** is the *persisted state* of an entity in the DB between runs: `PENDING`, `SYNCED`, `FAILED`, or `DELETED`.

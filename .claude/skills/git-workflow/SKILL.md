@@ -47,13 +47,14 @@ chore/agentic-dev-docs
 
 ## Before committing
 
-Run the same checks CI runs, and make sure they pass:
+Run the same checks CI runs, for each package you touched (`<pkg>` = `uploader` or `biobank_api`), and make sure they pass:
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest
+uv run ruff check apps/<pkg>
+uv run ruff format --check apps/<pkg>
+uv run mypy apps/<pkg>
+uv run pytest apps/<pkg>/tests
+uv lock --check
 ```
 
-`uv run ruff format .` (without `--check`) auto-fixes formatting. Do not commit secrets or a real `.env` - only `.env.example` is tracked. Do not hand-edit `uv.lock`.
+`uv run ruff format apps/<pkg>` (without `--check`) auto-fixes formatting. Do not commit secrets or a real `.env` - only `.env.example` is tracked. Do not hand-edit `uv.lock`.

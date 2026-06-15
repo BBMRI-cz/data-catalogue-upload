@@ -17,6 +17,45 @@ services:
 
     volumes:
       - db_data:/var/lib/postgresql/data
+      # Creates the biobank_api database on first init (alongside POSTGRES_DB).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+  # Biobank API HTTP server (long-running).
+  biobank_api:
+    build:
+      context: .
+      dockerfile: apps/biobank_api/Dockerfile
+    container_name: biobank-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BIOBANK_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/biobank_api
+      BIOBANK_HOST: 0.0.0.0
+      BIOBANK_PORT: 8001
+    depends_on:
+      - db
+    ports:
+      - "8001:8001"
+
+  # Biobank ingestion (one-shot). Run on demand / on a schedule:
+  #   docker compose -f compose.prod.yml --profile ingest run --rm biobank_api_ingest
+  biobank_api_ingest:
+    build:
+      context: .
+      dockerfile: apps/biobank_api/Dockerfile
+    profiles:
+      - ingest
+    env_file:
+      - .env
+    environment:
+      BIOBANK_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/biobank_api
+      BIOBANK_XML_EXPORT_PATH: /data/exports
+    depends_on:
+      - db
+    command: ["biobank-api-ingest"]
+    volumes:
+      - ./data/exports:/data/exports:ro
 
 volumes:
   db_data:
