@@ -1,13 +1,3 @@
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-# Load `.env` before building the engine. env.py lives at
-# apps/biobank_api/migrations/env.py; the workspace root (where `.env` lives) is 4 levels up.
-_project_root = Path(__file__).resolve().parents[3]
-load_dotenv(_project_root / ".env")
-load_dotenv()
-
 from logging.config import fileConfig
 
 from alembic import context
@@ -15,6 +5,9 @@ from alembic import context
 from biobank_api.config import get_settings
 from biobank_api.infrastructure.db.models import Base
 from biobank_api.infrastructure.db.session import get_engine
+
+# config.Settings reads this service's apps/biobank_api/.env directly, so no
+# separate dotenv loading is needed here.
 
 config = context.config
 

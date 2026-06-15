@@ -20,7 +20,7 @@ src/biobank_api/
 │   ├── xml/              # lxml parser implementing XmlExportSource
 │   ├── db/               # SQLAlchemy ORM, lazy session, repositories
 │   └── web/              # FastAPI app, routers, Pydantic schemas, DI
-├── config.py             # pydantic-settings (env prefix BIOBANK_)
+├── config.py             # pydantic-settings (reads apps/biobank_api/.env)
 ├── server.py             # HTTP server entrypoint  (biobank-api-serve)
 └── ingest.py             # ingestion/scheduler entrypoint  (biobank-api-ingest)
 migrations/               # Alembic environment + versioned migrations (own database)
@@ -28,11 +28,14 @@ migrations/               # Alembic environment + versioned migrations (own data
 
 ## Configuration
 
-Environment variables (prefix `BIOBANK_`, read by `config.Settings`; defaults keep it runnable locally):
+Copy `.env.example` to `.env` and adjust. Variables are read by `config.Settings` from
+`apps/biobank_api/.env`; defaults keep it runnable locally. The service builds its database URL from the
+`POSTGRES_*` parts (inside compose, `POSTGRES_HOST`/`POSTGRES_PORT` are overridden to reach `biobank-db`):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `BIOBANK_DATABASE_URL` | `postgresql+psycopg2://postgres:postgres@localhost:5432/biobank_api` | Service database |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres` / `postgres` / `biobank_api` | Service database credentials |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | `localhost` / `5433` | Where to reach the database |
 | `BIOBANK_HOST` | `0.0.0.0` | Server bind host |
 | `BIOBANK_PORT` | `8001` | Server bind port |
 | `BIOBANK_XML_EXPORT_PATH` | `data/exports` | Directory of biobank XML exports to ingest |
@@ -42,6 +45,9 @@ Environment variables (prefix `BIOBANK_`, read by `config.Settings`; defaults ke
 From the repository root (after `uv sync --all-packages --group dev`):
 
 ```bash
+cp apps/biobank_api/.env.example apps/biobank_api/.env
+docker compose -f compose.prod.yml up -d biobank-db   # this service's database
+
 # apply migrations (own database)
 cd apps/biobank_api && uv run alembic -c alembic.ini upgrade head && cd -
 

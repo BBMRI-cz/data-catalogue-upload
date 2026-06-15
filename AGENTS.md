@@ -11,32 +11,57 @@ Guidance for AI coding agents (primarily Claude Code) working in this repository
 
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data flow and layering, and [`DEVELOPMENT.md`](DEVELOPMENT.md) for setup and local run instructions.
 
-## Tech stack
+## Workspace
 
-- Python `>=3.11` (local dev pins `3.14` via `.python-version`; CI and mypy target `3.11`)
-- [uv](https://github.com/astral-sh/uv) **workspace**: one root `uv.lock` + shared `.venv`; each member declares its own deps
-- SQLAlchemy + PostgreSQL (via `psycopg2-binary`), Alembic for migrations (per service)
-- `requests` (uploader HTTP client); **FastAPI + Uvicorn** (API services); `lxml` (biobank XML parsing)
-- `python-dotenv` / `pydantic-settings` for config
-- ruff (lint + format), mypy (types), pytest (tests)
-
-## Workspace layout
+- Python `>=3.11` (local dev pins `3.14` via `.python-version`; CI and mypy target `3.11`).
+- [uv](https://github.com/astral-sh/uv) **workspace**: one root `uv.lock` + shared `.venv`. Each member declares only its own deps, has its own Alembic migrations + PostgreSQL database, and its own `.env` (copied from that member's `.env.example`).
+- Shared dev tooling lives in the root dev group: ruff (lint + format), mypy (types), pytest (tests).
 
 ```
 apps/
 ├── uploader/                 # sync job (import package `uploader`)
-│   ├── pyproject.toml        # its own deps
-│   ├── alembic.ini  migrations/
+│   ├── pyproject.toml  .env.example  alembic.ini  migrations/  Dockerfile
 │   └── src/uploader/{domain,application,infrastructure,main.py}
 └── biobank_api/              # biobank source API (import package `biobank_api`)
-    ├── pyproject.toml
-    ├── alembic.ini  migrations/
-    └── src/biobank_api/{domain,application,infrastructure,server.py,ingest.py}
+    ├── pyproject.toml  .env.example  alembic.ini  migrations/  Dockerfile
+    └── src/biobank_api/{domain,application,infrastructure,config.py,server.py,ingest.py}
 pyproject.toml                # virtual workspace root: [tool.uv.workspace], shared dev group, ruff/mypy config
 uv.lock                       # single lockfile for the whole workspace
 ```
 
 Each member is a src-layout package with a distinct import name (`uploader`, `biobank_api`). A single shared venv cannot host two top-level `domain` packages, so imports are always `from <package>.domain...`.
+
+## apps/uploader
+
+**Tech stack**
+- `requests` for HTTP, `python-dotenv` for config
+- SQLAlchemy + PostgreSQL (via `psycopg2-binary`), Alembic for migrations
+
+**Layout** (`apps/uploader/src/uploader/`, dependency direction `infrastructure -> application -> domain`)
+- `domain/` - pure dataclass models and fingerprinting (`compute_fingerprint`). No I/O, no framework imports.
+- `application/` - `sync_service.py`, `sync_planner.py`, `builders/` (raw dict -> domain), `interfaces/ports.py` (Protocols).
+- `infrastructure/` - `api/clients.py` (HTTP gateways) and `db/` (SQLAlchemy ORM + repositories).
+- `main.py` - composition root; loads `apps/uploader/.env` then wires everything from env vars.
+- `migrations/` - Alembic for the uploader's own database.
+
+**Config** `apps/uploader/.env`: `POSTGRES_*` (its database) + the five source/catalogue API URLs. **Entrypoint:** `uploader`.
+
+## apps/biobank_api
+
+**Tech stack**
+- **FastAPI + Uvicorn** for the HTTP server; Pydantic v2 + `pydantic-settings` for schemas/config
+- `lxml` for biobank XML parsing
+- SQLAlchemy + PostgreSQL (via `psycopg2-binary`), Alembic for migrations
+
+**Layout** (`apps/biobank_api/src/biobank_api/`, same dependency direction)
+- `domain/` - pure dataclass models (`Patient`, `Sample`).
+- `application/` - use cases (`get_patients.py`, `ingest_exports.py`) + `interfaces/ports.py` (Protocols).
+- `infrastructure/` - `xml/` (lxml parser), `db/` (ORM, lazy session, repositories), `web/` (FastAPI app, routers, Pydantic schemas, DI).
+- `config.py` - `pydantic-settings` `Settings`, reads `apps/biobank_api/.env`.
+- `server.py` / `ingest.py` - the HTTP server and one-shot ingestion entrypoints (composition roots).
+- `migrations/` - Alembic for the biobank API's own database.
+
+**Config** `apps/biobank_api/.env`: `POSTGRES_*` (its database) + `BIOBANK_*` (server bind + XML export path). **Entrypoints:** `biobank-api-serve`, `biobank-api-ingest`.
 
 ## Commands
 
@@ -52,23 +77,10 @@ uv run mypy apps/<pkg>                  # type check
 uv run pytest apps/<pkg>/tests          # tests
 uv lock --check                         # workspace lockfile is consistent
 
-cd apps/<pkg> && uv run alembic -c alembic.ini upgrade head   # migrations (own DB)
+cp apps/<pkg>/.env.example apps/<pkg>/.env                     # each member has its own .env
+cd apps/<pkg> && uv run alembic -c alembic.ini upgrade head    # migrations (own DB)
+uv run --package <pkg> <console-script>                        # run an entrypoint (see per-app sections)
 ```
-
-Entrypoints (console scripts, run via `uv run --package <pkg> <script>`):
-- uploader: `uploader`
-- biobank_api: `biobank-api-serve` (HTTP server), `biobank-api-ingest` (one-shot ingestion)
-
-## Project layout (within a member)
-
-Each member follows a hexagonal / layered architecture under `apps/<pkg>/src/<pkg>/` with the dependency direction `infrastructure -> application -> domain`:
-
-- `domain/` - pure dataclass models (+ `compute_fingerprint` in the uploader). No I/O, no framework imports.
-- `application/` - use cases/orchestration and `interfaces/ports.py` (Protocol definitions).
-- `infrastructure/` - adapters implementing the ports: HTTP/XML/web and `db/` (SQLAlchemy ORM + repositories).
-- `migrations/` - Alembic environment and versioned migrations (per service).
-
-The entrypoint (`main.py` / `server.py` / `ingest.py`) is the composition root that wires everything from environment variables.
 
 ## Conventions
 
@@ -95,7 +107,7 @@ These mirror CI (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)), wh
 
 ## What to avoid
 
-- Do not commit secrets or a real `.env`. Only `.env.example` is tracked.
+- Do not commit secrets or a real `.env`. Only each member's `.env.example` is tracked.
 - Do not bypass the layers (e.g. calling `requests`/`lxml`/`sqlalchemy` from `application/` or `domain/`).
 - Do not add a dependency to the wrong member - keep each member's deps minimal; shared dev tooling goes in the root dev group.
 - Do not edit `uv.lock` by hand.

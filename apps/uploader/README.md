@@ -13,10 +13,11 @@ for the data flow and layering.
 From the repository root:
 
 ```bash
-uv sync --group dev                                   # install the whole workspace
-docker compose -f compose.prod.yml up -d db           # start PostgreSQL
+uv sync --all-packages --group dev                    # install the whole workspace
+cp apps/uploader/.env.example apps/uploader/.env       # this app's own .env
+docker compose -f compose.prod.yml up -d uploader-db   # this app's database
 cd apps/uploader && uv run alembic -c alembic.ini upgrade head   # apply migrations
-uv run --package uploader uploader                    # run the sync (needs a complete .env)
+uv run --package uploader uploader                     # run the sync (needs a complete .env)
 ```
 
 The job prints a JSON run summary (scanned / changed / uploaded / deleted / skipped / failed) and exits

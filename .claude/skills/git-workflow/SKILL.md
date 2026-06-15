@@ -57,4 +57,4 @@ uv run pytest apps/<pkg>/tests
 uv lock --check
 ```
 
-`uv run ruff format apps/<pkg>` (without `--check`) auto-fixes formatting. Do not commit secrets or a real `.env` - only `.env.example` is tracked. Do not hand-edit `uv.lock`.
+`uv run ruff format apps/<pkg>` (without `--check`) auto-fixes formatting. Do not commit secrets or a real `.env` - only each member's `.env.example` is tracked. Do not hand-edit `uv.lock`.

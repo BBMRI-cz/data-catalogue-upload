@@ -2,10 +2,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load `.env` before importing `uploader.infrastructure.db.session` (that module builds `engine` at import).
-# env.py lives at apps/uploader/migrations/env.py; the workspace root (where `.env` lives) is 4 levels up.
-_project_root = Path(__file__).resolve().parents[3]
-load_dotenv(_project_root / ".env")
+# Load this app's .env before importing `uploader.infrastructure.db.session` (that module builds
+# `engine` at import). env.py lives at apps/uploader/migrations/env.py; the app root is 2 levels up.
+_app_root = Path(__file__).resolve().parents[1]
+load_dotenv(_app_root / ".env")
 load_dotenv()
 
 from logging.config import fileConfig

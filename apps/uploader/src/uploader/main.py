@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load this app's .env before importing infrastructure (the db session builds the
+# engine at import). main.py is at apps/uploader/src/uploader/main.py; the app root
+# (where .env lives) is 2 levels up.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 import json
 import os
-from dotenv import load_dotenv
 
 from uploader.application import CatalogueSyncService, FingerprintSyncPlanner
 from uploader.infrastructure import (
@@ -24,7 +32,6 @@ def _require_env(name: str) -> str:
 
 
 def main() -> int:
-    load_dotenv()
     _require_env("BIOBANK_API_URL")
     _require_env("RADIOLOGY_API_URL")
     _require_env("SEQUENCING_API_URL")

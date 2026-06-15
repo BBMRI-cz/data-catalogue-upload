@@ -1,28 +1,44 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# apps/biobank_api (this service's root, where its .env lives).
+_APP_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    """Runtime configuration, read from environment variables (prefix ``BIOBANK_``).
+    """Runtime configuration for the biobank API.
 
-    Defaults keep the package importable (and testable) without a configured
-    environment; real values come from ``.env`` / the deployment environment.
+    Read from environment variables, falling back to this service's own
+    ``apps/biobank_api/.env`` file. Defaults keep the package importable (and
+    testable) without a configured environment.
     """
 
-    model_config = SettingsConfigDict(env_prefix="BIOBANK_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_APP_ROOT / ".env", extra="ignore")
 
-    # Database the ingestion writes to and the server reads from.
-    database_url: str = (
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/biobank_api"
-    )
+    # PostgreSQL (the names the biobank-db container also uses). Inside compose the
+    # service overrides POSTGRES_HOST/POSTGRES_PORT to reach the biobank-db container.
+    postgres_user: str = "postgres"
+    postgres_password: str = "postgres"
+    postgres_db: str = "biobank_api"
+    postgres_host: str = "localhost"
+    postgres_port: int = 5433
 
-    # HTTP server bind address (see uploader's BIOBANK_API_URL, default :8001).
-    host: str = "0.0.0.0"
-    port: int = 8001
+    # HTTP server bind address.
+    biobank_host: str = "0.0.0.0"
+    biobank_port: int = 8001
 
     # Directory holding the biobank XML export(s) the ingestion parses.
-    xml_export_path: str = "data/exports"
+    biobank_xml_export_path: str = "data/exports"
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
 
 def get_settings() -> Settings:

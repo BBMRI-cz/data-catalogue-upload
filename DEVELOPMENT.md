@@ -8,13 +8,14 @@ This repository is a **uv workspace** (monorepo). Members live under `apps/`:
 - [`apps/uploader`](apps/uploader) - the sync job ([README](apps/uploader/README.md))
 - [`apps/biobank_api`](apps/biobank_api) - the biobank source API ([README](apps/biobank_api/README.md))
 
-There is one `uv.lock` and one `.venv` for the whole workspace; each member declares only its own dependencies.
+There is one `uv.lock` and one `.venv` for the whole workspace; each member declares only its own dependencies
+and has **its own `.env`, Alembic migrations, and PostgreSQL database**.
 
 ## Prerequisites
 
 - **Python** - local development uses `3.14` (pinned in `.python-version`); the project supports `>=3.11` and CI runs `3.11`.
 - **[uv](https://github.com/astral-sh/uv)** - dependency manager and task runner.
-- **Docker** (with Compose) - to run PostgreSQL and the API services.
+- **Docker** (with Compose) - to run the PostgreSQL databases and the API services.
 
 ## Setup
 
@@ -24,33 +25,41 @@ There is one `uv.lock` and one `.venv` for the whole workspace; each member decl
 uv sync --all-packages --group dev
 ```
 
-2. Create your env file from the template and adjust as needed:
+2. Create each member's env file from its template and adjust as needed:
 
 ```bash
-cp .env.example .env
+cp apps/uploader/.env.example    apps/uploader/.env
+cp apps/biobank_api/.env.example apps/biobank_api/.env
 ```
 
 ## Environment variables
 
-`.env.example` holds the PostgreSQL settings, the uploader's API URLs, and the `BIOBANK_*` settings for the
-biobank API. Keep `.env` in the **project root** - each service's Alembic `env.py` loads it from there. Never
-commit a real `.env`; only `.env.example` is tracked.
+Each member owns its config: `apps/<member>/.env` (gitignored; only `.env.example` is tracked).
 
-## Database
+- `apps/uploader/.env` - `POSTGRES_*` for the uploader's database, plus the five source/catalogue API URLs.
+  Loaded by `main.py` and the uploader's `migrations/env.py`.
+- `apps/biobank_api/.env` - `POSTGRES_*` for the biobank API's database and `BIOBANK_*` (server bind + XML
+  export path). Read by `config.Settings` (which also drives `migrations/env.py`).
 
-Start PostgreSQL (set `POSTGRES_PORT` in `.env` first if the default port is in use):
+Never commit a real `.env`.
+
+## Databases
+
+Each app has its own PostgreSQL service in [`compose.prod.yml`](compose.prod.yml):
 
 ```bash
-docker compose -f compose.prod.yml up -d db
+docker compose -f compose.prod.yml up -d uploader-db biobank-db
 ```
 
-The container creates the uploader's database (`POSTGRES_DB`) and, on first init, the biobank API's database
-(`biobank_api`, via [`docker/postgres/init`](docker/postgres/init)).
+| Service | Host port | Database (`POSTGRES_DB`) | Used by |
+|---------|-----------|--------------------------|---------|
+| `uploader-db` | `5432` | `data_catalogue_upload` | the uploader (host-run, via `localhost:5432`) |
+| `biobank-db` | `5433` | `biobank_api` | the biobank API |
 
-Apply migrations per service (each member has its own Alembic tree and database):
+Apply each member's migrations (own Alembic tree + database):
 
 ```bash
-cd apps/uploader   && uv run alembic -c alembic.ini upgrade head && cd -
+cd apps/uploader    && uv run alembic -c alembic.ini upgrade head && cd -
 cd apps/biobank_api && uv run alembic -c alembic.ini upgrade head && cd -
 ```
 
@@ -59,7 +68,7 @@ cd apps/biobank_api && uv run alembic -c alembic.ini upgrade head && cd -
 
 ## Running the services
 
-With the database up and a complete `.env`:
+With the databases up and each `.env` filled in:
 
 ```bash
 # uploader sync job (prints a JSON run summary; exits 0, or 1 if any entity failed)
@@ -72,10 +81,10 @@ uv run --package biobank_api biobank-api-serve
 uv run --package biobank_api biobank-api-ingest
 ```
 
-Or run the API services via Docker:
+Or run the biobank API via Docker (it reaches `biobank-db` over the compose network):
 
 ```bash
-docker compose -f compose.prod.yml up -d db biobank_api
+docker compose -f compose.prod.yml up -d biobank-db biobank_api
 docker compose -f compose.prod.yml --profile ingest run --rm biobank_api_ingest
 ```
 
@@ -121,11 +130,10 @@ Do not hand-edit `uv.lock`.
 
 | Symptom | Likely cause & fix |
 |---------|--------------------|
-| `docker compose up` fails with "port is already allocated" | The host `5432` is taken (often a local Postgres). Set a free `POSTGRES_PORT` (e.g. `5433`) in `.env` and re-run. |
-| App/alembic can't connect to the database | Postgres isn't up or `.env` doesn't match the container. Check `docker compose -f compose.prod.yml ps`, and confirm the `POSTGRES_*` values match what the container started with. |
-| biobank API: `database "biobank_api" does not exist` | The init script only runs on a fresh data volume. Either recreate the volume, or `createdb biobank_api` manually. |
-| `RuntimeError: Missing required environment variable` (uploader) | A required API URL is unset. Ensure all five (`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`) are in `.env`. |
+| `docker compose up` fails with "port is already allocated" | A host port (`5432`/`5433`) is taken. Change the mapping in `compose.prod.yml` (and the member's `.env` `POSTGRES_PORT` for host runs). |
+| App/alembic can't connect to the database | The relevant db service isn't up, or the member's `.env` doesn't match it. Check `docker compose -f compose.prod.yml ps` and the `POSTGRES_*` values in `apps/<member>/.env`. |
+| `RuntimeError: Missing required environment variable` (uploader) | A required API URL is unset. Ensure all five (`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`) are in `apps/uploader/.env`. |
 | Alembic: "Target database is not up to date" | Pending migrations. Run `cd apps/<pkg> && uv run alembic -c alembic.ini upgrade head`. |
 | Alembic: "Can't locate revision identified by ..." | The DB's `alembic_version` points at a revision not in `apps/<pkg>/migrations/versions/` (e.g. after switching branches). Align the branch with the DB, or recreate the dev DB. |
-| `.env` values seem ignored by migrations | `.env` must live in the **project root**; each `migrations/env.py` loads it from there. |
+| `.env` values seem ignored | Each member's `.env` lives in `apps/<member>/`, not the repo root. The uploader loads it in `main.py`; the biobank API reads it via `config.Settings`. |
 | `uv sync` removed a member's deps | At the workspace root, `uv sync` alone only syncs the root. Use `uv sync --all-packages --group dev`. |
