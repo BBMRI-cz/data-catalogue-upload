@@ -44,9 +44,59 @@ Why the change is needed (link issues with `Closes #<n>`).
 
 ```
 
-Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`.
+Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`. **Always assign the PR to `mf-16`** (use `--assignee mf-16` on `gh pr create`, or `gh pr edit <n> --add-assignee mf-16` afterwards). PRs are **not** added to the project board.
+
+## Project board
+
+Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = Todo**, **Category = Data catalogue**, and assigned to `mf-16`. PRs are intentionally excluded from the board (assignee only — see above) to keep the table readable.
+
+Reference IDs (org `BBMRI-cz`, project number `3`):
+
+| Item | ID |
+|------|----|
+| Project ID | `PVT_kwDOBuSb9M4AbC0J` |
+| Status field | `PVTSSF_lADOBuSb9M4AbC0JzgRYUBg` |
+| Status → `Todo` option | `f75ad846` |
+| Category field | `PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ` |
+| Category → `Data catalogue` option | `d9fce010` |
+
+Setting fields needs the `project` token scope. If a command fails with `your authentication token is missing required scopes [read:project]`, run once:
+
+```bash
+gh auth refresh -s read:project,project --hostname github.com
+```
+
+### Adding an issue to the board
+
+After creating the issue (always with `--assignee mf-16`), add it to the board and set the two fields:
+
+```bash
+# 1. Add the issue to the project; capture the returned item id
+ITEM_ID=$(gh project item-add 3 --owner BBMRI-cz --url <issue-url> --format json -q .id)
+
+# 2. Status = Todo
+gh project item-edit \
+  --project-id PVT_kwDOBuSb9M4AbC0J \
+  --id "$ITEM_ID" \
+  --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg \
+  --single-select-option-id f75ad846
+
+# 3. Category = Data catalogue
+gh project item-edit \
+  --project-id PVT_kwDOBuSb9M4AbC0J \
+  --id "$ITEM_ID" \
+  --field-id PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ \
+  --single-select-option-id d9fce010
+```
 
 ## Issues
+
+When filing an issue, assign it to `mf-16` and add it to the project board with Status = Todo and Category = Data catalogue (see the **Project board** section above for the exact commands):
+
+```bash
+gh issue create --repo BBMRI-cz/data-catalogue-upload \
+  --title "..." --body "..." --assignee mf-16
+```
 
 ### Bug report
 
