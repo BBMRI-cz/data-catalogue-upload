@@ -122,3 +122,34 @@ flowchart TD
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
 Upload eligibility: a patient is only uploaded if it has at least one sample (`PatientAggregate.is_upload_eligible()`).
+
+## Sync state machine
+
+Two enums in `src/domain/models/sync.py` drive change detection. They are distinct concepts:
+
+- **`SyncOp`** is the *decision* the planner makes for an entity on this run: `CREATE`, `UPDATE`, `SKIP`, or `DELETE`.
+- **`SyncStatus`** is the *persisted state* of an entity in the DB between runs: `PENDING`, `SYNCED`, `FAILED`, or `DELETED`.
+
+Each entity (patient, sample, sequencing, WSI, imaging study) carries its own state, persisted in its per-entity `*_sync_state` table alongside the fingerprint.
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: planned (no prior state)
+    PENDING --> SYNCED: upsert succeeded
+    PENDING --> FAILED: upsert failed
+    SYNCED --> SYNCED: UPDATE succeeded (fingerprint changed)
+    SYNCED --> FAILED: UPDATE failed
+    FAILED --> SYNCED: retried successfully on a later run
+    SYNCED --> DELETED: entity gone from source (soft delete)
+    FAILED --> DELETED: entity gone from source (soft delete)
+    DELETED --> PENDING: entity reappears in source (re-CREATE)
+```
+
+| Status | Meaning | Set when |
+|--------|---------|----------|
+| `PENDING` | Planned this run, not yet executed (also the default for a brand-new entity). | Planner creates a new state, or no prior state exists (`sync_planner.py`). |
+| `SYNCED` | Successfully upserted to the catalogue. | Execution of a `CREATE`/`UPDATE` op succeeds (`sync_service.py`). |
+| `FAILED` | The upsert/delete for this entity failed; the run continues for others. | Execution of an op raises (`sync_service.py`). |
+| `DELETED` | Entity disappeared from the source; deleted in the catalogue and soft-deleted in the DB. | Planner emits a `DELETE` op, or the repository soft-deletes a subtree (`sync_planner.py`, `sync_state_repository.py`). |
+
+A soft-deleted (`DELETED`) entity that reappears in the source is treated as a fresh `CREATE` on the next run, returning it to `PENDING` → `SYNCED`.

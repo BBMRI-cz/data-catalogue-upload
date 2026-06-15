@@ -24,7 +24,7 @@ cp .env.example .env
 
 ## Environment variables
 
-`.env.example` currently only contains the PostgreSQL settings. The sync job (`src/main.py`) also requires five API URLs. A complete `.env` looks like this:
+`.env.example` contains the PostgreSQL settings and the five API URLs the sync job (`src/main.py`) requires. A complete `.env` looks like this:
 
 ```bash
 # PostgreSQL (used by docker compose and the app)
@@ -104,3 +104,14 @@ uv add --group dev pytest       # dev dependency
 ```
 
 Do not hand-edit `uv.lock`.
+
+## Troubleshooting
+
+| Symptom | Likely cause & fix |
+|---------|--------------------|
+| `docker compose up` fails with "port is already allocated" | The host `5432` is taken (often a local Postgres). Set a free `POSTGRES_PORT` (e.g. `5433`) in `.env` and re-run. |
+| App/alembic can't connect to the database | Postgres isn't up or `.env` doesn't match the container. Check `docker compose -f compose.prod.yml ps`, and confirm the `POSTGRES_*` values match what the container started with. |
+| `KeyError` / missing-URL error when running `src/main.py` | A required API URL is unset. Ensure all five (`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`) are in `.env`. |
+| Alembic: "Target database is not up to date" | Pending migrations. Run `cd src && uv run alembic -c alembic.ini upgrade head`. |
+| Alembic: "Can't locate revision identified by ..." | The DB's `alembic_version` points at a revision not in `src/migrations/versions/` (e.g. after switching branches). Align the branch with the DB, or recreate the dev DB. |
+| `.env` values seem ignored by migrations | `.env` must live in the **project root**; `src/migrations/env.py` loads it from there, not from `src/`. |
