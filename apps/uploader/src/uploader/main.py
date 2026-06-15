@@ -1,27 +1,24 @@
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load this app's .env before importing infrastructure (the db session builds the
-# engine at import). main.py is at apps/uploader/src/uploader/main.py; the app root
-# (where .env lives) is 2 levels up.
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-
-import json
-import os
-
 from uploader.application import CatalogueSyncService, FingerprintSyncPlanner
 from uploader.infrastructure import (
     Base,
-    SessionLocal,
     SyncRunRepository,
     SyncStateRepository,
     build_catalogue_gateway_from_env,
     build_source_gateway_from_env,
-    engine,
+    get_engine,
+    get_sessionmaker,
 )
+
+# This app's .env (apps/uploader/.env); main.py is 2 levels below the app root.
+_APP_ENV = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _require_env(name: str) -> str:
@@ -32,14 +29,15 @@ def _require_env(name: str) -> str:
 
 
 def main() -> int:
+    load_dotenv(_APP_ENV)
     _require_env("BIOBANK_API_URL")
     _require_env("RADIOLOGY_API_URL")
     _require_env("SEQUENCING_API_URL")
     _require_env("WSI_API_URL")
     _require_env("CATALOGUE_API_URL")
 
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as session:
+    Base.metadata.create_all(bind=get_engine())
+    with get_sessionmaker()() as session:
         service = CatalogueSyncService(
             source_gateway=build_source_gateway_from_env(),
             catalogue_gateway=build_catalogue_gateway_from_env(),

@@ -1,7 +1,9 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
+from functools import lru_cache
 import os
+
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def require_env(name: str) -> str:
@@ -21,6 +23,12 @@ def get_database_url() -> str:
     )
 
 
-engine = create_engine(get_database_url(), echo=False)
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    """Build the engine lazily so importing the package needs no live database."""
+    return create_engine(get_database_url(), echo=False)
 
-SessionLocal = sessionmaker(bind=engine)
+
+@lru_cache(maxsize=1)
+def get_sessionmaker() -> sessionmaker[Session]:
+    return sessionmaker(bind=get_engine())

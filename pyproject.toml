@@ -22,9 +22,8 @@ dev = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# load_dotenv must run before importing the app (db session builds the engine at import)
+# load_dotenv runs before importing the app modules (Alembic env loads .env first)
 "apps/uploader/migrations/env.py" = ["E402"]
-"apps/uploader/src/uploader/main.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"
