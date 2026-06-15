@@ -52,15 +52,15 @@ uv run pytest --pdb                            # drop into the debugger on failu
 
 - **Interactive debugger:** drop `breakpoint()` at the suspect line and run with `uv run pytest -s --pdb` (or run the module). Useful pdb commands: `pp <expr>` (pretty-print), `w` (where/stack), `u`/`d` (move up/down frames), `n`/`s`/`c` (next/step/continue).
 - **Temporary tracing:** add `print(...)` or `logging` while narrowing down, but **remove it before committing**. Never leave a bare `except` or a swallowed error as a "fix".
-- **Type-level bugs:** `uv run mypy .` often catches the class of bug (wrong Optional handling, mismatched signatures) before runtime — read its output before reaching for the debugger.
+- **Type-level bugs:** `uv run mypy apps/<pkg>` often catches the class of bug (wrong Optional handling, mismatched signatures) before runtime — read its output before reaching for the debugger.
 
 ## Before you call it fixed
 
-Run the full suite and make sure it passes, then keep the regression test:
+Run the full suite for the package you touched (`<pkg>` = `uploader` or `biobank_api`) and make sure it passes, then keep the regression test:
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest
+uv run ruff check apps/<pkg>
+uv run ruff format --check apps/<pkg>
+uv run mypy apps/<pkg>
+uv run pytest apps/<pkg>/tests
 ```

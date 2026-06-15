@@ -7,26 +7,30 @@ description: GitHub CI, pull request, and issue conventions for the data-catalog
 
 ## CI
 
-CI runs on every push and pull request to `master` (`.github/workflows/ci.yml`). On Python 3.11 with uv it runs, in order:
+CI runs on every push and pull request to `master` (`.github/workflows/ci.yml`). On Python 3.11 with uv it
+runs `uv lock --check` plus a **per-package matrix** (`uploader`, `biobank_api`); each matrix job installs the
+workspace (`uv sync --all-packages --group dev`) and runs, scoped to its package (`<pkg>`):
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest
+uv run ruff check apps/<pkg>
+uv run ruff format --check apps/<pkg>
+uv run mypy apps/<pkg>
+uv run pytest apps/<pkg>/tests
 ```
 
-Reproduce all of CI locally before pushing by running the same four commands. If they pass locally, CI should pass.
+Reproduce CI locally before pushing by running those commands for each package you touched, plus
+`uv lock --check`. If they pass locally, CI should pass.
 
 ### Fixing common CI failures
 
 | Failure | Fix |
 |---------|-----|
-| `ruff check` errors | `uv run ruff check --fix .`, then review remaining manual fixes |
-| `ruff format --check` fails | `uv run ruff format .` to reformat |
-| `mypy` missing stubs | add a typed stub package via `uv add --group dev types-<pkg>` (e.g. `types-requests` is already present) |
+| `ruff check` errors | `uv run ruff check --fix apps/<pkg>`, then review remaining manual fixes |
+| `ruff format --check` fails | `uv run ruff format apps/<pkg>` to reformat |
+| `mypy` missing stubs | add a typed stub package via `uv add --group dev types-<pkg>` (e.g. `types-requests`, `lxml-stubs` are present) |
 | `mypy` type errors | fix the code; do not loosen `[tool.mypy]` config |
-| `pytest` failures | reproduce with `uv run pytest -v`, fix the code or test |
+| `pytest` failures | reproduce with `uv run pytest apps/<pkg>/tests -v`, fix the code or test |
+| `uv lock --check` fails | run `uv lock` and commit the updated `uv.lock` |
 
 ## Pull requests
 
