@@ -52,7 +52,7 @@ Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`. **Always assign 
 
 ## Project board
 
-Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = Todo**, **Category = Data catalogue**, and assigned to `mf-16`. PRs are intentionally excluded from the board (assignee only — see above) to keep the table readable.
+Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No Status** (cleared — the default for newly added items), **Category = Data catalogue**, and assigned to `mf-16`. PRs are intentionally excluded from the board (assignee only — see above) to keep the table readable.
 
 Reference IDs (org `BBMRI-cz`, project number `3`):
 
@@ -60,7 +60,6 @@ Reference IDs (org `BBMRI-cz`, project number `3`):
 |------|----|
 | Project ID | `PVT_kwDOBuSb9M4AbC0J` |
 | Status field | `PVTSSF_lADOBuSb9M4AbC0JzgRYUBg` |
-| Status → `Todo` option | `f75ad846` |
 | Category field | `PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ` |
 | Category → `Data catalogue` option | `d9fce010` |
 
@@ -72,18 +71,16 @@ gh auth refresh -s read:project,project --hostname github.com
 
 ### Adding an issue to the board
 
-After creating the issue (always with `--assignee mf-16`), add it to the board and set the two fields:
+After creating the issue (always with `--assignee mf-16`), add it to the board, leave Status as **No Status**, and set Category:
 
 ```bash
 # 1. Add the issue to the project; capture the returned item id
 ITEM_ID=$(gh project item-add 3 --owner BBMRI-cz --url <issue-url> --format json -q .id)
 
-# 2. Status = Todo
-gh project item-edit \
-  --project-id PVT_kwDOBuSb9M4AbC0J \
-  --id "$ITEM_ID" \
-  --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg \
-  --single-select-option-id f75ad846
+# 2. Status = No Status. Newly added items default to No Status, so nothing to
+#    set. If an item already has a status, clear it back to No Status with:
+#    gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
+#      --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg --clear
 
 # 3. Category = Data catalogue
 gh project item-edit \
@@ -95,7 +92,7 @@ gh project item-edit \
 
 ## Issues
 
-When filing an issue, assign it to `mf-16` and add it to the project board with Status = Todo and Category = Data catalogue (see the **Project board** section above for the exact commands):
+When filing an issue, assign it to `mf-16` and add it to the project board with Status = No Status and Category = Data catalogue (see the **Project board** section above for the exact commands):
 
 ```bash
 gh issue create --repo BBMRI-cz/data-catalogue-upload \
