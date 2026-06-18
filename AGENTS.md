@@ -89,6 +89,7 @@ uv run --package <pkg> <console-script>                        # run an entrypoi
 - **Domain models are dataclasses.** Builders map raw `dict` payloads into domain objects using `.get(...)` for optional fields.
 - **Imports are absolute under the package name** (`from uploader.domain...`, `from biobank_api.application...`).
 - **Use `from __future__ import annotations`** at the top of modules.
+- **Tests split into `tests/unit/` (pure, no I/O) and `tests/integration/`** (real adapters — DB repositories run against in-memory SQLite via the `session` fixture). `uv run pytest apps/<pkg>/tests` recurses into both.
 - **Add dependencies with uv to the right member**, e.g. `cd apps/biobank_api && uv add fastapi`; put shared dev tooling in the root dev group (`uv add --group dev <pkg>`). Do not hand-edit `pyproject.toml` versions or `uv.lock`.
 
 ## Before finishing any change

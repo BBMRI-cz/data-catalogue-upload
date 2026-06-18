@@ -101,6 +101,22 @@ uv run pytest apps/<pkg>/tests          # tests
 uv lock --check                         # workspace lockfile is consistent
 ```
 
+### Tests: unit vs integration
+
+A member's tests live in `apps/<pkg>/tests/`, split by what they touch:
+
+- `tests/unit/` — pure tests with no I/O (domain models, builders, use cases; handlers tested
+  against fake ports). Fast; these are the bulk of the suite.
+- `tests/integration/` — exercise a real adapter (e.g. a repository against a real database
+  engine), no live external service needed. A `conftest.py` in the folder is a shared file pytest
+  auto-loads to provide fixtures (like a DB session) to every test under it.
+
+```bash
+uv run pytest apps/<pkg>/tests/unit         # fast inner loop
+uv run pytest apps/<pkg>/tests/integration  # adapter round-trips
+uv run pytest apps/<pkg>/tests              # everything (what CI runs; pytest recurses)
+```
+
 ## Adding a migration
 
 After changing a member's ORM models (e.g. `apps/biobank_api/src/biobank_api/infrastructure/db/models.py`):
