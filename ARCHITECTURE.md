@@ -1,9 +1,9 @@
 # Architecture Overview
 
-> This repository is a **uv-workspace monorepo**. Members live under `apps/`: the `uploader` sync job and
-> the source API services (starting with `biobank_api`). This document describes the **uploader** and the
-> end-to-end data flow; each API service follows the same hexagonal layering within its own member. See
-> [`AGENTS.md`](AGENTS.md) for the workspace layout.
+> This repository is a **.NET solution** (`DataCatalogue.slnx`). The two services - the `uploader`
+> sync job and the `biobank_api` source API - live under `src/`. This document describes the
+> **uploader** and the end-to-end data flow; each service follows the same Clean Architecture layering.
+> See [`AGENTS.md`](AGENTS.md) for the solution layout.
 
 The uploader synchronizes patient-related data from multiple source systems into the data catalogue.
 
@@ -47,29 +47,29 @@ flowchart LR
 
 In one sentence: for each patient, the sync job reads from all source APIs, aggregates the data into one coherent record, and uploads it into the data catalogue.
 
-## Code structure (hexagonal / layered)
+## Code structure (Clean Architecture / layered)
 
-The uploader's code under `apps/uploader/src/uploader/` is organized into three layers with a strict dependency direction: `infrastructure` -> `application` -> `domain`. The domain layer has no outward dependencies.
+The uploader's projects under `src/Uploader/` follow a strict dependency direction: `Host` -> `Infrastructure` -> `Application` -> `Domain`. The domain layer has no outward dependencies.
 
 ```mermaid
 flowchart TD
-    Main["main.py (composition root)"]
+    Main["Uploader.Host (composition root)"]
 
-    subgraph application [application - use cases]
-        SyncService["CatalogueSyncService"]
+    subgraph application [Application - CQRS]
+        SyncService["RunCatalogueSyncCommandHandler"]
+        Builders["builders/ (JSON -> domain)"]
+        Ports["Abstractions (port interfaces)"]
+    end
+
+    subgraph domain [Domain - models + domain services]
+        Models["record models + aggregates"]
         Planner["FingerprintSyncPlanner"]
-        Builders["builders/ (dict -> domain)"]
-        Ports["interfaces/ports.py (Protocols)"]
+        Fingerprint["FingerprintCalculator"]
     end
 
-    subgraph domain [domain - pure models]
-        Models["dataclass models"]
-        Fingerprint["compute_fingerprint()"]
-    end
-
-    subgraph infrastructure [infrastructure - adapters]
-        HttpClients["api/clients.py (HTTP gateways)"]
-        Db["db/ (ORM + repositories)"]
+    subgraph infrastructure [Infrastructure - adapters]
+        HttpClients["Http/ (typed HttpClient gateways)"]
+        Db["Persistence/ (EF Core + repositories)"]
     end
 
     Main --> SyncService
@@ -86,11 +86,11 @@ flowchart TD
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| Domain | `apps/uploader/src/uploader/domain/` | Pure dataclass models and `compute_fingerprint`. No I/O, no framework imports. |
-| Application | `apps/uploader/src/uploader/application/` | Orchestration (`sync_service.py`), planning (`sync_planner.py`), `builders/`, and the `interfaces/ports.py` Protocols. |
-| Infrastructure | `apps/uploader/src/uploader/infrastructure/` | Adapters implementing the ports: HTTP gateways (`api/clients.py`) and DB ORM + repositories (`db/`). |
+| Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, and the domain services `FingerprintSyncPlanner` and `FingerprintCalculator`. No I/O, no framework dependencies. |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Builders/` (JSON -> domain), and the port interfaces in `Abstractions/`. |
+| Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
-The ports in `apps/uploader/src/uploader/application/interfaces/ports.py` (`SourceDataGateway`, `CatalogueGateway`, `SyncStateRepository`, `SyncPlanner`) are `typing.Protocol`s. Infrastructure provides concrete implementations, and `main.py` wires them together from environment variables.
+The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
 
 ## Sync flow
 
@@ -121,16 +121,16 @@ flowchart TD
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
 2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number`), and radiology (by `accession_numbers`).
-3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (`compute_fingerprint`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
+3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (`FingerprintCalculator`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
 4. **Execute** the plan against the catalogue API (upsert or delete per entity).
 5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB subtree.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
-Upload eligibility: a patient is only uploaded if it has at least one sample (`PatientAggregate.is_upload_eligible()`).
+Upload eligibility: a patient is only uploaded if it has at least one sample (`PatientAggregate.IsUploadEligible()`).
 
 ## Sync state machine
 
-Two enums in `apps/uploader/src/uploader/domain/models/sync.py` drive change detection. They are distinct concepts:
+Two enums in `Uploader.Domain/Sync/SyncState.cs` drive change detection. They are distinct concepts:
 
 - **`SyncOp`** is the *decision* the planner makes for an entity on this run: `CREATE`, `UPDATE`, `SKIP`, or `DELETE`.
 - **`SyncStatus`** is the *persisted state* of an entity in the DB between runs: `PENDING`, `SYNCED`, `FAILED`, or `DELETED`.
@@ -152,9 +152,9 @@ stateDiagram-v2
 
 | Status | Meaning | Set when |
 |--------|---------|----------|
-| `PENDING` | Planned this run, not yet executed (also the default for a brand-new entity). | Planner creates a new state, or no prior state exists (`sync_planner.py`). |
-| `SYNCED` | Successfully upserted to the catalogue. | Execution of a `CREATE`/`UPDATE` op succeeds (`sync_service.py`). |
-| `FAILED` | The upsert/delete for this entity failed; the run continues for others. | Execution of an op raises (`sync_service.py`). |
-| `DELETED` | Entity disappeared from the source; deleted in the catalogue and soft-deleted in the DB. | Planner emits a `DELETE` op, or the repository soft-deletes a subtree (`sync_planner.py`, `sync_state_repository.py`). |
+| `PENDING` | Planned this run, not yet executed (also the default for a brand-new entity). | Planner creates a new state, or no prior state exists (`FingerprintSyncPlanner`). |
+| `SYNCED` | Successfully upserted to the catalogue. | Execution of a `CREATE`/`UPDATE` op succeeds (`RunCatalogueSyncCommandHandler`). |
+| `FAILED` | The upsert/delete for this entity failed; the run continues for others. | The catalogue gateway returns an error for an op (`RunCatalogueSyncCommandHandler`). |
+| `DELETED` | Entity disappeared from the source; deleted in the catalogue and soft-deleted in the DB. | Planner emits a `DELETE` op, or the repository soft-deletes a subtree (`FingerprintSyncPlanner`, `SyncStateRepository`). |
 
 A soft-deleted (`DELETED`) entity that reappears in the source is treated as a fresh `CREATE` on the next run, returning it to `PENDING` → `SYNCED`.

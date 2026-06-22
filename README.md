@@ -1,36 +1,41 @@
 # data-catalogue-upload
 
-A **uv-workspace monorepo** for the data-catalogue sync system. It contains the sync job and the source API
-services it reads from.
+A **.NET solution** for the data-catalogue sync system: the sync job and the source API
+services it reads from. The solution is [`DataCatalogue.slnx`](DataCatalogue.slnx) at the repo root.
 
-| Member | Path | What it is |
-|--------|------|------------|
-| uploader | [`apps/uploader`](apps/uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and upserts it into the data catalogue. |
-| biobank_api | [`apps/biobank_api`](apps/biobank_api) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
+| Service | Projects | What it is |
+|---------|----------|------------|
+| uploader | [`src/Uploader`](src/Uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and upserts it into the data catalogue. |
+| biobank_api | [`src/BiobankApi`](src/BiobankApi) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
 
-More `*_api` services (radiology, sequencing, WSI) will be added as additional members. Each member declares
-its own dependencies and has its own `.env`, Alembic migrations, and PostgreSQL database.
+Each service is its own set of projects (Domain / Application / Infrastructure / host) following
+**Clean Architecture + DDD**: a rich domain with aggregates and domain services, a CQRS application
+layer dispatched through the free [`Mediator`](https://github.com/martinothamar/Mediator) source
+generator, `ErrorOr` for results, FluentValidation for input validation, EF Core for persistence,
+and ASP.NET Core Minimal API for the HTTP surface. Each service owns its own PostgreSQL database and
+EF Core migrations.
 
 ## Quickstart
 
 ```bash
-uv sync --all-packages --group dev                 # install the whole workspace
+dotnet restore DataCatalogue.slnx
+dotnet build DataCatalogue.slnx
+dotnet test DataCatalogue.slnx
 
-# each member has its own .env
-cp apps/uploader/.env.example    apps/uploader/.env
-cp apps/biobank_api/.env.example apps/biobank_api/.env
-
-# each app has its own database service
+# start both databases
 docker compose -f compose.prod.yml up -d uploader-db biobank-db
 
-# apply each member's migrations
-cd apps/uploader    && uv run alembic -c alembic.ini upgrade head && cd -
-cd apps/biobank_api && uv run alembic -c alembic.ini upgrade head && cd -
+# run the biobank API (applies its EF migrations on startup when RUN_MIGRATIONS=true)
+RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
+  dotnet run --project src/BiobankApi/BiobankApi.Web          # http://localhost:8001
 
-# run a member
-uv run --package biobank_api biobank-api-serve     # http://localhost:8001
-uv run --package uploader    uploader              # the sync job
+# one-shot XML ingestion
+RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
+  dotnet run --project src/BiobankApi/BiobankApi.Web -- ingest
+
+# run the sync job (applies its EF migrations on startup, then syncs and prints a JSON summary)
+dotnet run --project src/Uploader/Uploader.Host
 ```
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design,
-and each member's README for service-specific details.
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
+design, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
