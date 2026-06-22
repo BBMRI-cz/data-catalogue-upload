@@ -4,8 +4,10 @@ services:
     image: postgres:16
     container_name: uploader-db
     restart: unless-stopped
-    env_file:
-      - apps/uploader/.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
     ports:
       - "5432:5432"
     volumes:
@@ -16,49 +18,53 @@ services:
     image: postgres:16
     container_name: biobank-db
     restart: unless-stopped
-    env_file:
-      - apps/biobank_api/.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
     ports:
       - "5433:5432"
     volumes:
       - biobank_db_data:/var/lib/postgresql/data
 
-  biobank_api:
+  biobank-api:
     build:
       context: .
-      dockerfile: apps/biobank_api/Dockerfile
+      dockerfile: src/BiobankApi/BiobankApi.Web/Dockerfile
     container_name: biobank-api
     restart: unless-stopped
-    env_file:
-      - apps/biobank_api/.env
     environment:
-      # Reach the biobank-db container; creds come from the env_file above.
       POSTGRES_HOST: biobank-db
       POSTGRES_PORT: 5432
-      BIOBANK_HOST: 0.0.0.0
-      BIOBANK_PORT: 8001
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
+      ASPNETCORE_URLS: http://+:8001
+      RUN_MIGRATIONS: "true"
     depends_on:
       - biobank-db
     ports:
       - "8001:8001"
 
   # Ingestion (one-shot). Run on demand / on a schedule:
-  #   docker compose -f compose.prod.yml --profile ingest run --rm biobank_api_ingest
-  biobank_api_ingest:
+  #   docker compose -f compose.prod.yml --profile ingest run --rm biobank-api-ingest
+  biobank-api-ingest:
     build:
       context: .
-      dockerfile: apps/biobank_api/Dockerfile
+      dockerfile: src/BiobankApi/BiobankApi.Web/Dockerfile
     profiles:
       - ingest
-    env_file:
-      - apps/biobank_api/.env
     environment:
       POSTGRES_HOST: biobank-db
       POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
       BIOBANK_XML_EXPORT_PATH: /data/exports
+      RUN_MIGRATIONS: "true"
     depends_on:
       - biobank-db
-    command: ["biobank-api-ingest"]
+    command: ["ingest"]
     volumes:
       - ./data/exports:/data/exports:ro
 
