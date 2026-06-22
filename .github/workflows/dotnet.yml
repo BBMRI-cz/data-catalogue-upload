@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore
+        run: dotnet restore DataCatalogue.slnx
+      - name: Format check
+        run: dotnet format DataCatalogue.slnx --verify-no-changes --no-restore
+      - name: Build (warnings as errors)
+        run: dotnet build DataCatalogue.slnx --configuration Release --no-restore
+      - name: Test
+        run: dotnet test DataCatalogue.slnx --configuration Release --no-build

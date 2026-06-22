@@ -1,155 +1,105 @@
 # Development
 
-Developer guide for setting up, running, and contributing to `data-catalogue-upload`. For the high-level
-design see [`ARCHITECTURE.md`](ARCHITECTURE.md); for AI-agent conventions see [`AGENTS.md`](AGENTS.md).
-
-This repository is a **uv workspace** (monorepo). Members live under `apps/`:
-
-- [`apps/uploader`](apps/uploader) - the sync job ([README](apps/uploader/README.md))
-- [`apps/biobank_api`](apps/biobank_api) - the biobank source API ([README](apps/biobank_api/README.md))
-
-There is one `uv.lock` and one `.venv` for the whole workspace; each member declares only its own dependencies
-and has **its own `.env`, Alembic migrations, and PostgreSQL database**.
+Setup and local-run guide for the **.NET solution**. All commands run from the repo root.
 
 ## Prerequisites
 
-- **Python** - local development uses `3.14` (pinned in `.python-version`); the project supports `>=3.11` and CI runs `3.11`.
-- **[uv](https://github.com/astral-sh/uv)** - dependency manager and task runner.
-- **Docker** (with Compose) - to run the PostgreSQL databases and the API services.
+- **.NET SDK 10** (pinned in `global.json`). Check with `dotnet --version`.
+- **Docker** (for the two PostgreSQL databases).
+- EF Core CLI tooling is restored as a local tool: `dotnet tool restore` (uses `dotnet-tools.json`).
 
-## Setup
-
-1. Install the whole workspace (all members + shared dev tools):
+## Install & verify
 
 ```bash
-uv sync --all-packages --group dev
+dotnet tool restore                       # dotnet-ef local tool
+dotnet restore DataCatalogue.slnx
+dotnet build DataCatalogue.slnx -c Release   # warnings are errors
+dotnet test DataCatalogue.slnx               # unit + integration tests
+dotnet format DataCatalogue.slnx --verify-no-changes   # lint/format check
 ```
-
-2. Create each member's env file from its template and adjust as needed:
-
-```bash
-cp apps/uploader/.env.example    apps/uploader/.env
-cp apps/biobank_api/.env.example apps/biobank_api/.env
-```
-
-## Environment variables
-
-Each member owns its config: `apps/<member>/.env` (gitignored; only `.env.example` is tracked).
-
-- `apps/uploader/.env` - `POSTGRES_*` for the uploader's database, plus the five source/catalogue API URLs.
-  Loaded by `main.py` and the uploader's `migrations/env.py`.
-- `apps/biobank_api/.env` - `POSTGRES_*` for the biobank API's database and `BIOBANK_*` (server bind + XML
-  export path). Read by `config.Settings` (which also drives `migrations/env.py`).
-
-Never commit a real `.env`.
 
 ## Databases
 
-Each app has its own PostgreSQL service in [`compose.prod.yml`](compose.prod.yml):
+Each service owns its own PostgreSQL database. Start both with Docker:
 
 ```bash
 docker compose -f compose.prod.yml up -d uploader-db biobank-db
 ```
 
-| Service | Host port | Database (`POSTGRES_DB`) | Used by |
-|---------|-----------|--------------------------|---------|
-| `uploader-db` | `5432` | `data_catalogue_upload` | the uploader (host-run, via `localhost:5432`) |
-| `biobank-db` | `5433` | `biobank_api` | the biobank API |
+- `uploader-db` -> `localhost:5432`, database `data_catalogue_upload`
+- `biobank-db` -> `localhost:5433`, database `biobank_api`
 
-Apply each member's migrations (own Alembic tree + database):
+Both default to `postgres` / `postgres`.
+
+## Configuration
+
+Configuration is read from **environment variables** (no `.env` files are tracked). Defaults in
+`BiobankOptions` / `UploaderOptions` match the Docker databases above.
+
+**biobank_api:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `BIOBANK_HOST|PORT`, `BIOBANK_XML_EXPORT_PATH`.
+For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
+
+**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
+`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`.
+
+## Migrations (EF Core)
 
 ```bash
-cd apps/uploader    && uv run alembic -c alembic.ini upgrade head && cd -
-cd apps/biobank_api && uv run alembic -c alembic.ini upgrade head && cd -
+# biobank_api
+dotnet ef migrations add <Name> \
+  --project src/BiobankApi/BiobankApi.Infrastructure \
+  --startup-project src/BiobankApi/BiobankApi.Web \
+  --output-dir Persistence/Migrations
+dotnet ef database update \
+  --project src/BiobankApi/BiobankApi.Infrastructure \
+  --startup-project src/BiobankApi/BiobankApi.Web
+
+# uploader (swap the project/startup paths)
+dotnet ef migrations add <Name> \
+  --project src/Uploader/Uploader.Infrastructure \
+  --startup-project src/Uploader/Uploader.Host \
+  --output-dir Persistence/Migrations
 ```
 
-> Note: both `uploader` (`main.py`) and `biobank_api` (`ingest.py`) also call `Base.metadata.create_all(...)`,
-> so tables can be created without migrations during development. For anything reproducible, use Alembic.
+At runtime the **uploader** applies migrations on startup; the **biobank_api** applies them when
+`RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).
 
 ## Running the services
 
-With the databases up and each `.env` filled in:
-
 ```bash
-# uploader sync job (prints a JSON run summary; exits 0, or 1 if any entity failed)
-uv run --package uploader uploader
+# biobank API server (http://localhost:8001)
+RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/BiobankApi.Web
 
-# biobank API HTTP server (then curl localhost:8001/health and /patients)
-uv run --package biobank_api biobank-api-serve
+# biobank one-shot XML ingestion
+RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/BiobankApi.Web -- ingest
 
-# biobank API ingestion (one-shot: parse XML exports -> DB)
-uv run --package biobank_api biobank-api-ingest
+# uploader sync job (prints a JSON summary; exit 0 = no failures, 1 = failures)
+dotnet run --project src/Uploader/Uploader.Host
 ```
 
-Or run the biobank API via Docker (it reaches `biobank-db` over the compose network):
+## Tests
+
+- `*.UnitTests` - pure tests (domain services, planner, builders, handlers with fakes).
+- `*.IntegrationTests` - EF Core against in-memory SQLite via the `SqliteDatabase` helper; the biobank
+  API is exercised end-to-end with `WebApplicationFactory<Program>`.
 
 ```bash
-docker compose -f compose.prod.yml up -d biobank-db biobank_api
-docker compose -f compose.prod.yml --profile ingest run --rm biobank_api_ingest
+dotnet test DataCatalogue.slnx                                  # everything
+dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 ```
 
-## Quality checks
-
-Run these for each package you touched (`<pkg>` = `uploader` or `biobank_api`); they mirror CI (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml), a per-package matrix):
+## Containers
 
 ```bash
-uv run ruff check apps/<pkg>            # lint
-uv run ruff format --check apps/<pkg>   # formatting (drop --check to auto-format)
-uv run mypy apps/<pkg>                  # type check
-uv run pytest apps/<pkg>/tests          # tests
-uv lock --check                         # workspace lockfile is consistent
+docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api
+docker compose -f compose.prod.yml --profile ingest run --rm biobank-api-ingest
 ```
 
-### Tests: unit vs integration
+The Dockerfiles build with the repo root as their context (central package management +
+project references). The uploader is run as a job (host `dotnet run` or its own container image).
 
-A member's tests live in `apps/<pkg>/tests/`, split by what they touch:
+## CI
 
-- `tests/unit/` — pure tests with no I/O (domain models, builders, use cases; handlers tested
-  against fake ports). Fast; these are the bulk of the suite.
-- `tests/integration/` — exercise a real adapter (e.g. a repository against a real database
-  engine), no live external service needed. A `conftest.py` in the folder is a shared file pytest
-  auto-loads to provide fixtures (like a DB session) to every test under it.
-
-```bash
-uv run pytest apps/<pkg>/tests/unit         # fast inner loop
-uv run pytest apps/<pkg>/tests/integration  # adapter round-trips
-uv run pytest apps/<pkg>/tests              # everything (what CI runs; pytest recurses)
-```
-
-## Adding a migration
-
-After changing a member's ORM models (e.g. `apps/biobank_api/src/biobank_api/infrastructure/db/models.py`):
-
-```bash
-cd apps/biobank_api
-uv run alembic -c alembic.ini revision --autogenerate -m "describe change"
-uv run alembic -c alembic.ini upgrade head
-```
-
-Review the generated file under `apps/<pkg>/migrations/versions/` before committing - autogenerate is a
-starting point, not a guarantee.
-
-## Adding dependencies
-
-Use uv so `pyproject.toml` and `uv.lock` stay consistent. Add runtime deps to the **member that needs them**;
-add shared dev tooling to the **root** dev group:
-
-```bash
-cd apps/biobank_api && uv add fastapi    # runtime dependency of one member
-uv add --group dev pytest                # shared dev dependency (run at the repo root)
-```
-
-Do not hand-edit `uv.lock`.
-
-## Troubleshooting
-
-| Symptom | Likely cause & fix |
-|---------|--------------------|
-| `docker compose up` fails with "port is already allocated" | A host port (`5432`/`5433`) is taken. Change the mapping in `compose.prod.yml` (and the member's `.env` `POSTGRES_PORT` for host runs). |
-| App/alembic can't connect to the database | The relevant db service isn't up, or the member's `.env` doesn't match it. Check `docker compose -f compose.prod.yml ps` and the `POSTGRES_*` values in `apps/<member>/.env`. |
-| `RuntimeError: Missing required environment variable` (uploader) | A required API URL is unset. Ensure all five (`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`) are in `apps/uploader/.env`. |
-| Alembic: "Target database is not up to date" | Pending migrations. Run `cd apps/<pkg> && uv run alembic -c alembic.ini upgrade head`. |
-| Alembic: "Can't locate revision identified by ..." | The DB's `alembic_version` points at a revision not in `apps/<pkg>/migrations/versions/` (e.g. after switching branches). Align the branch with the DB, or recreate the dev DB. |
-| `.env` values seem ignored | Each member's `.env` lives in `apps/<member>/`, not the repo root. The uploader loads it in `main.py`; the biobank API reads it via `config.Settings`. |
-| `uv sync` removed a member's deps | At the workspace root, `uv sync` alone only syncs the root. Use `uv sync --all-packages --group dev`. |
+[`.github/workflows/dotnet.yml`](.github/workflows/dotnet.yml) restores, runs
+`dotnet format --verify-no-changes`, builds in Release (warnings as errors), and runs the tests.
+Run those three locally before pushing.

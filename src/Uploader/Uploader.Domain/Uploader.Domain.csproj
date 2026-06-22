@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Uploader.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>
