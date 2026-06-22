@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/BiobankApi/">
+    <Project Path="src/BiobankApi/BiobankApi.Application/BiobankApi.Application.csproj" />
+    <Project Path="src/BiobankApi/BiobankApi.Domain/BiobankApi.Domain.csproj" />
+    <Project Path="src/BiobankApi/BiobankApi.Infrastructure/BiobankApi.Infrastructure.csproj" />
+    <Project Path="src/BiobankApi/BiobankApi.Web/BiobankApi.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/Uploader/">
+    <Project Path="src/Uploader/Uploader.Application/Uploader.Application.csproj" />
+    <Project Path="src/Uploader/Uploader.Domain/Uploader.Domain.csproj" />
+    <Project Path="src/Uploader/Uploader.Host/Uploader.Host.csproj" />
+    <Project Path="src/Uploader/Uploader.Infrastructure/Uploader.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BiobankApi.IntegrationTests/BiobankApi.IntegrationTests.csproj" />
+    <Project Path="tests/BiobankApi.UnitTests/BiobankApi.UnitTests.csproj" />
+    <Project Path="tests/Uploader.IntegrationTests/Uploader.IntegrationTests.csproj" />
+    <Project Path="tests/Uploader.UnitTests/Uploader.UnitTests.csproj" />
+  </Folder>
+</Solution>
