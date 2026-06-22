@@ -1,0 +1,65 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using BiobankApi.Application.Abstractions;
+using BiobankApi.Domain.Patients;
+using BiobankApi.Web.Contracts;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xunit;
+
+namespace BiobankApi.IntegrationTests;
+
+public sealed class ApiTests
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    private static HttpClient CreateClient(params Patient[] patients)
+    {
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IBiobankRepository>();
+                services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository(patients));
+            }));
+
+        return factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task HealthReturnsOk()
+    {
+        var response = await CreateClient().GetAsync("/health");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<HealthResponse>(JsonOptions);
+        Assert.Equal("ok", body!.Status);
+    }
+
+    [Fact]
+    public async Task ListPatientsEmpty()
+    {
+        var response = await CreateClient().GetAsync("/patients");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<PatientResponse>>(JsonOptions);
+        Assert.Empty(body!);
+    }
+
+    [Fact]
+    public async Task ListPatientsReturnsRepositoryData()
+    {
+        var response = await CreateClient(new Patient("P1")).GetAsync("/patients");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<List<PatientResponse>>(JsonOptions);
+        var patient = Assert.Single(body!);
+        Assert.Equal("P1", patient.PatientId);
+        Assert.Empty(patient.Samples);
+    }
+}
