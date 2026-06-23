@@ -10,16 +10,16 @@ public sealed class MapperTests
     [Fact]
     public void ToEntityRoutesSamplesToTheirTables()
     {
-        var patient = new Patient(
+        var patient = PatientAggregate.Create(
             "P1",
             consent: true,
             samples:
             [
-                new TissueSample("T1", "1"),
-                new SerumSample("S1", "SD"),
-                new GenomeSample("G1", "PK"),
+                TissueSample.Create("T1", "1").Value,
+                SerumSample.Create("S1", "SD").Value,
+                GenomeSample.Create("G1", "PK").Value,
             ],
-            diagnosticSpecimens: [new DiagnosticSpecimen("&:2022:1")]);
+            diagnosticSpecimens: [DiagnosticSpecimen.Create("&:2022:1").Value]).Value;
 
         var entity = PatientMapper.ToEntity(patient);
 
@@ -33,7 +33,7 @@ public sealed class MapperTests
     [Fact]
     public void FullPatientRoundTripsThroughMappers()
     {
-        var patient = new Patient(
+        var patient = PatientAggregate.Create(
             "138423",
             biobank: "MOU",
             consent: true,
@@ -43,27 +43,27 @@ public sealed class MapperTests
             accessionNumbers: ["RAD-1", "RAD-2"],
             samples:
             [
-                new TissueSample(
+                TissueSample.Create(
                     "BBM:2023:181:1",
                     "1",
                     accessionNumbers: ["ACC-1"],
                     diagnosis: "C56",
                     cutTime: new DateTime(2023, 3, 24, 11, 15, 0),
                     freezeTime: new DateTime(2023, 3, 24, 11, 20, 0),
-                    retrieved: Retrieved.Operational),
+                    retrieved: Retrieved.Operational).Value,
             ],
             diagnosticSpecimens:
             [
-                new DiagnosticSpecimen(
+                DiagnosticSpecimen.Create(
                     "&:2022:118485",
                     diagnosis: "C504",
                     takingDate: new DateTime(2022, 9, 20, 10, 44, 0),
-                    retrieved: Retrieved.Unknown),
-            ]);
+                    retrieved: Retrieved.Unknown).Value,
+            ]).Value;
 
         var restored = PatientMapper.ToDomain(PatientMapper.ToEntity(patient));
 
-        Assert.Equal(patient.PatientId, restored.PatientId);
+        Assert.Equal(patient.Id.Value, restored.Id.Value);
         Assert.Equal(patient.Biobank, restored.Biobank);
         Assert.Equal(patient.Consent, restored.Consent);
         Assert.Equal(patient.Sex, restored.Sex);
@@ -72,7 +72,7 @@ public sealed class MapperTests
         Assert.Equal(patient.AccessionNumbers, restored.AccessionNumbers);
 
         var tissue = Assert.IsType<TissueSample>(Assert.Single(restored.Samples));
-        Assert.Equal("BBM:2023:181:1", tissue.SampleId);
+        Assert.Equal("BBM:2023:181:1", tissue.Id.Value);
         Assert.Equal(["ACC-1"], tissue.AccessionNumbers);
         Assert.Equal("C56", tissue.Diagnosis);
         Assert.Equal(new DateTime(2023, 3, 24, 11, 15, 0), tissue.CutTime);
@@ -80,7 +80,7 @@ public sealed class MapperTests
         Assert.Equal(Retrieved.Operational, tissue.Retrieved);
 
         var specimen = Assert.Single(restored.DiagnosticSpecimens);
-        Assert.Equal("&:2022:118485", specimen.SampleId);
+        Assert.Equal("&:2022:118485", specimen.Id.Value);
         Assert.Equal("C504", specimen.Diagnosis);
         Assert.Equal(new DateTime(2022, 9, 20, 10, 44, 0), specimen.TakingDate);
         Assert.Equal(Retrieved.Unknown, specimen.Retrieved);
