@@ -4,4 +4,13 @@
     <RootNamespace>BiobankApi.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The persistence Mapperly mapper reconstitutes aggregates via their internal initializer. -->
+    <InternalsVisibleTo Include="BiobankApi.Infrastructure" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ErrorOr" />
+  </ItemGroup>
+
 </Project>

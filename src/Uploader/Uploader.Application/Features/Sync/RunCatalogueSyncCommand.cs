@@ -1,17 +1,31 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using ErrorOr;
 using Mediator;
+using Microsoft.Extensions.Logging;
 using Uploader.Application.Abstractions;
-using Uploader.Application.Builders;
-using Uploader.Application.Json;
+using Uploader.Application.Dtos;
+using Uploader.Application.Mapping;
 using Uploader.Domain;
+using Uploader.Domain.Common;
 using Uploader.Domain.Services;
 using Uploader.Domain.Sync;
 
 namespace Uploader.Application.Features.Sync;
 
 /// <summary>Command backing the scheduled job: run a full catalogue sync and return its summary.</summary>
-public sealed record RunCatalogueSyncCommand : ICommand<ErrorOr<RunSummary>>;
+public sealed record RunCatalogueSyncCommand : ICommand<ErrorOr<RunCatalogueSyncCommandResult>>;
+
+/// <summary>Mutable tally of one catalogue-sync run, persisted to the <c>sync_run</c> table.</summary>
+public sealed class RunCatalogueSyncCommandResult(string runId)
+{
+    public string RunId { get; } = runId;
+    public int Scanned { get; set; }
+    public int Changed { get; set; }
+    public int Uploaded { get; set; }
+    public int Deleted { get; set; }
+    public int Skipped { get; set; }
+    public int Failed { get; set; }
+}
 
 internal sealed class RunCatalogueSyncCommandHandler(
     ISourceDataGateway sourceGateway,
@@ -19,54 +33,75 @@ internal sealed class RunCatalogueSyncCommandHandler(
     ISyncStateRepository stateRepository,
     ISyncRunRepository runRepository,
     ISyncPlanner planner,
-    ClinicalBuilder clinicalBuilder,
-    RadiologyBuilder radiologyBuilder,
-    SequencingBuilder sequencingBuilder,
-    WsiBuilder wsiBuilder,
-    TimeProvider timeProvider)
-    : ICommandHandler<RunCatalogueSyncCommand, ErrorOr<RunSummary>>
+    SourceMapper mapper,
+    TimeProvider timeProvider,
+    ILogger<RunCatalogueSyncCommandHandler> logger)
+    : ICommandHandler<RunCatalogueSyncCommand, ErrorOr<RunCatalogueSyncCommandResult>>
 {
     private const string DeleteEntityType = "patient";
 
-    public async ValueTask<ErrorOr<RunSummary>> Handle(
+    public async ValueTask<ErrorOr<RunCatalogueSyncCommandResult>> Handle(
         RunCatalogueSyncCommand command,
         CancellationToken cancellationToken)
     {
         var runId = Guid.NewGuid().ToString();
-        var summary = new RunSummary(runId);
+        var result = new RunCatalogueSyncCommandResult(runId);
 
         var rawPatients = await sourceGateway.FetchPatientsAsync(cancellationToken);
-        var seenPatientIds = new HashSet<string>();
+        var seenPatientIds = new HashSet<PatientId>();
 
         foreach (var rawPatient in rawPatients)
         {
-            var aggregate = await BuildPatientAggregateAsync(rawPatient, cancellationToken);
-            summary.Scanned++;
-            seenPatientIds.Add(aggregate.PatientId);
+            result.Scanned++;
 
-            var existing = await stateRepository.GetAllForPatientAsync(aggregate.PatientId, cancellationToken);
-            foreach (var operation in planner.Plan(aggregate, existing))
+            ErrorOr<PatientCatalogueData> built;
+            try
             {
-                await ExecuteAsync(operation, runId, summary, cancellationToken);
+                built = await BuildPatientDataAsync(rawPatient, cancellationToken);
+            }
+            catch (JsonException exception)
+            {
+                result.Failed++;
+                logger.LogWarning(exception, "Skipping unparseable patient payload ({PatientId})", rawPatient.PatientId);
+                continue;
+            }
+
+            if (built.IsError)
+            {
+                result.Failed++;
+                logger.LogWarning(
+                    "Skipping invalid patient {PatientId}: {Error}",
+                    rawPatient.PatientId,
+                    built.Errors[0].Description);
+                continue;
+            }
+
+            var data = built.Value;
+            seenPatientIds.Add(data.Patient.Id);
+
+            var existing = await stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
+            foreach (var operation in planner.Plan(data, existing))
+            {
+                await ExecuteAsync(operation, runId, result, cancellationToken);
             }
         }
 
-        await DeleteMissingPatientsAsync(seenPatientIds, runId, summary, cancellationToken);
-        await runRepository.FinishAsync(summary, cancellationToken);
-        return summary;
+        await DeleteMissingPatientsAsync(seenPatientIds, runId, result, cancellationToken);
+        await runRepository.FinishAsync(result, cancellationToken);
+        return result;
     }
 
     private async Task ExecuteAsync(
         SyncOperation operation,
         string runId,
-        RunSummary summary,
+        RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
     {
         operation.State.RunId = runId;
 
         if (operation.Op == SyncOp.Skip)
         {
-            summary.Skipped++;
+            result.Skipped++;
             await stateRepository.SaveAsync(operation.State, cancellationToken);
             return;
         }
@@ -74,26 +109,26 @@ internal sealed class RunCatalogueSyncCommandHandler(
         if (operation.Op == SyncOp.Delete)
         {
             // Soft delete: the planner already marked the state deleted; DB only.
-            summary.Deleted++;
+            result.Deleted++;
             await stateRepository.SaveAsync(operation.State, cancellationToken);
             return;
         }
 
-        summary.Changed++;
-        var result = await UpsertAsync(operation, cancellationToken);
-        if (!result.IsError)
+        result.Changed++;
+        var upserted = await UpsertAsync(operation, cancellationToken);
+        if (!upserted.IsError)
         {
-            operation.State.CatalogueRemoteId = result.Value;
+            operation.State.CatalogueRemoteId = upserted.Value;
             operation.State.Status = SyncStatus.Synced;
             operation.State.IsDeleted = false;
             operation.State.LastSyncedAt = timeProvider.GetUtcNow();
-            summary.Uploaded++;
+            result.Uploaded++;
         }
         else
         {
-            summary.Failed++;
+            result.Failed++;
             operation.State.Status = SyncStatus.Failed;
-            operation.State.LastError = result.Errors[0].Description;
+            operation.State.LastError = upserted.Errors[0].Description;
         }
 
         await stateRepository.SaveAsync(operation.State, cancellationToken);
@@ -102,23 +137,23 @@ internal sealed class RunCatalogueSyncCommandHandler(
     private Task<ErrorOr<string>> UpsertAsync(SyncOperation operation, CancellationToken cancellationToken) =>
         operation switch
         {
-            PatientOperation patient => catalogueGateway.UpsertPatientAsync(
-                patient.PatientState.PatientId, patient.Personal, patient.Clinical, cancellationToken),
-            SampleOperation sample => catalogueGateway.UpsertSampleAsync(
-                sample.Entity!, sample.SampleState.PatientId, cancellationToken),
-            SequencingOperation sequencing => catalogueGateway.UpsertSequencingAsync(
-                sequencing.Entity!, sequencing.SequencingState.SampleId, cancellationToken),
-            WsiOperation wsi => catalogueGateway.UpsertWsiAsync(
-                wsi.Entity!, wsi.WsiState.SampleId, cancellationToken),
-            ImagingStudyOperation study => catalogueGateway.UpsertImagingStudyAsync(
-                study.Entity!, study.ImagingStudyState.PatientId, cancellationToken),
-            _ => throw new InvalidOperationException($"Unsupported operation type: {operation.GetType().Name}"),
+            PatientOperation { Patient: { } patient } => catalogueGateway.UpsertPatientAsync(patient, cancellationToken),
+            SampleOperation { Sample: { } sample } => catalogueGateway.UpsertSampleAsync(sample, cancellationToken),
+            SequencingOperation { Sequencing: { } sequencing } =>
+                catalogueGateway.UpsertSequencingAsync(sequencing, cancellationToken),
+            WsiOperation { Wsi: { } wsi } => catalogueGateway.UpsertWsiAsync(wsi, cancellationToken),
+            ImagingStudyOperation { ImagingStudy: { } study } =>
+                catalogueGateway.UpsertImagingStudyAsync(study, cancellationToken),
+
+            // Unreachable: Skip/Delete are handled before this, and create/update operations always
+            // carry their aggregate. Reaching here is a programmer error, not bad source data.
+            _ => throw new InvalidOperationException($"Unsupported operation for upsert: {operation.GetType().Name}"),
         };
 
     private async Task DeleteMissingPatientsAsync(
-        ISet<string> seenPatientIds,
+        ISet<PatientId> seenPatientIds,
         string runId,
-        RunSummary summary,
+        RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
     {
         var missing = await stateRepository.MarkMissingPatientsAsDeletedAsync(
@@ -126,89 +161,99 @@ internal sealed class RunCatalogueSyncCommandHandler(
 
         foreach (var state in missing)
         {
-            var result = await catalogueGateway.DeleteAsync(
-                DeleteEntityType, state.PatientId, state.CatalogueRemoteId, cancellationToken);
-            if (!result.IsError)
+            var deleted = await catalogueGateway.DeleteAsync(
+                DeleteEntityType, state.Id.Value, state.CatalogueRemoteId, cancellationToken);
+            if (!deleted.IsError)
             {
-                summary.Deleted++;
+                result.Deleted++;
             }
             else
             {
-                summary.Failed++;
+                result.Failed++;
             }
 
             // Children are soft-deleted in the DB only, no gateway calls.
-            await stateRepository.SoftDeleteChildrenAsync(state.PatientId, runId, cancellationToken);
+            await stateRepository.SoftDeleteChildrenAsync(state.Id, runId, cancellationToken);
         }
     }
 
-    private async Task<PatientAggregate> BuildPatientAggregateAsync(
-        JsonObject rawPatient,
+    private async Task<ErrorOr<PatientCatalogueData>> BuildPatientDataAsync(
+        PatientDto rawPatient,
         CancellationToken cancellationToken)
     {
-        var personal = clinicalBuilder.BuildPersonal(rawPatient);
-        var clinical = clinicalBuilder.BuildClinical(rawPatient);
-
-        var samples = new List<Sample>();
-        foreach (var node in RawJson.AsList(rawPatient["samples"]))
+        var patientResult = mapper.ToPatient(rawPatient);
+        if (patientResult.IsError)
         {
-            if (node is not JsonObject rawSample)
-            {
-                continue;
-            }
-
-            var predictiveNumber = rawSample.GetString("predictive_number");
-            var biopticNumber = rawSample.GetString("bioptic_number");
-
-            IReadOnlyList<SequencingEntry>? sequencing = null;
-            if (!string.IsNullOrEmpty(predictiveNumber))
-            {
-                var sequencingPayload = await sourceGateway.FetchSequencingAsync(predictiveNumber, cancellationToken);
-                if (sequencingPayload is { Count: > 0 })
-                {
-                    sequencing = sequencingBuilder.BuildSequencingData(predictiveNumber, sequencingPayload);
-                }
-            }
-
-            WsiData? wsi = null;
-            if (!string.IsNullOrEmpty(biopticNumber))
-            {
-                var wsiPayload = await sourceGateway.FetchWsiAsync(biopticNumber, cancellationToken);
-                if (wsiPayload is { Count: > 0 })
-                {
-                    wsi = wsiBuilder.BuildWsi(biopticNumber, wsiPayload);
-                }
-            }
-
-            samples.Add(new Sample
-            {
-                SampleId = RawJson.RequireString(rawSample, "sample_id"),
-                PredictiveNumber = predictiveNumber,
-                BiopticNumber = biopticNumber,
-                Material = clinicalBuilder.BuildMaterial(rawSample),
-                Payload = rawSample,
-                Sequencing = sequencing,
-                Wsi = wsi,
-            });
+            return patientResult.Errors;
         }
 
-        var accessionNumbers = RawJson.AsList(rawPatient["accession_numbers"])
-            .Where(node => node is not null)
-            .Select(node => RawJson.ValueToString(node!))
-            .ToList();
+        var patient = patientResult.Value;
+        var samples = new List<SampleAggregate>();
+        var sequencings = new List<SequencingAggregate>();
+        var wsis = new List<WsiAggregate>();
 
-        var radiologyPayloads = await sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken);
-        var radiology = radiologyPayloads.Select(radiologyBuilder.BuildImagingStudy).ToList();
-
-        return new PatientAggregate
+        foreach (var rawSample in rawPatient.Samples ?? [])
         {
-            PatientId = RawJson.RequireString(rawPatient, "patient_id"),
-            AccessionNumbers = accessionNumbers,
-            Personal = personal,
-            Clinical = clinical,
+            var sampleResult = mapper.ToSample(rawSample, patient.Id);
+            if (sampleResult.IsError)
+            {
+                return sampleResult.Errors;
+            }
+
+            var sample = sampleResult.Value;
+            samples.Add(sample);
+
+            if (sample.SequencingId is { } sequencingId)
+            {
+                var sequencingDto = await sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
+                if (sequencingDto is not null)
+                {
+                    var sequencingResult = mapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
+                    if (sequencingResult.IsError)
+                    {
+                        return sequencingResult.Errors;
+                    }
+
+                    sequencings.Add(sequencingResult.Value);
+                }
+            }
+
+            if (sample.WsiId is { } wsiId)
+            {
+                var wsiDto = await sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
+                if (wsiDto is not null)
+                {
+                    var wsiResult = mapper.ToWsi(wsiDto, wsiId, sample.Id);
+                    if (wsiResult.IsError)
+                    {
+                        return wsiResult.Errors;
+                    }
+
+                    wsis.Add(wsiResult.Value);
+                }
+            }
+        }
+
+        var accessionNumbers = rawPatient.AccessionNumbers ?? [];
+        var studies = new List<ImagingStudyAggregate>();
+        foreach (var studyDto in await sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
+        {
+            var studyResult = mapper.ToImagingStudy(studyDto, patient.Id);
+            if (studyResult.IsError)
+            {
+                return studyResult.Errors;
+            }
+
+            studies.Add(studyResult.Value);
+        }
+
+        return new PatientCatalogueData
+        {
+            Patient = patient,
             Samples = samples,
-            Payload = rawPatient,
-            Radiology = radiology,
+            Sequencings = sequencings,
+            Wsis = wsis,
+            ImagingStudies = studies,
         };
     }
 }

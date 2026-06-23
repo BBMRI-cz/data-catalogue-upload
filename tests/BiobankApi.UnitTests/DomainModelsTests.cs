@@ -1,6 +1,5 @@
-using BiobankApi.Domain;
-using BiobankApi.Domain.Common;
 using BiobankApi.Domain.Patients;
+using ErrorOr;
 using Xunit;
 
 namespace BiobankApi.UnitTests;
@@ -12,14 +11,14 @@ public sealed class DomainModelsTests
     [Fact]
     public void TissueSampleMaterialTypeLabel()
     {
-        var sample = new TissueSample("BBM:2023:181:53", "53");
+        var sample = TissueSample.Create("BBM:2023:181:53", "53").Value;
         Assert.Equal("Malignant tumour (RNAlater)", sample.MaterialTypeLabel);
     }
 
     [Fact]
     public void UnknownMaterialTypeLabelIsNull()
     {
-        Assert.Null(new TissueSample("BBM:2023:181:1", "999").MaterialTypeLabel);
+        Assert.Null(TissueSample.Create("BBM:2023:181:1", "999").Value.MaterialTypeLabel);
         Assert.Null(MaterialTypes.Label(MaterialTypes.Tissue, "999"));
         Assert.Null(MaterialTypes.Label(MaterialTypes.Serum, null));
     }
@@ -27,14 +26,14 @@ public sealed class DomainModelsTests
     [Fact]
     public void SerumSampleResolvesLabel()
     {
-        var sample = new SerumSample("BBMs:2022:3249:SD", "SD");
+        var sample = SerumSample.Create("BBMs:2022:3249:SD", "SD").Value;
         Assert.Equal("Serum, nitrogen-stored", sample.MaterialTypeLabel);
     }
 
     [Fact]
     public void DiagnosticSpecimenResolvesLabel()
     {
-        var specimen = new DiagnosticSpecimen("&:2022:118485", materialType: "S");
+        var specimen = DiagnosticSpecimen.Create("&:2022:118485", materialType: "S").Value;
         Assert.Equal("Serum / surgical specimen", specimen.MaterialTypeLabel);
     }
 
@@ -43,57 +42,56 @@ public sealed class DomainModelsTests
     [Fact]
     public void PatientMinimalConstructionStaysValid()
     {
-        var patient = new Patient("P1");
+        var patient = PatientAggregate.Create("P1").Value;
+        Assert.Equal("P1", patient.Id.Value);
         Assert.Empty(patient.Samples);
         Assert.Empty(patient.DiagnosticSpecimens);
     }
 
-    // --- invariants ------------------------------------------------------------------
+    // --- invariants surface as ErrorOr validation errors -----------------------------
 
     [Fact]
-    public void PatientRejectsEmptyId() =>
-        Assert.Throws<DomainException>(() => new Patient("  "));
+    public void PatientRejectsEmptyId() => AssertValidationError(PatientAggregate.Create("  "));
 
     [Theory]
     [InlineData(0)]
     [InlineData(13)]
     [InlineData(-1)]
     public void PatientRejectsOutOfRangeMonth(int birthMonth) =>
-        Assert.Throws<DomainException>(() => new Patient("P1", birthMonth: birthMonth));
+        AssertValidationError(PatientAggregate.Create("P1", birthMonth: birthMonth));
 
     [Theory]
     [InlineData(1850)]
     [InlineData(2200)]
     public void PatientRejectsOutOfRangeYear(int birthYear) =>
-        Assert.Throws<DomainException>(() => new Patient("P1", birthYear: birthYear));
+        AssertValidationError(PatientAggregate.Create("P1", birthYear: birthYear));
 
     [Fact]
     public void PatientWithoutConsentMustNotCarryData()
     {
-        var serum = new SerumSample("BBMs:2022:3249:SD", "SD");
-        Assert.Throws<DomainException>(() => new Patient("P1", consent: false, samples: [serum]));
-        Assert.Throws<DomainException>(() => new Patient("P1", consent: false, accessionNumbers: ["RDG1"]));
+        var serum = SerumSample.Create("BBMs:2022:3249:SD", "SD").Value;
+        AssertValidationError(PatientAggregate.Create("P1", consent: false, samples: [serum]));
+        AssertValidationError(PatientAggregate.Create("P1", consent: false, accessionNumbers: ["RDG1"]));
     }
 
     [Fact]
     public void SampleRejectsEmptyRequiredFields()
     {
-        Assert.Throws<DomainException>(() => new TissueSample("", "1"));
-        Assert.Throws<DomainException>(() => new TissueSample("BBM:2023:181:1", ""));
+        AssertValidationError(TissueSample.Create("", "1"));
+        AssertValidationError(TissueSample.Create("BBM:2023:181:1", ""));
     }
 
     [Fact]
     public void SampleRejectsAvailableExceedingTotal() =>
-        Assert.Throws<DomainException>(() =>
-            new SerumSample("BBMs:2022:3249:SD", "SD", samplesNo: 1, availableSamplesNo: 2));
+        AssertValidationError(SerumSample.Create("BBMs:2022:3249:SD", "SD", samplesNo: 1, availableSamplesNo: 2));
 
     [Fact]
     public void SampleRejectsNegativeCounts() =>
-        Assert.Throws<DomainException>(() => new SerumSample("BBMs:2022:3249:SD", "SD", samplesNo: -1));
+        AssertValidationError(SerumSample.Create("BBMs:2022:3249:SD", "SD", samplesNo: -1));
 
     [Fact]
     public void TissueRejectsFreezeBeforeCut() =>
-        Assert.Throws<DomainException>(() => new TissueSample(
+        AssertValidationError(TissueSample.Create(
             "BBM:2023:181:1",
             "1",
             cutTime: new DateTime(2023, 3, 24, 11, 20, 0),
@@ -102,19 +100,24 @@ public sealed class DomainModelsTests
     [Fact]
     public void TissueAllowsFreezeAfterCut()
     {
-        var sample = new TissueSample(
+        var sample = TissueSample.Create(
             "BBM:2023:181:1",
             "1",
             cutTime: new DateTime(2023, 3, 24, 0, 0, 0),
-            freezeTime: new DateTime(2023, 3, 24, 11, 20, 0));
+            freezeTime: new DateTime(2023, 3, 24, 11, 20, 0)).Value;
         Assert.Equal(new DateTime(2023, 3, 24, 11, 20, 0), sample.FreezeTime);
     }
 
     [Fact]
-    public void DiagnosticSpecimenRejectsEmptyId() =>
-        Assert.Throws<DomainException>(() => new DiagnosticSpecimen(""));
+    public void DiagnosticSpecimenRejectsEmptyId() => AssertValidationError(DiagnosticSpecimen.Create(""));
 
     [Fact]
     public void DiagnosticSpecimenRejectsOutOfRangeYear() =>
-        Assert.Throws<DomainException>(() => new DiagnosticSpecimen("&:2022:118485", year: 1800));
+        AssertValidationError(DiagnosticSpecimen.Create("&:2022:118485", year: 1800));
+
+    private static void AssertValidationError<T>(ErrorOr<T> result)
+    {
+        Assert.True(result.IsError);
+        Assert.Equal(ErrorType.Validation, result.FirstError.Type);
+    }
 }

@@ -12,7 +12,7 @@ public sealed class RepositoryTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private static Patient FullPatient() => new(
+    private static PatientAggregate FullPatient() => PatientAggregate.Create(
         "138423",
         biobank: "MOU",
         consent: true,
@@ -22,7 +22,7 @@ public sealed class RepositoryTests : IDisposable
         accessionNumbers: ["RAD-1", "RAD-2"],
         samples:
         [
-            new TissueSample(
+            TissueSample.Create(
                 "BBM:2023:181:1",
                 "1",
                 eventNumber: 181,
@@ -37,8 +37,8 @@ public sealed class RepositoryTests : IDisposable
                 morphology: "8380/31",
                 cutTime: new DateTime(2023, 3, 24, 11, 15, 0),
                 freezeTime: new DateTime(2023, 3, 24, 11, 20, 0),
-                retrieved: Retrieved.Operational),
-            new SerumSample(
+                retrieved: Retrieved.Operational).Value,
+            SerumSample.Create(
                 "BBMs:2022:3249:SD",
                 "SD",
                 eventNumber: 3249,
@@ -46,8 +46,8 @@ public sealed class RepositoryTests : IDisposable
                 samplesNo: 1,
                 availableSamplesNo: 1,
                 takingDate: new DateTime(2022, 12, 7, 0, 0, 0),
-                retrieved: Retrieved.Unknown),
-            new GenomeSample(
+                retrieved: Retrieved.Unknown).Value,
+            GenomeSample.Create(
                 "BBMd:2023:249:PK",
                 "PK",
                 eventNumber: 249,
@@ -55,19 +55,19 @@ public sealed class RepositoryTests : IDisposable
                 samplesNo: 1,
                 availableSamplesNo: 1,
                 takingDate: new DateTime(2023, 3, 24, 0, 0, 0),
-                retrieved: Retrieved.Unknown),
+                retrieved: Retrieved.Unknown).Value,
         ],
         diagnosticSpecimens:
         [
-            new DiagnosticSpecimen(
+            DiagnosticSpecimen.Create(
                 "&:2022:118485",
                 specimenNumber: 118485,
                 year: 2022,
                 materialType: "S",
                 diagnosis: "C504",
                 takingDate: new DateTime(2022, 9, 20, 10, 44, 0),
-                retrieved: Retrieved.Unknown),
-        ]);
+                retrieved: Retrieved.Unknown).Value,
+        ]).Value;
 
     [Fact]
     public async Task SaveAndListRoundTripsFullPatient()
@@ -79,7 +79,7 @@ public sealed class RepositoryTests : IDisposable
         await repository.SavePatientsAsync([patient], CancellationToken.None);
         var loaded = Assert.Single(await repository.ListPatientsAsync(CancellationToken.None));
 
-        Assert.Equal("138423", loaded.PatientId);
+        Assert.Equal("138423", loaded.Id.Value);
         Assert.Equal("MOU", loaded.Biobank);
         Assert.True(loaded.Consent);
         Assert.Equal(Sex.Female, loaded.Sex);
@@ -108,12 +108,12 @@ public sealed class RepositoryTests : IDisposable
     {
         await using var context = _db.NewContext();
         var repository = new SqlBiobankRepository(context);
-        var stub = new Patient("P-STUB", biobank: "MOU", consent: false);
+        var stub = PatientAggregate.Create("P-STUB", biobank: "MOU", consent: false).Value;
 
         await repository.SavePatientsAsync([stub], CancellationToken.None);
         var loaded = Assert.Single(await repository.ListPatientsAsync(CancellationToken.None));
 
-        Assert.Equal("P-STUB", loaded.PatientId);
+        Assert.Equal("P-STUB", loaded.Id.Value);
         Assert.False(loaded.Consent);
         Assert.Empty(loaded.Samples);
         Assert.Empty(loaded.DiagnosticSpecimens);
@@ -145,15 +145,15 @@ public sealed class RepositoryTests : IDisposable
         var repository = new SqlBiobankRepository(context);
         await repository.SavePatientsAsync([FullPatient()], CancellationToken.None);
 
-        var updated = new Patient(
+        var updated = PatientAggregate.Create(
             "138423",
             biobank: "MOU",
             consent: true,
-            samples: [new TissueSample("NEW:1", "1")]);
+            samples: [TissueSample.Create("NEW:1", "1").Value]).Value;
         await repository.SavePatientsAsync([updated], CancellationToken.None);
 
         var loaded = Assert.Single(await repository.ListPatientsAsync(CancellationToken.None));
-        Assert.Equal(["NEW:1"], loaded.Samples.Select(sample => sample.SampleId));
+        Assert.Equal(["NEW:1"], loaded.Samples.Select(sample => sample.Id.Value));
         Assert.Empty(loaded.DiagnosticSpecimens);
 
         Assert.Equal(1, await context.TissueSamples.CountAsync());

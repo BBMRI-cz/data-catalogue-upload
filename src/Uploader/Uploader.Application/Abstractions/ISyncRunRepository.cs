@@ -6,5 +6,5 @@ namespace Uploader.Application.Abstractions;
 public interface ISyncRunRepository
 {
     /// <summary>Record (or update) the finished run with its summary counts.</summary>
-    Task FinishAsync(RunSummary summary, CancellationToken cancellationToken);
+    Task FinishAsync(RunCatalogueSyncCommandResult result, CancellationToken cancellationToken);
 }

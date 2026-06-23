@@ -1,14 +1,30 @@
 using BiobankApi.Domain.Common;
+using ErrorOr;
 
 namespace BiobankApi.Domain.Patients;
 
-/// <summary>
-/// A frozen surgical/tumour <c>&lt;tissue&gt;</c> sample (report §6.3.2). Carries pathological
-/// staging and the ICD-10 diagnosis that links to FAIR Genomes <c>Clinical</c>.
-/// </summary>
-public sealed record TissueSample : Sample
+/// <summary>A tissue sample, carrying pathological staging and an ICD-10 diagnosis.</summary>
+public sealed class TissueSample : Sample
 {
-    public TissueSample(
+    internal TissueSample()
+    {
+    }
+
+    public string? Diagnosis { get; init; }
+
+    public string? PTnm { get; init; }
+
+    public string? Morphology { get; init; }
+
+    public DateTime? CutTime { get; init; }
+
+    public DateTime? FreezeTime { get; init; }
+
+    public Retrieved? Retrieved { get; init; }
+
+    protected override string SampleTypeDiscriminator => MaterialTypes.Tissue;
+
+    public static ErrorOr<TissueSample> Create(
         string sampleId,
         string materialType,
         int? eventNumber = null,
@@ -24,47 +40,35 @@ public sealed record TissueSample : Sample
         DateTime? cutTime = null,
         DateTime? freezeTime = null,
         Retrieved? retrieved = null)
-        : base(
-            sampleId,
-            materialType,
-            eventNumber,
-            collectionYear,
-            biopsy,
-            predictiveNumber,
-            samplesNo,
-            availableSamplesNo,
-            accessionNumbers)
     {
-        if (cutTime is { } cut && freezeTime is { } freeze && freeze < cut)
+        var common = ValidateCommon(sampleId, materialType, eventNumber, collectionYear, samplesNo, availableSamplesNo);
+        if (common.IsError)
         {
-            throw new DomainException("freeze_time cannot precede cut_time");
+            return common.Errors;
         }
 
-        Diagnosis = diagnosis;
-        PTnm = pTnm;
-        Morphology = morphology;
-        CutTime = cutTime;
-        FreezeTime = freezeTime;
-        Retrieved = retrieved;
+        if (cutTime is { } cut && freezeTime is { } freeze && freeze < cut)
+        {
+            return Error.Validation("TissueSample.FreezeTime", "freeze_time cannot precede cut_time");
+        }
+
+        return new TissueSample
+        {
+            Id = new SampleId(sampleId),
+            MaterialType = materialType,
+            EventNumber = eventNumber,
+            CollectionYear = collectionYear,
+            Biopsy = biopsy,
+            PredictiveNumber = predictiveNumber,
+            SamplesNo = samplesNo,
+            AvailableSamplesNo = availableSamplesNo,
+            AccessionNumbers = accessionNumbers ?? [],
+            Diagnosis = diagnosis,
+            PTnm = pTnm,
+            Morphology = morphology,
+            CutTime = cutTime,
+            FreezeTime = freezeTime,
+            Retrieved = retrieved,
+        };
     }
-
-    /// <summary><c>&lt;diagnosis&gt;</c> ICD-10 → <c>Material.belongs_to_diagnosis</c>.</summary>
-    public string? Diagnosis { get; }
-
-    /// <summary><c>&lt;pTNM&gt;</c> pathological TNM staging (opaque free text, report §6.7).</summary>
-    public string? PTnm { get; }
-
-    /// <summary><c>&lt;morphology&gt;</c> ICD-O-3 code (report §6.8).</summary>
-    public string? Morphology { get; }
-
-    /// <summary><c>&lt;cutTime&gt;</c> → <c>Material.sampling_timestamp</c>.</summary>
-    public DateTime? CutTime { get; }
-
-    /// <summary><c>&lt;freezeTime&gt;</c> (a few minutes after <see cref="CutTime"/>).</summary>
-    public DateTime? FreezeTime { get; }
-
-    /// <summary><c>&lt;retrieved&gt;</c> (usually <c>operational</c> for tissue).</summary>
-    public Retrieved? Retrieved { get; }
-
-    protected override string SampleTypeDiscriminator => MaterialTypes.Tissue;
 }

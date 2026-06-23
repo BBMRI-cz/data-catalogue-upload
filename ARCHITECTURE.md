@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> This repository is a **.NET solution** (`DataCatalogue.slnx`). The two services - the `uploader`
+> This repository is a **.NET solution** (`DataCatalogueUpload.slnx`). The two services - the `uploader`
 > sync job and the `biobank_api` source API - live under `src/`. This document describes the
 > **uploader** and the end-to-end data flow; each service follows the same Clean Architecture layering.
 > See [`AGENTS.md`](AGENTS.md) for the solution layout.
@@ -57,14 +57,14 @@ flowchart TD
 
     subgraph application [Application - CQRS]
         SyncService["RunCatalogueSyncCommandHandler"]
-        Builders["builders/ (JSON -> domain)"]
+        Mapper["SourceMapper (Mapperly: DTO -> domain)"]
         Ports["Abstractions (port interfaces)"]
     end
 
     subgraph domain [Domain - models + domain services]
         Models["record models + aggregates"]
         Planner["FingerprintSyncPlanner"]
-        Fingerprint["FingerprintCalculator"]
+        Fingerprint["Fingerprint.Of / aggregate.ComputeFingerprint()"]
     end
 
     subgraph infrastructure [Infrastructure - adapters]
@@ -76,9 +76,9 @@ flowchart TD
     Main --> HttpClients
     Main --> Db
     SyncService --> Planner
-    SyncService --> Builders
+    SyncService --> Mapper
     SyncService --> Ports
-    Builders --> Models
+    Mapper --> Models
     Planner --> Fingerprint
     HttpClients -.implements.-> Ports
     Db -.implements.-> Ports
@@ -86,8 +86,8 @@ flowchart TD
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, and the domain services `FingerprintSyncPlanner` and `FingerprintCalculator`. No I/O, no framework dependencies. |
-| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Builders/` (JSON -> domain), and the port interfaces in `Abstractions/`. |
+| Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object each aggregate uses for its `ComputeFingerprint()`. No I/O, no framework dependencies. |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the Mapperly `SourceMapper` (`Mapping/`, DTO -> domain), and the port interfaces in `Abstractions/`. |
 | Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
 The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
@@ -121,7 +121,7 @@ flowchart TD
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
 2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number`), and radiology (by `accession_numbers`).
-3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (`FingerprintCalculator`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
+3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
 4. **Execute** the plan against the catalogue API (upsert or delete per entity).
 5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB subtree.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.

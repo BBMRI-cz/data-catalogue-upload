@@ -1,61 +1,61 @@
+using Uploader.Domain.Common;
 using Uploader.Domain.Sync;
 
 namespace Uploader.Domain.Services;
 
-/// <summary>Domain service that plans per-entity catalogue operations for one patient aggregate.</summary>
+/// <summary>Domain service that plans per-aggregate catalogue operations for one patient.</summary>
 public interface ISyncPlanner
 {
-    IReadOnlyList<SyncOperation> Plan(PatientAggregate aggregate, PatientSyncStates existing);
+    IReadOnlyList<SyncOperation> Plan(PatientCatalogueData data, PatientSyncStates existing);
 }
 
 /// <summary>
-/// Plans catalogue operations by comparing fingerprints. Per entity: no prior state or a
-/// soft-deleted prior -> CREATE; fingerprint changed -> UPDATE; unchanged -> SKIP. Entities
+/// Plans catalogue operations by comparing fingerprints. Per aggregate: no prior state or a
+/// soft-deleted prior -> CREATE; fingerprint changed -> UPDATE; unchanged -> SKIP. Aggregates
 /// present in a prior run but absent now -> DELETE (soft, DB only). Operations are returned in
-/// dependency order: patient, then samples and their sequencing/WSI children, then imaging
-/// studies, then deletions.
+/// dependency order: patient, then samples, their sequencing/WSI, then imaging studies, then
+/// deletions.
 /// </summary>
-public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, TimeProvider? timeProvider = null)
-    : ISyncPlanner
+public sealed class FingerprintSyncPlanner(TimeProvider? timeProvider = null) : ISyncPlanner
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public IReadOnlyList<SyncOperation> Plan(PatientAggregate aggregate, PatientSyncStates existing)
+    public IReadOnlyList<SyncOperation> Plan(PatientCatalogueData data, PatientSyncStates existing)
     {
         var ops = new List<SyncOperation>();
-        var eligible = aggregate.IsUploadEligible();
+        var eligible = data.IsUploadEligible;
 
-        ops.Add(PlanPatient(aggregate, existing, eligible));
+        ops.Add(PlanPatient(data.Patient, existing.Patient, eligible));
 
-        var seenSamples = new HashSet<string>();
-        var seenSequencing = new HashSet<string>();
-        var seenWsi = new HashSet<string>();
-        var seenImaging = new HashSet<string>();
+        var seenSamples = new HashSet<SampleId>();
+        var seenSequencing = new HashSet<SequencingId>();
+        var seenWsi = new HashSet<WsiId>();
+        var seenImaging = new HashSet<AccessionNumber>();
 
         if (eligible)
         {
-            foreach (var sample in aggregate.Samples)
+            foreach (var sample in data.Samples)
             {
-                seenSamples.Add(sample.SampleId);
-                ops.Add(PlanSample(sample, aggregate.PatientId, existing));
-
-                if (sample.Sequencing is { Count: > 0 } && !string.IsNullOrEmpty(sample.PredictiveNumber))
-                {
-                    seenSequencing.Add(sample.PredictiveNumber);
-                    ops.Add(PlanSequencing(sample, sample.PredictiveNumber, existing));
-                }
-
-                if (sample.Wsi is not null && !string.IsNullOrEmpty(sample.BiopticNumber))
-                {
-                    seenWsi.Add(sample.BiopticNumber);
-                    ops.Add(PlanWsi(sample, sample.BiopticNumber, existing));
-                }
+                seenSamples.Add(sample.Id);
+                ops.Add(PlanSample(sample, existing));
             }
 
-            foreach (var study in aggregate.Radiology)
+            foreach (var sequencing in data.Sequencings)
             {
-                seenImaging.Add(study.AccessionNumber);
-                ops.Add(PlanImagingStudy(study, aggregate.PatientId, existing));
+                seenSequencing.Add(sequencing.Id);
+                ops.Add(PlanSequencing(sequencing, existing));
+            }
+
+            foreach (var wsi in data.Wsis)
+            {
+                seenWsi.Add(wsi.Id);
+                ops.Add(PlanWsi(wsi, existing));
+            }
+
+            foreach (var study in data.ImagingStudies)
+            {
+                seenImaging.Add(study.Id);
+                ops.Add(PlanImagingStudy(study, existing));
             }
         }
 
@@ -63,7 +63,7 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
         return ops;
     }
 
-    private static SyncOp Decide(string newFingerprint, EntitySyncState? prior)
+    private static SyncOp Decide(string newFingerprint, ISyncState? prior)
     {
         if (prior is null || prior.IsDeleted)
         {
@@ -73,143 +73,79 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
         return prior.SourceFingerprint != newFingerprint ? SyncOp.Update : SyncOp.Skip;
     }
 
-    private PatientOperation PlanPatient(PatientAggregate aggregate, PatientSyncStates existing, bool eligible)
+    private PatientOperation PlanPatient(PatientAggregate patient, PatientSyncState? prior, bool eligible)
     {
-        var fingerprint = fingerprints.Compute(aggregate.Personal, aggregate.Clinical);
-        var prior = existing.Patient;
-        var op = !eligible ? SyncOp.Skip : Decide(fingerprint, prior);
-
+        var fingerprint = patient.ComputeFingerprint().Value;
         return new PatientOperation
         {
-            Op = op,
+            Op = eligible ? Decide(fingerprint, prior) : SyncOp.Skip,
             SourceFingerprint = fingerprint,
-            Personal = aggregate.Personal,
-            Clinical = aggregate.Clinical,
-            PatientState = new PatientSyncState
-            {
-                PatientId = aggregate.PatientId,
-                SourceFingerprint = fingerprint,
-                CatalogueRemoteId = prior?.CatalogueRemoteId,
-                Status = prior?.Status ?? SyncStatus.Pending,
-                IsDeleted = false,
-                LastSeenAt = Now,
-                LastSyncedAt = prior?.LastSyncedAt,
-                LastError = null,
-                RunId = string.Empty,
-            },
+            Patient = patient,
+            PatientState = Track(new PatientSyncState { Id = patient.Id }, fingerprint, prior),
         };
     }
 
-    private SampleOperation PlanSample(Sample sample, string patientId, PatientSyncStates existing)
+    private SampleOperation PlanSample(SampleAggregate sample, PatientSyncStates existing)
     {
-        var fingerprint = fingerprints.Compute(sample.Material);
-        existing.Samples.TryGetValue(sample.SampleId, out var prior);
-
+        var fingerprint = sample.ComputeFingerprint().Value;
+        existing.Samples.TryGetValue(sample.Id, out var prior);
         return new SampleOperation
         {
             Op = Decide(fingerprint, prior),
             SourceFingerprint = fingerprint,
-            Entity = sample,
-            SampleState = new SampleSyncState
-            {
-                SampleId = sample.SampleId,
-                PatientId = patientId,
-                SourceFingerprint = fingerprint,
-                CatalogueRemoteId = prior?.CatalogueRemoteId,
-                Status = prior?.Status ?? SyncStatus.Pending,
-                IsDeleted = false,
-                LastSeenAt = Now,
-                LastSyncedAt = prior?.LastSyncedAt,
-                LastError = null,
-                RunId = string.Empty,
-            },
+            Sample = sample,
+            SampleState = Track(
+                new SampleSyncState { Id = sample.Id, PatientId = sample.PatientId }, fingerprint, prior),
         };
     }
 
-    private SequencingOperation PlanSequencing(Sample sample, string predictiveNumber, PatientSyncStates existing)
+    private SequencingOperation PlanSequencing(SequencingAggregate sequencing, PatientSyncStates existing)
     {
-        var fingerprint = fingerprints.Compute(sample.Sequencing);
-        existing.Sequencing.TryGetValue(predictiveNumber, out var prior);
-
+        var fingerprint = sequencing.ComputeFingerprint().Value;
+        existing.Sequencing.TryGetValue(sequencing.Id, out var prior);
         return new SequencingOperation
         {
             Op = Decide(fingerprint, prior),
             SourceFingerprint = fingerprint,
-            Entity = sample.Sequencing,
-            SequencingState = new SequencingSyncState
-            {
-                PredictiveNumber = predictiveNumber,
-                SampleId = sample.SampleId,
-                SourceFingerprint = fingerprint,
-                CatalogueRemoteId = prior?.CatalogueRemoteId,
-                Status = prior?.Status ?? SyncStatus.Pending,
-                IsDeleted = false,
-                LastSeenAt = Now,
-                LastSyncedAt = prior?.LastSyncedAt,
-                LastError = null,
-                RunId = string.Empty,
-            },
+            Sequencing = sequencing,
+            SequencingState = Track(
+                new SequencingSyncState { Id = sequencing.Id, SampleId = sequencing.SampleId }, fingerprint, prior),
         };
     }
 
-    private WsiOperation PlanWsi(Sample sample, string biopticNumber, PatientSyncStates existing)
+    private WsiOperation PlanWsi(WsiAggregate wsi, PatientSyncStates existing)
     {
-        var fingerprint = fingerprints.Compute(sample.Wsi);
-        existing.Wsi.TryGetValue(biopticNumber, out var prior);
-
+        var fingerprint = wsi.ComputeFingerprint().Value;
+        existing.Wsi.TryGetValue(wsi.Id, out var prior);
         return new WsiOperation
         {
             Op = Decide(fingerprint, prior),
             SourceFingerprint = fingerprint,
-            Entity = sample.Wsi,
-            WsiState = new WsiSyncState
-            {
-                BiopticNumber = biopticNumber,
-                SampleId = sample.SampleId,
-                SourceFingerprint = fingerprint,
-                CatalogueRemoteId = prior?.CatalogueRemoteId,
-                Status = prior?.Status ?? SyncStatus.Pending,
-                IsDeleted = false,
-                LastSeenAt = Now,
-                LastSyncedAt = prior?.LastSyncedAt,
-                LastError = null,
-                RunId = string.Empty,
-            },
+            Wsi = wsi,
+            WsiState = Track(new WsiSyncState { Id = wsi.Id, SampleId = wsi.SampleId }, fingerprint, prior),
         };
     }
 
-    private ImagingStudyOperation PlanImagingStudy(ImagingStudy study, string patientId, PatientSyncStates existing)
+    private ImagingStudyOperation PlanImagingStudy(ImagingStudyAggregate study, PatientSyncStates existing)
     {
-        var fingerprint = fingerprints.Compute(study);
-        existing.ImagingStudies.TryGetValue(study.AccessionNumber, out var prior);
-
+        var fingerprint = study.ComputeFingerprint().Value;
+        existing.ImagingStudies.TryGetValue(study.Id, out var prior);
         return new ImagingStudyOperation
         {
             Op = Decide(fingerprint, prior),
             SourceFingerprint = fingerprint,
-            Entity = study,
-            ImagingStudyState = new ImagingStudySyncState
-            {
-                AccessionNumber = study.AccessionNumber,
-                PatientId = patientId,
-                SourceFingerprint = fingerprint,
-                CatalogueRemoteId = prior?.CatalogueRemoteId,
-                Status = prior?.Status ?? SyncStatus.Pending,
-                IsDeleted = false,
-                LastSeenAt = Now,
-                LastSyncedAt = prior?.LastSyncedAt,
-                LastError = null,
-                RunId = string.Empty,
-            },
+            ImagingStudy = study,
+            ImagingStudyState = Track(
+                new ImagingStudySyncState { Id = study.Id, PatientId = study.PatientId }, fingerprint, prior),
         };
     }
 
     private IEnumerable<SyncOperation> PlanDeletions(
         PatientSyncStates existing,
-        HashSet<string> seenSamples,
-        HashSet<string> seenSequencing,
-        HashSet<string> seenWsi,
-        HashSet<string> seenImaging)
+        HashSet<SampleId> seenSamples,
+        HashSet<SequencingId> seenSequencing,
+        HashSet<WsiId> seenWsi,
+        HashSet<AccessionNumber> seenImaging)
     {
         var deletions = new List<SyncOperation>();
 
@@ -221,7 +157,6 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
                 {
                     Op = SyncOp.Delete,
                     SourceFingerprint = state.SourceFingerprint,
-                    Entity = null,
                     SampleState = (SampleSyncState)AsDeleted(state),
                 });
             }
@@ -235,7 +170,6 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
                 {
                     Op = SyncOp.Delete,
                     SourceFingerprint = state.SourceFingerprint,
-                    Entity = null,
                     SequencingState = (SequencingSyncState)AsDeleted(state),
                 });
             }
@@ -249,7 +183,6 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
                 {
                     Op = SyncOp.Delete,
                     SourceFingerprint = state.SourceFingerprint,
-                    Entity = null,
                     WsiState = (WsiSyncState)AsDeleted(state),
                 });
             }
@@ -263,7 +196,6 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
                 {
                     Op = SyncOp.Delete,
                     SourceFingerprint = state.SourceFingerprint,
-                    Entity = null,
                     ImagingStudyState = (ImagingStudySyncState)AsDeleted(state),
                 });
             }
@@ -272,7 +204,21 @@ public sealed class FingerprintSyncPlanner(IFingerprintCalculator fingerprints, 
         return deletions;
     }
 
-    private EntitySyncState AsDeleted(EntitySyncState state)
+    private T Track<T>(T state, string fingerprint, ISyncState? prior)
+        where T : class, ISyncState
+    {
+        state.SourceFingerprint = fingerprint;
+        state.CatalogueRemoteId = prior?.CatalogueRemoteId;
+        state.Status = prior?.Status ?? SyncStatus.Pending;
+        state.IsDeleted = false;
+        state.LastSeenAt = Now;
+        state.LastSyncedAt = prior?.LastSyncedAt;
+        state.LastError = null;
+        state.RunId = string.Empty;
+        return state;
+    }
+
+    private ISyncState AsDeleted(ISyncState state)
     {
         var copy = state.Clone();
         copy.Status = SyncStatus.Deleted;

@@ -1,9 +1,24 @@
+using BiobankApi.Domain.Common;
+using ErrorOr;
+
 namespace BiobankApi.Domain.Patients;
 
-/// <summary>A frozen blood-derived liquid <c>&lt;serum&gt;</c> sample (report §6.3.3).</summary>
-public sealed record SerumSample : Sample
+/// <summary>A blood-derived liquid sample (serum / plasma).</summary>
+public sealed class SerumSample : Sample
 {
-    public SerumSample(
+    internal SerumSample()
+    {
+    }
+
+    public string? Diagnosis { get; init; }
+
+    public DateTime? TakingDate { get; init; }
+
+    public Retrieved? Retrieved { get; init; }
+
+    protected override string SampleTypeDiscriminator => MaterialTypes.Serum;
+
+    public static ErrorOr<SerumSample> Create(
         string sampleId,
         string materialType,
         int? eventNumber = null,
@@ -16,30 +31,27 @@ public sealed record SerumSample : Sample
         string? diagnosis = null,
         DateTime? takingDate = null,
         Retrieved? retrieved = null)
-        : base(
-            sampleId,
-            materialType,
-            eventNumber,
-            collectionYear,
-            biopsy,
-            predictiveNumber,
-            samplesNo,
-            availableSamplesNo,
-            accessionNumbers)
     {
-        Diagnosis = diagnosis;
-        TakingDate = takingDate;
-        Retrieved = retrieved;
+        var common = ValidateCommon(sampleId, materialType, eventNumber, collectionYear, samplesNo, availableSamplesNo);
+        if (common.IsError)
+        {
+            return common.Errors;
+        }
+
+        return new SerumSample
+        {
+            Id = new SampleId(sampleId),
+            MaterialType = materialType,
+            EventNumber = eventNumber,
+            CollectionYear = collectionYear,
+            Biopsy = biopsy,
+            PredictiveNumber = predictiveNumber,
+            SamplesNo = samplesNo,
+            AvailableSamplesNo = availableSamplesNo,
+            AccessionNumbers = accessionNumbers ?? [],
+            Diagnosis = diagnosis,
+            TakingDate = takingDate,
+            Retrieved = retrieved,
+        };
     }
-
-    /// <summary><c>&lt;diagnosis&gt;</c> ICD-10 (when linked to a diagnosis event).</summary>
-    public string? Diagnosis { get; }
-
-    /// <summary><c>&lt;takingDate&gt;</c> → <c>Material.sampling_timestamp</c>.</summary>
-    public DateTime? TakingDate { get; }
-
-    /// <summary><c>&lt;retrieved&gt;</c> (present in ~60% of serum rows).</summary>
-    public Retrieved? Retrieved { get; }
-
-    protected override string SampleTypeDiscriminator => MaterialTypes.Serum;
 }

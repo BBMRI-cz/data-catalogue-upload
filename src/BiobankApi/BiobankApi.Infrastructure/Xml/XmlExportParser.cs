@@ -8,15 +8,16 @@ namespace BiobankApi.Infrastructure.Xml;
 /// Parses biobank XML exports into domain patients.
 ///
 /// Scaffold: it discovers and validates that the export files are well-formed, but the concrete
-/// element/XPath mapping to <see cref="Patient"/> / <see cref="Sample"/> lands with issue #33.
-/// When implemented it will stream each file with <see cref="XmlReader"/> and build patients via
-/// the <see cref="Domain.Services.IBiobankCleaningService"/>.
+/// element/XPath mapping to <see cref="PatientAggregate"/> / <see cref="Sample"/> lands with
+/// issue #33. When implemented it will stream each file with <see cref="XmlReader"/>, decode the
+/// raw text with <see cref="XmlValueReader"/>, and build patients via
+/// <see cref="PatientAggregate.Create"/>.
 /// </summary>
 public sealed class XmlExportParser(string exportPath) : IXmlExportSource
 {
-    public IReadOnlyList<Patient> ParsePatients()
+    public IReadOnlyList<PatientAggregate> ParsePatients()
     {
-        var patients = new List<Patient>();
+        var patients = new List<PatientAggregate>();
         if (!Directory.Exists(exportPath))
         {
             return patients;

@@ -19,7 +19,7 @@ public sealed class ApiTests
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    private static HttpClient CreateClient(params Patient[] patients)
+    private static HttpClient CreateClient(params PatientAggregate[] patients)
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services =>
@@ -54,7 +54,7 @@ public sealed class ApiTests
     [Fact]
     public async Task ListPatientsReturnsRepositoryData()
     {
-        var response = await CreateClient(new Patient("P1")).GetAsync("/patients");
+        var response = await CreateClient(PatientAggregate.Create("P1").Value).GetAsync("/patients");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<List<PatientResponse>>(JsonOptions);

@@ -1,7 +1,11 @@
 namespace BiobankApi.Domain.Common;
 
 /// <summary>
-/// Marker base for aggregate roots — the single entry point and consistency boundary for
-/// a cluster of entities. External code only ever holds a reference to the root.
+/// Base for aggregate roots — the consistency boundary and single entry point for a cluster of
+/// entities. External code only ever holds a reference to the root; entities outside the cluster
+/// reference it by identity (<typeparamref name="TId"/>), never by object reference.
 /// </summary>
-public abstract record AggregateRoot : Entity;
+public abstract class AggregateRoot<TId> : Entity<TId>
+    where TId : notnull
+{
+}

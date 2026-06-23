@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Git commit and branch conventions for the data-catalogue-upload repository. Use when staging changes, writing commit messages, or creating branches. Covers Conventional Commits, branch naming, and the pre-commit quality checklist.
+description: Git commit and branch conventions for the data-catalogue-upload repository. Use when staging changes, writing commit messages, or creating branches. Covers Conventional Commits, branch naming, the pre-commit quality checklist (dotnet format/build/test), and the Co-Authored-By trailer.
 ---
 
 # Git workflow (data-catalogue-upload)
@@ -20,41 +20,56 @@ Common types:
 | `test` | adding or fixing tests |
 | `docs` | documentation only |
 
-Useful scopes for this repo: `sync`, `domain`, `builders`, `infra`, `db`, `migrations`, `ci`.
+Useful scopes for this repo: `sync`, `domain`, `infra`, `db`, `migrations`, `api`, `biobank-api`,
+`uploader`, `ci`.
 
 Examples:
 
 ```
-feat(builders): add radiology imaging-study builder
+feat(uploader): add radiology imaging-study mapping
 fix(sync): count per-entity failures without aborting the run
-chore: prepare repo for agentic development
-refactor(domain): extract fingerprint helper into sync module
-test(builders): cover clinical builder missing-field handling
+chore: bump EF Core to 10.0.9
+refactor(domain): reshape the biobank domain into DDD aggregates
+test(biobank-api): cover the Mapperly persistence mapper
 docs: document required API URL env vars
 ```
 
-Keep the summary in the imperative mood and under ~72 characters. Add a body (after a blank line) to explain the "why" when it is not obvious.
+Keep the summary in the imperative mood and under ~72 characters. Add a body (after a blank line) to explain
+the "why" when it is not obvious. This repo's history uses scoped messages like
+`refactor(biobank-api): ...` - match that style.
 
 ## Branch naming
 
 `type/short-kebab-description`, matching the commit types:
 
 ```
-feat/radiology-builder
+feat/radiology-mapping
 fix/sync-failure-count
-chore/agentic-dev-docs
+refactor/port-to-csharp
 ```
+
+Branch off `master`; don't commit directly to it.
 
 ## Before committing
 
-Run the same checks CI runs, for each package you touched (`<pkg>` = `uploader` or `biobank_api`), and make sure they pass:
+Run the same checks CI runs, from the repo root, and make sure they pass:
 
 ```bash
-uv run ruff check apps/<pkg>
-uv run ruff format --check apps/<pkg>
-uv run mypy apps/<pkg>
-uv run pytest apps/<pkg>/tests
-uv lock --check
+dotnet format DataCatalogueUpload.slnx --verify-no-changes   # drop the flag to auto-fix formatting
+dotnet build DataCatalogueUpload.slnx -c Release             # warnings are errors
+dotnet test DataCatalogueUpload.slnx
 ```
 
-`uv run ruff format apps/<pkg>` (without `--check`) auto-fixes formatting. Do not commit secrets or a real `.env` - only each member's `.env.example` is tracked. Do not hand-edit `uv.lock`.
+- Do **not** commit secrets, connection strings, or a real `appsettings.*.local.json` - configuration comes
+  from environment variables.
+- Do **not** hand-edit NuGet versions onto a `PackageReference`; use central package management
+  (`dotnet add <project> package <name>`, which updates `Directory.Packages.props`).
+- Don't loosen analyzer/format settings to make the checks pass - fix the code.
+
+## Commit trailer
+
+End commit messages created by the agent with:
+
+```
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+```

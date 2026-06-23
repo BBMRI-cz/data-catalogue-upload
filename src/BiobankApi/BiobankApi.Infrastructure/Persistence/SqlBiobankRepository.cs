@@ -8,7 +8,7 @@ namespace BiobankApi.Infrastructure.Persistence;
 /// <summary>EF Core implementation of <see cref="IBiobankRepository"/>.</summary>
 internal sealed class SqlBiobankRepository(BiobankDbContext context) : IBiobankRepository
 {
-    public async Task<IReadOnlyList<Patient>> ListPatientsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken)
     {
         var entities = await context.Patients
             .AsNoTracking()
@@ -21,13 +21,13 @@ internal sealed class SqlBiobankRepository(BiobankDbContext context) : IBiobankR
         return entities.Select(PatientMapper.ToDomain).ToList();
     }
 
-    public async Task SavePatientsAsync(IReadOnlyList<Patient> patients, CancellationToken cancellationToken)
+    public async Task SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken cancellationToken)
     {
         // Delete-then-insert per patient: removing the existing row cascades to its child
         // tables, so a re-save never leaves stale or duplicate sample/specimen rows.
         foreach (var patient in patients)
         {
-            var existing = await context.Patients.FindAsync([patient.PatientId], cancellationToken);
+            var existing = await context.Patients.FindAsync([patient.Id.Value], cancellationToken);
             if (existing is not null)
             {
                 context.Patients.Remove(existing);

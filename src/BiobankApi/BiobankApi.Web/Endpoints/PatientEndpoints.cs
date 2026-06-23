@@ -15,9 +15,9 @@ internal static class PatientEndpoints
             return result.Match(
                 patients => Results.Ok(patients
                     .Select(patient => new PatientResponse(
-                        patient.PatientId,
+                        patient.Id.Value,
                         patient.Samples
-                            .Select(sample => new SampleResponse(sample.SampleId, sample.MaterialType))
+                            .Select(sample => new SampleResponse(sample.Id.Value, sample.MaterialType))
                             .ToList()))
                     .ToList()),
                 ErrorResults.Problem);

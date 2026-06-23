@@ -8,5 +8,5 @@ namespace BiobankApi.Application.Abstractions;
 public interface IXmlExportSource
 {
     /// <summary>Parse all configured XML exports into domain patients.</summary>
-    IReadOnlyList<Patient> ParsePatients();
+    IReadOnlyList<PatientAggregate> ParsePatients();
 }

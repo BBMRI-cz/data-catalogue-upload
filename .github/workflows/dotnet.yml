@@ -20,10 +20,10 @@ jobs:
         with:
           global-json-file: global.json
       - name: Restore
-        run: dotnet restore DataCatalogue.slnx
+        run: dotnet restore DataCatalogueUpload.slnx
       - name: Format check
-        run: dotnet format DataCatalogue.slnx --verify-no-changes --no-restore
+        run: dotnet format DataCatalogueUpload.slnx --verify-no-changes --no-restore
       - name: Build (warnings as errors)
-        run: dotnet build DataCatalogue.slnx --configuration Release --no-restore
+        run: dotnet build DataCatalogueUpload.slnx --configuration Release --no-restore
       - name: Test
-        run: dotnet test DataCatalogue.slnx --configuration Release --no-build
+        run: dotnet test DataCatalogueUpload.slnx --configuration Release --no-build

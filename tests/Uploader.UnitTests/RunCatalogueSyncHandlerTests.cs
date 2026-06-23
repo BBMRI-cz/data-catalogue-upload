@@ -1,6 +1,8 @@
-using System.Text.Json.Nodes;
-using Uploader.Application.Builders;
+using Microsoft.Extensions.Logging.Abstractions;
 using Uploader.Application.Features.Sync;
+using Uploader.Application.Mapping;
+using Uploader.Application.Dtos;
+using Uploader.Domain.Common;
 using Uploader.Domain.Services;
 using Uploader.Domain.Sync;
 using Xunit;
@@ -9,8 +11,6 @@ namespace Uploader.UnitTests;
 
 public sealed class RunCatalogueSyncHandlerTests
 {
-    private static JsonObject Patient(string json) => JsonNode.Parse(json)!.AsObject();
-
     private static RunCatalogueSyncCommandHandler CreateHandler(
         FakeSourceDataGateway source,
         FakeCatalogueGateway catalogue,
@@ -21,17 +21,18 @@ public sealed class RunCatalogueSyncHandlerTests
             catalogue,
             state,
             runs,
-            new FingerprintSyncPlanner(new FingerprintCalculator()),
-            new ClinicalBuilder(),
-            new RadiologyBuilder(),
-            new SequencingBuilder(),
-            new WsiBuilder(),
-            TimeProvider.System);
+            new FingerprintSyncPlanner(),
+            new SourceMapper(),
+            TimeProvider.System,
+            NullLogger<RunCatalogueSyncCommandHandler>.Instance);
+
+    private static PatientDto PatientWithSample(string patientId, string sampleId) =>
+        new() { PatientId = patientId, Samples = [new SampleDto { SampleId = sampleId }] };
 
     [Fact]
     public async Task UploadsNewPatientAndSample()
     {
-        var source = new FakeSourceDataGateway([Patient("""{ "patient_id": "P1", "samples": [{ "sample_id": "S1" }] }""")]);
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
         var catalogue = new FakeCatalogueGateway();
         var state = new InMemorySyncStateRepository();
         var runs = new FakeSyncRunRepository();
@@ -54,7 +55,7 @@ public sealed class RunCatalogueSyncHandlerTests
     [Fact]
     public async Task RecordsFailureWhenUpsertFails()
     {
-        var source = new FakeSourceDataGateway([Patient("""{ "patient_id": "P1", "samples": [{ "sample_id": "S1" }] }""")]);
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
         var catalogue = new FakeCatalogueGateway();
         catalogue.FailUpsertTypes.Add("sample");
         var state = new InMemorySyncStateRepository();
@@ -70,14 +71,29 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task SkipsMalformedPatientWithoutCrashing()
+    {
+        // A blank patient id can't form a PatientId; the patient is failed, not fatal.
+        var source = new FakeSourceDataGateway([new PatientDto { PatientId = "", Samples = [new SampleDto { SampleId = "S1" }] }]);
+        var catalogue = new FakeCatalogueGateway();
+
+        var result = await CreateHandler(source, catalogue, new InMemorySyncStateRepository(), new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Equal(1, result.Value.Scanned);
+        Assert.Equal(1, result.Value.Failed);
+        Assert.Empty(catalogue.Upserts);
+    }
+
+    [Fact]
     public async Task DeletesPatientMissingFromSource()
     {
-        var source = new FakeSourceDataGateway([Patient("""{ "patient_id": "P1", "samples": [{ "sample_id": "S1" }] }""")]);
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
         var catalogue = new FakeCatalogueGateway();
         var state = new InMemorySyncStateRepository();
         state.Patients["GONE"] = new PatientSyncState
         {
-            PatientId = "GONE",
+            Id = new PatientId("GONE"),
             SourceFingerprint = "x",
             Status = SyncStatus.Synced,
             CatalogueRemoteId = "remote-gone",
