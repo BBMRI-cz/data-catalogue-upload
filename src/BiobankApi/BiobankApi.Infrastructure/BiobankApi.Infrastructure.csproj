@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <RootNamespace>BiobankApi.Infrastructure</RootNamespace>
+    <!--
+      Mapperly RMG020 (source member not mapped) is expected: the domain samples expose computed
+      members (MaterialTypeLabel) and the EF rows carry the PatientId foreign key, neither of which
+      has a counterpart on the other side. Unmapped *target* diagnostics stay on to catch real gaps.
+    -->
+    <NoWarn>$(NoWarn);RMG020</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +22,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Riok.Mapperly" />
   </ItemGroup>
 
 </Project>
