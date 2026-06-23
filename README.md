@@ -1,7 +1,7 @@
 # data-catalogue-upload
 
 A **.NET solution** for the data-catalogue sync system: the sync job and the source API
-services it reads from. The solution is [`DataCatalogue.slnx`](DataCatalogue.slnx) at the repo root.
+services it reads from. The solution is [`DataCatalogueUpload.slnx`](DataCatalogueUpload.slnx) at the repo root.
 
 | Service | Projects | What it is |
 |---------|----------|------------|
@@ -9,18 +9,18 @@ services it reads from. The solution is [`DataCatalogue.slnx`](DataCatalogue.sln
 | biobank_api | [`src/BiobankApi`](src/BiobankApi) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
 
 Each service is its own set of projects (Domain / Application / Infrastructure / host) following
-**Clean Architecture + DDD**: a rich domain with aggregates and domain services, a CQRS application
-layer dispatched through the free [`Mediator`](https://github.com/martinothamar/Mediator) source
-generator, `ErrorOr` for results, FluentValidation for input validation, EF Core for persistence,
-and ASP.NET Core Minimal API for the HTTP surface. Each service owns its own PostgreSQL database and
-EF Core migrations.
+**Clean Architecture + DDD**: a rich domain with aggregates and domain services that enforce their
+own invariants (constructors/factories return `ErrorOr` or throw `DomainException`), a CQRS
+application layer dispatched through the free [`Mediator`](https://github.com/martinothamar/Mediator)
+source generator with handlers returning `ErrorOr`, EF Core for persistence, and ASP.NET Core Minimal
+API for the HTTP surface. Each service owns its own PostgreSQL database and EF Core migrations.
 
 ## Quickstart
 
 ```bash
-dotnet restore DataCatalogue.slnx
-dotnet build DataCatalogue.slnx
-dotnet test DataCatalogue.slnx
+dotnet restore DataCatalogueUpload.slnx
+dotnet build DataCatalogueUpload.slnx
+dotnet test DataCatalogueUpload.slnx
 
 # start both databases
 docker compose -f compose.prod.yml up -d uploader-db biobank-db

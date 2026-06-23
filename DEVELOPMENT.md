@@ -12,10 +12,10 @@ Setup and local-run guide for the **.NET solution**. All commands run from the r
 
 ```bash
 dotnet tool restore                       # dotnet-ef local tool
-dotnet restore DataCatalogue.slnx
-dotnet build DataCatalogue.slnx -c Release   # warnings are errors
-dotnet test DataCatalogue.slnx               # unit + integration tests
-dotnet format DataCatalogue.slnx --verify-no-changes   # lint/format check
+dotnet restore DataCatalogueUpload.slnx
+dotnet build DataCatalogueUpload.slnx -c Release   # warnings are errors
+dotnet test DataCatalogueUpload.slnx               # unit + integration tests
+dotnet format DataCatalogueUpload.slnx --verify-no-changes   # lint/format check
 ```
 
 ## Databases
@@ -84,7 +84,7 @@ dotnet run --project src/Uploader/Uploader.Host
   API is exercised end-to-end with `WebApplicationFactory<Program>`.
 
 ```bash
-dotnet test DataCatalogue.slnx                                  # everything
+dotnet test DataCatalogueUpload.slnx                                  # everything
 dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 ```
 
