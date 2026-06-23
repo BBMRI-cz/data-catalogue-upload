@@ -6,12 +6,12 @@ using Mediator;
 namespace BiobankApi.Application.Features.Patients;
 
 /// <summary>Query backing <c>GET /patients</c>: list all ingested patients.</summary>
-public sealed record GetPatientsQuery : IQuery<ErrorOr<IReadOnlyList<Patient>>>;
+public sealed record GetPatientsQuery : IQuery<ErrorOr<IReadOnlyList<PatientAggregate>>>;
 
 internal sealed class GetPatientsQueryHandler(IBiobankRepository repository)
-    : IQueryHandler<GetPatientsQuery, ErrorOr<IReadOnlyList<Patient>>>
+    : IQueryHandler<GetPatientsQuery, ErrorOr<IReadOnlyList<PatientAggregate>>>
 {
-    public async ValueTask<ErrorOr<IReadOnlyList<Patient>>> Handle(
+    public async ValueTask<ErrorOr<IReadOnlyList<PatientAggregate>>> Handle(
         GetPatientsQuery query,
         CancellationToken cancellationToken)
     {

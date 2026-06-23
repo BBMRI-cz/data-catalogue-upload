@@ -8,8 +8,8 @@ namespace BiobankApi.Application.Abstractions;
 public interface IBiobankRepository
 {
     /// <summary>List all ingested patients with their samples and diagnostic specimens.</summary>
-    Task<IReadOnlyList<Patient>> ListPatientsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken);
 
     /// <summary>Persist patients idempotently (delete-then-insert per patient id).</summary>
-    Task SavePatientsAsync(IReadOnlyList<Patient> patients, CancellationToken cancellationToken);
+    Task SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken cancellationToken);
 }
