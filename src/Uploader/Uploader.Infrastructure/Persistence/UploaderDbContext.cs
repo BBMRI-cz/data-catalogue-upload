@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Uploader.Infrastructure.Persistence.Entities;
 
 namespace Uploader.Infrastructure.Persistence;
 
@@ -23,56 +24,56 @@ public sealed class UploaderDbContext(DbContextOptions<UploaderDbContext> option
         modelBuilder.Entity<PatientSyncStateEntity>(builder =>
         {
             builder.ToTable("patient_sync_state");
-            builder.HasKey(state => state.PatientId);
+            builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
+
+            builder.HasMany(state => state.Samples)
+                .WithOne()
+                .HasForeignKey(sample => sample.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(state => state.ImagingStudies)
+                .WithOne()
+                .HasForeignKey(study => study.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SampleSyncStateEntity>(builder =>
         {
             builder.ToTable("sample_sync_state");
-            builder.HasKey(state => state.SampleId);
-            builder.HasIndex(state => state.PatientId);
+            builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
-            builder.HasOne<PatientSyncStateEntity>()
-                .WithMany()
-                .HasForeignKey(state => state.PatientId)
+
+            builder.HasOne(state => state.Sequencing)
+                .WithOne()
+                .HasForeignKey<SequencingSyncStateEntity>(sequencing => sequencing.SampleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(state => state.Wsi)
+                .WithOne()
+                .HasForeignKey<WsiSyncStateEntity>(wsi => wsi.SampleId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SequencingSyncStateEntity>(builder =>
         {
             builder.ToTable("sequencing_sync_state");
-            builder.HasKey(state => state.PredictiveNumber);
-            builder.HasIndex(state => state.SampleId);
+            builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
-            builder.HasOne<SampleSyncStateEntity>()
-                .WithMany()
-                .HasForeignKey(state => state.SampleId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<WsiSyncStateEntity>(builder =>
         {
             builder.ToTable("wsi_sync_state");
-            builder.HasKey(state => state.BiopticNumber);
-            builder.HasIndex(state => state.SampleId);
+            builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
-            builder.HasOne<SampleSyncStateEntity>()
-                .WithMany()
-                .HasForeignKey(state => state.SampleId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ImagingStudySyncStateEntity>(builder =>
         {
             builder.ToTable("imaging_study_sync_state");
-            builder.HasKey(state => state.AccessionNumber);
-            builder.HasIndex(state => state.PatientId);
+            builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
-            builder.HasOne<PatientSyncStateEntity>()
-                .WithMany()
-                .HasForeignKey(state => state.PatientId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

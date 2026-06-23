@@ -1,95 +1,93 @@
 using Microsoft.EntityFrameworkCore;
 using Uploader.Application.Abstractions;
+using Uploader.Domain.Common;
 using Uploader.Domain.Sync;
+using Uploader.Infrastructure.Persistence.Entities;
 
 namespace Uploader.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation of <see cref="ISyncStateRepository"/>.</summary>
 internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvider timeProvider) : ISyncStateRepository
 {
-    public async Task<PatientSyncStates> GetAllForPatientAsync(string patientId, CancellationToken cancellationToken)
+    public async Task<PatientSyncStates> GetAllForPatientAsync(PatientId patientId, CancellationToken cancellationToken)
     {
+        var id = patientId.Value;
         var patient = await context.PatientSyncStates.AsNoTracking()
-            .FirstOrDefaultAsync(state => state.PatientId == patientId, cancellationToken);
-        var samples = await context.SampleSyncStates.AsNoTracking()
-            .Where(state => state.PatientId == patientId).ToListAsync(cancellationToken);
-        var imaging = await context.ImagingStudySyncStates.AsNoTracking()
-            .Where(state => state.PatientId == patientId).ToListAsync(cancellationToken);
+            .Include(state => state.Samples).ThenInclude(sample => sample.Sequencing)
+            .Include(state => state.Samples).ThenInclude(sample => sample.Wsi)
+            .Include(state => state.ImagingStudies)
+            .FirstOrDefaultAsync(state => state.Id == id, cancellationToken);
 
-        var sampleIds = samples.Select(state => state.SampleId).ToList();
-        var sequencing = sampleIds.Count == 0
-            ? []
-            : await context.SequencingSyncStates.AsNoTracking()
-                .Where(state => sampleIds.Contains(state.SampleId)).ToListAsync(cancellationToken);
-        var wsi = sampleIds.Count == 0
-            ? []
-            : await context.WsiSyncStates.AsNoTracking()
-                .Where(state => sampleIds.Contains(state.SampleId)).ToListAsync(cancellationToken);
+        if (patient is null)
+        {
+            return PatientSyncStates.Empty();
+        }
+
+        var samples = patient.Samples.Select(sample => SyncStateMapper.ToDomain(sample)).ToList();
+        var sequencing = patient.Samples
+            .Where(sample => sample.Sequencing is not null)
+            .Select(sample => SyncStateMapper.ToDomain(sample.Sequencing!)).ToList();
+        var wsi = patient.Samples
+            .Where(sample => sample.Wsi is not null)
+            .Select(sample => SyncStateMapper.ToDomain(sample.Wsi!)).ToList();
+        var imaging = patient.ImagingStudies.Select(study => SyncStateMapper.ToDomain(study)).ToList();
 
         return new PatientSyncStates
         {
-            Patient = patient is null ? null : SyncStateMapper.ToDomain(patient),
-            Samples = samples.ToDictionary(state => state.SampleId, SyncStateMapper.ToDomain),
-            Sequencing = sequencing.ToDictionary(state => state.PredictiveNumber, SyncStateMapper.ToDomain),
-            Wsi = wsi.ToDictionary(state => state.BiopticNumber, SyncStateMapper.ToDomain),
-            ImagingStudies = imaging.ToDictionary(state => state.AccessionNumber, SyncStateMapper.ToDomain),
+            Patient = SyncStateMapper.ToDomain(patient),
+            Samples = samples.ToDictionary(state => state.Id),
+            Sequencing = sequencing.ToDictionary(state => state.Id),
+            Wsi = wsi.ToDictionary(state => state.Id),
+            ImagingStudies = imaging.ToDictionary(state => state.Id),
         };
     }
 
-    public async Task SaveAsync(EntitySyncState state, CancellationToken cancellationToken)
+    public async Task SaveAsync(ISyncState state, CancellationToken cancellationToken)
     {
         switch (state)
         {
             case PatientSyncState patient:
                 await UpsertAsync(
                     context.PatientSyncStates,
-                    patient.PatientId,
-                    () => new PatientSyncStateEntity { PatientId = patient.PatientId },
-                    entity => { },
+                    patient.Id.Value,
+                    () => new PatientSyncStateEntity { Id = patient.Id.Value },
+                    _ => { },
                     patient,
                     cancellationToken);
                 break;
             case SampleSyncState sample:
                 await UpsertAsync(
                     context.SampleSyncStates,
-                    sample.SampleId,
-                    () => new SampleSyncStateEntity { SampleId = sample.SampleId, PatientId = sample.PatientId },
-                    entity => entity.PatientId = sample.PatientId,
+                    sample.Id.Value,
+                    () => new SampleSyncStateEntity { Id = sample.Id.Value, PatientId = sample.PatientId.Value },
+                    entity => entity.PatientId = sample.PatientId.Value,
                     sample,
                     cancellationToken);
                 break;
             case SequencingSyncState sequencing:
                 await UpsertAsync(
                     context.SequencingSyncStates,
-                    sequencing.PredictiveNumber,
-                    () => new SequencingSyncStateEntity
-                    {
-                        PredictiveNumber = sequencing.PredictiveNumber,
-                        SampleId = sequencing.SampleId,
-                    },
-                    entity => entity.SampleId = sequencing.SampleId,
+                    sequencing.Id.Value,
+                    () => new SequencingSyncStateEntity { Id = sequencing.Id.Value, SampleId = sequencing.SampleId.Value },
+                    entity => entity.SampleId = sequencing.SampleId.Value,
                     sequencing,
                     cancellationToken);
                 break;
             case WsiSyncState wsi:
                 await UpsertAsync(
                     context.WsiSyncStates,
-                    wsi.BiopticNumber,
-                    () => new WsiSyncStateEntity { BiopticNumber = wsi.BiopticNumber, SampleId = wsi.SampleId },
-                    entity => entity.SampleId = wsi.SampleId,
+                    wsi.Id.Value,
+                    () => new WsiSyncStateEntity { Id = wsi.Id.Value, SampleId = wsi.SampleId.Value },
+                    entity => entity.SampleId = wsi.SampleId.Value,
                     wsi,
                     cancellationToken);
                 break;
             case ImagingStudySyncState imaging:
                 await UpsertAsync(
                     context.ImagingStudySyncStates,
-                    imaging.AccessionNumber,
-                    () => new ImagingStudySyncStateEntity
-                    {
-                        AccessionNumber = imaging.AccessionNumber,
-                        PatientId = imaging.PatientId,
-                    },
-                    entity => entity.PatientId = imaging.PatientId,
+                    imaging.Id.Value,
+                    () => new ImagingStudySyncStateEntity { Id = imaging.Id.Value, PatientId = imaging.PatientId.Value },
+                    entity => entity.PatientId = imaging.PatientId.Value,
                     imaging,
                     cancellationToken);
                 break;
@@ -100,18 +98,19 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SoftDeleteChildrenAsync(string parentKey, string runId, CancellationToken cancellationToken)
+    public async Task SoftDeleteChildrenAsync(PatientId parentId, string runId, CancellationToken cancellationToken)
     {
+        var id = parentId.Value;
         var now = timeProvider.GetUtcNow();
 
         var samples = await context.SampleSyncStates
-            .Where(state => state.PatientId == parentKey).ToListAsync(cancellationToken);
+            .Where(state => state.PatientId == id).ToListAsync(cancellationToken);
         var imaging = await context.ImagingStudySyncStates
-            .Where(state => state.PatientId == parentKey).ToListAsync(cancellationToken);
+            .Where(state => state.PatientId == id).ToListAsync(cancellationToken);
         MarkDeleted(samples, runId, now);
         MarkDeleted(imaging, runId, now);
 
-        var sampleIds = samples.Select(state => state.SampleId).ToList();
+        var sampleIds = samples.Select(state => state.Id).ToList();
         if (sampleIds.Count > 0)
         {
             var sequencing = await context.SequencingSyncStates
@@ -126,17 +125,18 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
     }
 
     public async Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(
-        ISet<string> seenIds,
+        ISet<PatientId> seenIds,
         string runId,
         CancellationToken cancellationToken)
     {
+        var seen = seenIds.Select(seenId => seenId.Value).ToHashSet();
         var now = timeProvider.GetUtcNow();
         var rows = await context.PatientSyncStates.ToListAsync(cancellationToken);
         var missing = new List<PatientSyncState>();
 
         foreach (var row in rows)
         {
-            if (seenIds.Contains(row.PatientId) || row.IsDeleted)
+            if (seen.Contains(row.Id) || row.IsDeleted)
             {
                 continue;
             }
@@ -154,7 +154,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
         object key,
         Func<TEntity> create,
         Action<TEntity> applyKeys,
-        EntitySyncState state,
+        ISyncState state,
         CancellationToken cancellationToken)
         where TEntity : SyncStateEntityBase
     {
