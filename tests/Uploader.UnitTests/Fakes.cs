@@ -1,26 +1,27 @@
-using System.Text.Json.Nodes;
 using ErrorOr;
 using Uploader.Application.Abstractions;
+using Uploader.Application.Dtos;
 using Uploader.Application.Features.Sync;
 using Uploader.Domain;
+using Uploader.Domain.Common;
 using Uploader.Domain.Sync;
 
 namespace Uploader.UnitTests;
 
-internal sealed class FakeSourceDataGateway(IReadOnlyList<JsonObject> patients) : ISourceDataGateway
+internal sealed class FakeSourceDataGateway(IReadOnlyList<PatientDto> patients) : ISourceDataGateway
 {
-    public Task<IReadOnlyList<JsonObject>> FetchPatientsAsync(CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<PatientDto>> FetchPatientsAsync(CancellationToken cancellationToken) =>
         Task.FromResult(patients);
 
-    public Task<IReadOnlyList<JsonObject>> FetchRadiologyAsync(
+    public Task<IReadOnlyList<ImagingStudyDto>> FetchRadiologyAsync(
         IReadOnlyList<string> accessionNumbers, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<JsonObject>>([]);
+        Task.FromResult<IReadOnlyList<ImagingStudyDto>>([]);
 
-    public Task<JsonObject?> FetchSequencingAsync(string predictiveNumber, CancellationToken cancellationToken) =>
-        Task.FromResult<JsonObject?>(null);
+    public Task<SequencingDto?> FetchSequencingAsync(string predictiveNumber, CancellationToken cancellationToken) =>
+        Task.FromResult<SequencingDto?>(null);
 
-    public Task<JsonObject?> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
-        Task.FromResult<JsonObject?>(null);
+    public Task<WsiDto?> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
+        Task.FromResult<WsiDto?>(null);
 }
 
 internal sealed class FakeCatalogueGateway : ICatalogueGateway
@@ -29,35 +30,34 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
     public List<string> Deletes { get; } = [];
     public HashSet<string> FailUpsertTypes { get; } = [];
 
-    public Task<ErrorOr<string>> UpsertPatientAsync(string patientId, Personal? p, Clinical? c, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertPatientAsync(PatientAggregate patient, CancellationToken ct)
     {
-        Upserts.Add($"patient:{patientId}");
-        return Upsert("patient", patientId);
+        Upserts.Add($"patient:{patient.Id.Value}");
+        return Upsert("patient", patient.Id.Value);
     }
 
-    public Task<ErrorOr<string>> UpsertSampleAsync(Sample sample, string patientId, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertSampleAsync(SampleAggregate sample, CancellationToken ct)
     {
-        Upserts.Add($"sample:{sample.SampleId}");
-        return Upsert("sample", sample.SampleId);
+        Upserts.Add($"sample:{sample.Id.Value}");
+        return Upsert("sample", sample.Id.Value);
     }
 
-    public Task<ErrorOr<string>> UpsertSequencingAsync(
-        IReadOnlyList<SequencingEntry> sequencing, string sampleId, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertSequencingAsync(SequencingAggregate sequencing, CancellationToken ct)
     {
-        Upserts.Add($"sequencing:{sampleId}");
-        return Upsert("sequencing", sampleId);
+        Upserts.Add($"sequencing:{sequencing.SampleId.Value}");
+        return Upsert("sequencing", sequencing.SampleId.Value);
     }
 
-    public Task<ErrorOr<string>> UpsertWsiAsync(WsiData wsi, string sampleId, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertWsiAsync(WsiAggregate wsi, CancellationToken ct)
     {
-        Upserts.Add($"wsi:{sampleId}");
-        return Upsert("wsi", sampleId);
+        Upserts.Add($"wsi:{wsi.SampleId.Value}");
+        return Upsert("wsi", wsi.SampleId.Value);
     }
 
-    public Task<ErrorOr<string>> UpsertImagingStudyAsync(ImagingStudy study, string patientId, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertImagingStudyAsync(ImagingStudyAggregate study, CancellationToken ct)
     {
-        Upserts.Add($"imaging:{study.AccessionNumber}");
-        return Upsert("imaging", study.AccessionNumber);
+        Upserts.Add($"imaging:{study.Id.Value}");
+        return Upsert("imaging", study.Id.Value);
     }
 
     public Task<ErrorOr<Deleted>> DeleteAsync(string entityType, string entityKey, string? remoteId, CancellationToken ct)
@@ -80,43 +80,47 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
     public Dictionary<string, WsiSyncState> Wsi { get; } = [];
     public Dictionary<string, ImagingStudySyncState> ImagingStudies { get; } = [];
 
-    public Task<PatientSyncStates> GetAllForPatientAsync(string patientId, CancellationToken cancellationToken)
+    public Task<PatientSyncStates> GetAllForPatientAsync(PatientId patientId, CancellationToken cancellationToken)
     {
-        var samples = Samples.Values.Where(s => s.PatientId == patientId).ToDictionary(s => s.SampleId);
+        var id = patientId.Value;
+        var samples = Samples.Values.Where(s => s.PatientId.Value == id).ToDictionary(s => s.Id);
         var sampleIds = samples.Keys.ToHashSet();
         return Task.FromResult(new PatientSyncStates
         {
-            Patient = Patients.GetValueOrDefault(patientId),
+            Patient = Patients.GetValueOrDefault(id),
             Samples = samples,
-            Sequencing = Sequencing.Values.Where(s => sampleIds.Contains(s.SampleId)).ToDictionary(s => s.PredictiveNumber),
-            Wsi = Wsi.Values.Where(s => sampleIds.Contains(s.SampleId)).ToDictionary(s => s.BiopticNumber),
-            ImagingStudies = ImagingStudies.Values.Where(i => i.PatientId == patientId).ToDictionary(i => i.AccessionNumber),
+            Sequencing = Sequencing.Values
+                .Where(s => sampleIds.Contains(s.SampleId)).ToDictionary(s => s.Id),
+            Wsi = Wsi.Values.Where(s => sampleIds.Contains(s.SampleId)).ToDictionary(s => s.Id),
+            ImagingStudies = ImagingStudies.Values
+                .Where(i => i.PatientId.Value == id).ToDictionary(i => i.Id),
         });
     }
 
-    public Task SaveAsync(EntitySyncState state, CancellationToken cancellationToken)
+    public Task SaveAsync(ISyncState state, CancellationToken cancellationToken)
     {
         switch (state)
         {
-            case PatientSyncState patient: Patients[patient.PatientId] = patient; break;
-            case SampleSyncState sample: Samples[sample.SampleId] = sample; break;
-            case SequencingSyncState sequencing: Sequencing[sequencing.PredictiveNumber] = sequencing; break;
-            case WsiSyncState wsi: Wsi[wsi.BiopticNumber] = wsi; break;
-            case ImagingStudySyncState imaging: ImagingStudies[imaging.AccessionNumber] = imaging; break;
+            case PatientSyncState patient: Patients[patient.Id.Value] = patient; break;
+            case SampleSyncState sample: Samples[sample.Id.Value] = sample; break;
+            case SequencingSyncState sequencing: Sequencing[sequencing.Id.Value] = sequencing; break;
+            case WsiSyncState wsi: Wsi[wsi.Id.Value] = wsi; break;
+            case ImagingStudySyncState imaging: ImagingStudies[imaging.Id.Value] = imaging; break;
         }
 
         return Task.CompletedTask;
     }
 
-    public Task SoftDeleteChildrenAsync(string parentKey, string runId, CancellationToken cancellationToken)
+    public Task SoftDeleteChildrenAsync(PatientId parentId, string runId, CancellationToken cancellationToken)
     {
-        foreach (var sample in Samples.Values.Where(s => s.PatientId == parentKey))
+        var id = parentId.Value;
+        foreach (var sample in Samples.Values.Where(s => s.PatientId.Value == id))
         {
             sample.IsDeleted = true;
             sample.Status = SyncStatus.Deleted;
         }
 
-        foreach (var imaging in ImagingStudies.Values.Where(i => i.PatientId == parentKey))
+        foreach (var imaging in ImagingStudies.Values.Where(i => i.PatientId.Value == id))
         {
             imaging.IsDeleted = true;
             imaging.Status = SyncStatus.Deleted;
@@ -126,12 +130,13 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
     }
 
     public Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(
-        ISet<string> seenIds, string runId, CancellationToken cancellationToken)
+        ISet<PatientId> seenIds, string runId, CancellationToken cancellationToken)
     {
+        var seen = seenIds.Select(seenId => seenId.Value).ToHashSet();
         var missing = new List<PatientSyncState>();
         foreach (var patient in Patients.Values)
         {
-            if (seenIds.Contains(patient.PatientId) || patient.IsDeleted)
+            if (seen.Contains(patient.Id.Value) || patient.IsDeleted)
             {
                 continue;
             }
@@ -147,11 +152,11 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
 
 internal sealed class FakeSyncRunRepository : ISyncRunRepository
 {
-    public RunSummary? Finished { get; private set; }
+    public RunCatalogueSyncCommandResult? Finished { get; private set; }
 
-    public Task FinishAsync(RunSummary summary, CancellationToken cancellationToken)
+    public Task FinishAsync(RunCatalogueSyncCommandResult result, CancellationToken cancellationToken)
     {
-        Finished = summary;
+        Finished = result;
         return Task.CompletedTask;
     }
 }
