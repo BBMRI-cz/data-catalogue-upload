@@ -2,6 +2,12 @@
 
   <PropertyGroup>
     <RootNamespace>Uploader.Application</RootNamespace>
+    <!--
+      Mapperly RMG020 (source member not mapped) is expected: the flat patient/sample DTOs carry
+      more than one value object's worth of fields, so each value-object map intentionally leaves
+      the others' fields unmapped. Unmapped *target* diagnostics stay on to catch real mistakes.
+    -->
+    <NoWarn>$(NoWarn);RMG020</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +20,6 @@
 
   <ItemGroup>
     <PackageReference Include="ErrorOr" />
-    <PackageReference Include="FluentValidation" />
-    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
     <PackageReference Include="Mediator.Abstractions" />
     <PackageReference Include="Mediator.SourceGenerator">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -23,6 +27,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Riok.Mapperly" />
   </ItemGroup>
 
 </Project>
