@@ -1,6 +1,6 @@
 namespace BiobankApi.Domain;
 
-/// <summary>Patient biological sex as exported in the <c>&lt;patient sex&gt;</c> attribute.</summary>
+/// <summary>Biological sex of a patient.</summary>
 public enum Sex
 {
     Male,
@@ -8,8 +8,8 @@ public enum Sex
 }
 
 /// <summary>
-/// The <c>&lt;retrieved&gt;</c> state of a sample: <c>Operational</c> = taken during a
-/// surgical/clinical procedure; <c>Unknown</c> = context not recorded.
+/// Whether a sample was retrieved during a clinical/surgical procedure (<c>Operational</c>) or its
+/// context was not recorded (<c>Unknown</c>).
 /// </summary>
 public enum Retrieved
 {

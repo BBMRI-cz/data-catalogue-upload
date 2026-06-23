@@ -3,10 +3,10 @@ using System.Collections.Frozen;
 namespace BiobankApi.Domain.Patients;
 
 /// <summary>
-/// Material-type code lookups for biobank samples (report §6.5). The <c>&lt;materialType&gt;</c>
-/// code's meaning depends on the enclosing element (tissue / serum / genome / diagnosisMaterial).
-/// Codes are intentionally not hard-validated by the models (new codes may appear); these maps
-/// are reference data plus the <see cref="Label"/> convenience lookup.
+/// Material-type code lookups for biobank samples. A code's meaning depends on the sample type
+/// (tissue / serum / genome / diagnostic specimen). Codes are intentionally not hard-validated by
+/// the models (new codes may appear); these maps are reference data plus the <see cref="Label"/>
+/// convenience lookup.
 /// </summary>
 public static class MaterialTypes
 {
@@ -19,10 +19,10 @@ public static class MaterialTypes
     /// <summary>Discriminator for genome samples.</summary>
     public const string Genome = "genome";
 
-    /// <summary>Discriminator for STS diagnostic specimens.</summary>
+    /// <summary>Discriminator for diagnostic specimens.</summary>
     public const string DiagnosisMaterial = "diagnosis_material";
 
-    // <tissue>/<materialType> — surgical/tumour tissue (report §6.3.2)
+    // Tissue material codes (surgical / tumour tissue).
     public static readonly FrozenDictionary<string, string> TissueMaterialTypes =
         new Dictionary<string, string>
         {
@@ -38,7 +38,7 @@ public static class MaterialTypes
             ["56"] = "Benign tumour (RNAlater)",
         }.ToFrozenDictionary();
 
-    // <serum>/<materialType> — blood-derived liquid samples (report §6.3.3)
+    // Serum material codes (blood-derived liquid samples).
     public static readonly FrozenDictionary<string, string> SerumMaterialTypes =
         new Dictionary<string, string>
         {
@@ -52,7 +52,7 @@ public static class MaterialTypes
             ["PR"] = "Primary cell cultures",
         }.ToFrozenDictionary();
 
-    // <genome>/<materialType> — DNA / nucleic acid samples (report §6.3.4)
+    // Genome material codes (DNA / nucleic-acid samples).
     public static readonly FrozenDictionary<string, string> GenomeMaterialTypes =
         new Dictionary<string, string>
         {
@@ -61,7 +61,7 @@ public static class MaterialTypes
             ["gD"] = "Extracted genomic DNA",
         }.ToFrozenDictionary();
 
-    // <diagnosisMaterial>/<materialType> — STS diagnostic specimens (report §6.4.1).
+    // Diagnostic-specimen material codes.
     public static readonly FrozenDictionary<string, string> DiagnosisMaterialTypes =
         new Dictionary<string, string> { ["S"] = "Serum / surgical specimen" }.ToFrozenDictionary();
 
@@ -74,12 +74,10 @@ public static class MaterialTypes
             [DiagnosisMaterial] = DiagnosisMaterialTypes,
         }.ToFrozenDictionary();
 
-    /// <summary>
-    /// Returns the English label for a <c>&lt;materialType&gt;</c> code, or <c>null</c> if unknown.
-    /// </summary>
+    /// <summary>Returns the English label for a material-type code, or <c>null</c> if unknown.</summary>
     /// <param name="sampleType">One of <see cref="Tissue"/>, <see cref="Serum"/>,
     /// <see cref="Genome"/> or <see cref="DiagnosisMaterial"/>.</param>
-    /// <param name="code">The raw code (e.g. <c>"53"</c>, <c>"SD"</c>).</param>
+    /// <param name="code">The material-type code.</param>
     public static string? Label(string sampleType, string? code)
     {
         if (code is null)

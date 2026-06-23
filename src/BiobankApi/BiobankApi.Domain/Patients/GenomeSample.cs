@@ -1,9 +1,22 @@
+using BiobankApi.Domain.Common;
+using ErrorOr;
+
 namespace BiobankApi.Domain.Patients;
 
-/// <summary>A frozen DNA / nucleic-acid <c>&lt;genome&gt;</c> sample (report §6.3.4).</summary>
-public sealed record GenomeSample : Sample
+/// <summary>A DNA / nucleic-acid sample.</summary>
+public sealed class GenomeSample : Sample
 {
-    public GenomeSample(
+    internal GenomeSample()
+    {
+    }
+
+    public DateTime? TakingDate { get; init; }
+
+    public Retrieved? Retrieved { get; init; }
+
+    protected override string SampleTypeDiscriminator => MaterialTypes.Genome;
+
+    public static ErrorOr<GenomeSample> Create(
         string sampleId,
         string materialType,
         int? eventNumber = null,
@@ -15,26 +28,26 @@ public sealed record GenomeSample : Sample
         IReadOnlyList<string>? accessionNumbers = null,
         DateTime? takingDate = null,
         Retrieved? retrieved = null)
-        : base(
-            sampleId,
-            materialType,
-            eventNumber,
-            collectionYear,
-            biopsy,
-            predictiveNumber,
-            samplesNo,
-            availableSamplesNo,
-            accessionNumbers)
     {
-        TakingDate = takingDate;
-        Retrieved = retrieved;
+        var common = ValidateCommon(sampleId, materialType, eventNumber, collectionYear, samplesNo, availableSamplesNo);
+        if (common.IsError)
+        {
+            return common.Errors;
+        }
+
+        return new GenomeSample
+        {
+            Id = new SampleId(sampleId),
+            MaterialType = materialType,
+            EventNumber = eventNumber,
+            CollectionYear = collectionYear,
+            Biopsy = biopsy,
+            PredictiveNumber = predictiveNumber,
+            SamplesNo = samplesNo,
+            AvailableSamplesNo = availableSamplesNo,
+            AccessionNumbers = accessionNumbers ?? [],
+            TakingDate = takingDate,
+            Retrieved = retrieved,
+        };
     }
-
-    /// <summary><c>&lt;takingDate&gt;</c> → <c>Material.sampling_timestamp</c>.</summary>
-    public DateTime? TakingDate { get; }
-
-    /// <summary><c>&lt;retrieved&gt;</c>.</summary>
-    public Retrieved? Retrieved { get; }
-
-    protected override string SampleTypeDiscriminator => MaterialTypes.Genome;
 }

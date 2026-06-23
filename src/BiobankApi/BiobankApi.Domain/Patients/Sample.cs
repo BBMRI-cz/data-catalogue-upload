@@ -1,106 +1,88 @@
 using BiobankApi.Domain.Common;
+using ErrorOr;
 
 namespace BiobankApi.Domain.Patients;
 
 /// <summary>
-/// An archived Long-Term Storage sample — the shared <c>&lt;tissue&gt;</c>/<c>&lt;serum&gt;</c>/
-/// <c>&lt;genome&gt;</c> attribute group (report §6.3.1). Maps to FAIR Genomes <c>Material</c>.
-/// Subclassed by <see cref="TissueSample"/>, <see cref="SerumSample"/> and
-/// <see cref="GenomeSample"/> for the type-specific child elements. A single collection event
-/// (same <c>number</c>) commonly yields several rows, one per <c>materialType</c>.
+/// An archived research sample held by a <see cref="PatientAggregate"/>. The shared attributes of
+/// the <see cref="TissueSample"/>, <see cref="SerumSample"/> and <see cref="GenomeSample"/> types,
+/// each created through its own <c>Create</c> factory.
 /// </summary>
-public abstract record Sample : Entity
+public abstract class Sample : Entity<SampleId>
 {
-    // Sanity bounds for a sample collection year (report observed 2022–2026); kept wide so the
-    // domain tolerates historical/future exports without hard-coding the current date.
     public const int MinCollectionYear = 1900;
     public const int MaxCollectionYear = 2100;
 
-    protected Sample(
-        string sampleId,
-        string materialType,
-        int? eventNumber,
-        int? collectionYear,
-        string? biopsy,
-        string? predictiveNumber,
-        int? samplesNo,
-        int? availableSamplesNo,
-        IReadOnlyList<string>? accessionNumbers)
-    {
-        if (string.IsNullOrWhiteSpace(sampleId))
-        {
-            throw new DomainException("sample_id must not be empty");
-        }
+    public required string MaterialType { get; init; }
 
-        if (string.IsNullOrWhiteSpace(materialType))
-        {
-            throw new DomainException("material_type must not be empty");
-        }
+    public int? EventNumber { get; init; }
 
-        EnsureNonNegative(nameof(eventNumber), eventNumber);
-        EnsureNonNegative(nameof(samplesNo), samplesNo);
-        EnsureNonNegative(nameof(availableSamplesNo), availableSamplesNo);
+    public int? CollectionYear { get; init; }
 
-        if (collectionYear is { } year && year is < MinCollectionYear or > MaxCollectionYear)
-        {
-            throw new DomainException($"collection_year out of range: {year}");
-        }
+    public string? Biopsy { get; init; }
 
-        if (samplesNo is { } total && availableSamplesNo is { } available && available > total)
-        {
-            throw new DomainException(
-                $"available_samples_no cannot exceed samples_no ({available} > {total})");
-        }
+    public string? PredictiveNumber { get; init; }
 
-        SampleId = sampleId;
-        MaterialType = materialType;
-        EventNumber = eventNumber;
-        CollectionYear = collectionYear;
-        Biopsy = biopsy;
-        PredictiveNumber = predictiveNumber;
-        SamplesNo = samplesNo;
-        AvailableSamplesNo = availableSamplesNo;
-        AccessionNumbers = accessionNumbers ?? [];
-    }
+    public int? SamplesNo { get; init; }
 
-    /// <summary><c>sampleId</c> attr → <c>Material.material_identifier</c>.</summary>
-    public string SampleId { get; }
+    public int? AvailableSamplesNo { get; init; }
 
-    /// <summary><c>&lt;materialType&gt;</c> code → <c>Material.biospecimen_type</c>.</summary>
-    public string MaterialType { get; }
-
-    /// <summary><c>number</c> attr — shared by all aliquots of one collection event.</summary>
-    public int? EventNumber { get; }
-
-    /// <summary><c>year</c> attr — the sample collection year (not the birth year).</summary>
-    public int? CollectionYear { get; }
-
-    /// <summary><c>biopsy</c> attr ("-" → null): pathology lab reference.</summary>
-    public string? Biopsy { get; }
-
-    /// <summary><c>predictive_number</c> attr ("-" → null): sequencing reference.</summary>
-    public string? PredictiveNumber { get; }
-
-    /// <summary><c>&lt;samplesNo&gt;</c>: total aliquots created.</summary>
-    public int? SamplesNo { get; }
-
-    /// <summary><c>&lt;availableSamplesNo&gt;</c>: aliquots still available.</summary>
-    public int? AvailableSamplesNo { get; }
-
-    /// <summary>Sample-level <c>&lt;AccessionNumbers&gt;/&lt;Number&gt;</c> (post-2024 files).</summary>
-    public IReadOnlyList<string> AccessionNumbers { get; }
+    public IReadOnlyList<string> AccessionNumbers { get; init; } = [];
 
     /// <summary>The <see cref="MaterialTypes"/> discriminator for this sample type.</summary>
     protected abstract string SampleTypeDiscriminator { get; }
 
-    /// <summary>English meaning of <see cref="MaterialType"/> for this sample type (report §6.5).</summary>
+    /// <summary>English meaning of <see cref="MaterialType"/> for this sample type, or null if unknown.</summary>
     public string? MaterialTypeLabel => MaterialTypes.Label(SampleTypeDiscriminator, MaterialType);
 
-    private static void EnsureNonNegative(string name, int? value)
+    /// <summary>Validate the invariants shared by every sample type; called from subtype factories.</summary>
+    protected static ErrorOr<Success> ValidateCommon(
+        string? sampleId,
+        string? materialType,
+        int? eventNumber,
+        int? collectionYear,
+        int? samplesNo,
+        int? availableSamplesNo)
     {
-        if (value is < 0)
+        if (string.IsNullOrWhiteSpace(sampleId))
         {
-            throw new DomainException($"{name} must not be negative, got {value}");
+            return Error.Validation("Sample.SampleId", "sample_id must not be empty");
         }
+
+        if (string.IsNullOrWhiteSpace(materialType))
+        {
+            return Error.Validation("Sample.MaterialType", "material_type must not be empty");
+        }
+
+        if (eventNumber is < 0)
+        {
+            return Error.Validation("Sample.EventNumber", $"event_number must not be negative, got {eventNumber}");
+        }
+
+        if (samplesNo is < 0)
+        {
+            return Error.Validation("Sample.SamplesNo", $"samples_no must not be negative, got {samplesNo}");
+        }
+
+        if (availableSamplesNo is < 0)
+        {
+            return Error.Validation(
+                "Sample.AvailableSamplesNo",
+                $"available_samples_no must not be negative, got {availableSamplesNo}");
+        }
+
+        if (collectionYear is { } year && year is < MinCollectionYear or > MaxCollectionYear)
+        {
+            return Error.Validation("Sample.CollectionYear", $"collection_year out of range: {year}");
+        }
+
+        if (samplesNo is { } total && availableSamplesNo is { } available && available > total)
+        {
+            return Error.Validation(
+                "Sample.AvailableSamplesNo",
+                $"available_samples_no cannot exceed samples_no ({available} > {total})");
+        }
+
+        return Result.Success;
     }
 }
