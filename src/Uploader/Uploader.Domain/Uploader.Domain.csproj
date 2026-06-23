@@ -4,4 +4,8 @@
     <RootNamespace>Uploader.Domain</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="ErrorOr" />
+  </ItemGroup>
+
 </Project>

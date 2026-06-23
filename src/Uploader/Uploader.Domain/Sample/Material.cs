@@ -1,9 +1,8 @@
-using System.Text.Json.Nodes;
 using Uploader.Domain.Common;
 
 namespace Uploader.Domain;
 
-/// <summary>FAIR Genomes <c>Material</c> value object.</summary>
+/// <summary>FAIR Genomes <c>Material</c> value object (the biobank sample's descriptive data).</summary>
 public sealed record Material : ValueObject
 {
     public string? MaterialIdentifier { get; init; }
@@ -23,16 +22,4 @@ public sealed record Material : ValueObject
     public string? PhysicalLocation { get; init; }
     public IReadOnlyList<string>? AnalysesPerformed { get; init; }
     public string? DerivedFrom { get; init; }
-}
-
-/// <summary>An archived biobank sample plus its derived sequencing/WSI analyses.</summary>
-public sealed record Sample : Entity
-{
-    public required string SampleId { get; init; }
-    public string? PredictiveNumber { get; init; }
-    public string? BiopticNumber { get; init; }
-    public JsonObject? Payload { get; init; }
-    public Material? Material { get; init; }
-    public IReadOnlyList<SequencingEntry>? Sequencing { get; init; }
-    public WsiData? Wsi { get; init; }
 }
