@@ -1,114 +1,110 @@
 ---
 name: testing
-description: Pytest conventions for the data-catalogue-upload workspace. Use when writing, running, or fixing tests in any member under apps/ - unit-testing builders/use cases and the planner, faking Protocol ports (SourceDataGateway / CatalogueGateway / SyncStateRepository / BiobankRepository), testing FastAPI endpoints with TestClient, and running pytest via uv.
+description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the four test projects under tests/ - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the SourceMapper and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper) and the biobank API with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
 ---
 
 # Testing (data-catalogue-upload)
 
-Each workspace member keeps its tests in `apps/<pkg>/tests/`, named `test_*.py`, run with pytest via uv.
-They are split into `tests/unit/` (pure, no I/O) and `tests/integration/` (real adapters, e.g. a DB engine).
+Tests live under `tests/`, split into four projects - two per service, **unit** and **integration**:
+
+```
+tests/
+├── BiobankApi.UnitTests          DomainModelsTests (aggregates/factories)
+├── BiobankApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests
+├── Uploader.UnitTests            FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
+└── Uploader.IntegrationTests     SyncStateRepositoryTests
+```
+
+Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
+NSubstitute** - assertions are explicit and ports are faked by hand.
+
+- **UnitTests** reference `*.Application` + `*.Domain` only: pure, no I/O.
+- **IntegrationTests** reference `*.Infrastructure` (+ `*.Web` for the API): they touch a real EF Core engine
+  (in-memory SQLite) or spin up the web host.
 
 ## Running
 
 ```bash
-uv run pytest apps/uploader/tests        # one member's tests
-uv run pytest apps/biobank_api/tests
-uv run pytest apps/biobank_api/tests/unit         # fast pure tests only
-uv run pytest apps/biobank_api/tests/integration  # DB round-trips (in-memory sqlite)
-uv run pytest apps/uploader/tests -v     # verbose
-uv run pytest apps/biobank_api/tests/unit/test_domain_models.py::test_patient_minimal_construction_stays_valid   # one test
+dotnet test DataCatalogueUpload.slnx                                  # everything
+dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj        # one project
+dotnet test --filter "FullyQualifiedName~FingerprintSyncPlannerTests" # one class
+dotnet test --filter "FullyQualifiedName~SkipsUnchangedPatient"       # one test
+dotnet test -l "console;verbosity=detailed"                           # full assert/log output
 ```
 
-## Conventions
+## Unit tests
 
-- Put test files in the member's `tests/`, named `test_*.py`, with functions named `test_*`.
-- Place pure tests (no I/O) in `tests/unit/`; tests that drive a real adapter (a DB engine, etc.) in `tests/integration/`.
-- Prefer fast, pure unit tests. The domain and application layers have no I/O, so they need no DB or network.
-- Import from the member's package: `from uploader.application.builders... import ...`,
-  `from biobank_api.domain.models import Patient`.
+**Domain factories / invariants.** A factory returns `ErrorOr<T>`; assert success or the specific validation
+error:
 
-## Testing builders / use cases
+```csharp
+[Fact]
+public void Create_RejectsBirthYearOutOfRange()
+{
+    var result = PatientAggregate.Create("P1", birthYear: 1800);
 
-Builders are pure dict -> dataclass mappers. Pass a raw payload and assert on the returned domain object:
-
-```python
-from uploader.application.builders.clinical_builder import ClinicalBuilder
-
-
-def test_build_personal_maps_fields():
-    payload = {"personal_identifier": "P1", "year_of_birth": 1980}
-    personal = ClinicalBuilder().build_personal(payload)
-    assert personal.personal_identifier == "P1"
-    assert personal.year_of_birth == 1980
+    Assert.True(result.IsError);
+    Assert.Equal(ErrorType.Validation, result.Errors[0].Type);
+}
 ```
 
-## Faking the ports
+**The planner.** `FingerprintSyncPlannerTests` drives `FingerprintSyncPlanner.Plan(data, existing)` and
+asserts the `SyncOp` per entity: no prior -> CREATE, unchanged fingerprint -> SKIP, changed -> UPDATE,
+soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE. Build the prior state and assert the returned
+operations.
 
-The application depends on Protocols (e.g. `SourceDataGateway`, `CatalogueGateway`, `SyncStateRepository` in
-the uploader; `BiobankRepository`, `XmlExportSource` in biobank_api), so tests can pass simple fakes - no
-mocking framework required. Implement only the methods the test exercises:
+## Faking the ports (uploader)
 
-```python
-class FakeBiobankRepository:
-    def __init__(self, patients): self._patients = patients
-    def list_patients(self): return self._patients
-    def save_patients(self, patients): self._patients = patients
+The application depends on interfaces (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`,
+`ISyncRunRepository`), so tests use the hand-written fakes in `tests/Uploader.UnitTests/Fakes.cs` - no mocking
+framework:
+
+- `FakeSourceDataGateway(IReadOnlyList<PatientDto>)` - returns canned source data.
+- `FakeCatalogueGateway` - records `Upserts`/`Deletes`; add an entity type to `FailUpsertTypes` to make that
+  upsert return an `Error.Failure` (this is how `RunCatalogueSyncHandlerTests` exercises the `Failed` path
+  and the `SyncStatus.Failed` + `LastError` recording).
+- `InMemorySyncStateRepository` - dictionaries of `*SyncState` keyed by id; implements the subtree load and
+  the soft-delete/mark-missing behaviour.
+- `FakeSyncRunRepository` - captures the finished `RunCatalogueSyncCommandResult`.
+
+Inject these where the composition root would inject the real adapters; a class that implements the interface
+is all that's needed.
+
+## Integration tests: EF Core repositories
+
+Repositories are tested against a **real engine**, not a mocked `DbContext`. Use the `SqliteDatabase` helper
+(one per service's IntegrationTests) - an in-memory SQLite connection held open for the test, with
+`EnsureCreated()` building the schema and foreign keys enabled:
+
+```csharp
+using var db = new SqliteDatabase();
+await new SqlBiobankRepository(db.NewContext()).SavePatientsAsync([PatientAggregate.Create("P1").Value], default);
+var loaded = await new SqlBiobankRepository(db.NewContext()).ListPatientsAsync(default);
+Assert.Equal("P1", Assert.Single(loaded).Id.Value);
 ```
 
-A class that satisfies the Protocol's method signatures is accepted by mypy - it does not need to inherit
-from it. Inject the fake where the composition root would inject the real adapter.
+Call `NewContext()` again for the read to prove the round-trip went through the DB, not an in-memory tracked
+graph. The schema only uses column types SQLite supports, so this stays representative of PostgreSQL. Keep
+pure mapping logic (domain <-> EF entity) in `MapperTests` where it needs no engine.
 
-## Testing FastAPI endpoints (API services)
+## Integration tests: the biobank API
 
-Use Starlette's `TestClient` and override the route's dependency to avoid a live database (see
-`apps/biobank_api/tests/test_server.py`):
+`ApiTests` uses `WebApplicationFactory<Program>` and replaces the repository with a `FakeBiobankRepository`
+via `ConfigureTestServices` (no live database):
 
-```python
-app = create_app()
-app.dependency_overrides[get_patients_use_case] = lambda: GetPatients(FakeBiobankRepository([]))
-client = TestClient(app)
-assert client.get("/patients").json() == []
+```csharp
+var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    builder.ConfigureTestServices(services =>
+    {
+        services.RemoveAll<IBiobankRepository>();
+        services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository(patients));
+    }));
+var client = factory.CreateClient();
 ```
 
-## Integration tests (DB repositories)
-
-A repository is tested against a **real engine**, not a mocked `Session` (a mock would just assert how
-SQLAlchemy was called - testing the library). Use an in-memory SQLite engine built fresh per test. The
-`session` fixture in `apps/biobank_api/tests/integration/conftest.py`:
-
-```python
-@pytest.fixture
-def session() -> Iterator[Session]:
-    engine = create_engine("sqlite://")
-
-    @event.listens_for(engine, "connect")
-    def _enable_sqlite_fk(dbapi_connection: object, _record: object) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")  # off by default in sqlite
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    db = sessionmaker(bind=engine)()
-    try:
-        yield db
-    finally:
-        db.close()
-        engine.dispose()
-```
-
-A test then drives the real repository and asserts a save/read round-trip:
-
-```python
-def test_round_trip(session: Session) -> None:
-    SqlBiobankRepository(session).save_patients([Patient(patient_id="P1", consent=True)])
-    (loaded,) = SqlBiobankRepository(session).list_patients()
-    assert loaded.patient_id == "P1"
-```
-
-The schema only uses column types SQLite supports, so this stays representative of PostgreSQL. Keep pure
-mapping logic (ORM <-> domain) in `tests/unit/` where it needs no engine.
+JSON is **snake_case** (`JsonNamingPolicy.SnakeCaseLower`) - match that when deserializing responses in tests.
 
 ## CI
 
-CI runs `uv run pytest apps/<pkg>/tests` per member in a matrix on every push/PR to `master` (pytest recurses
-into `unit/` and `integration/`). Keep tests green before pushing.
+CI runs `dotnet test DataCatalogueUpload.slnx --configuration Release` on every push/PR to `master` (all four
+projects). Keep tests green before pushing - see the `github-workflow` skill.

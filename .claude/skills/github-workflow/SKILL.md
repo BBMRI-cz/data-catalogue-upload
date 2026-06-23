@@ -1,36 +1,34 @@
 ---
 name: github-workflow
-description: GitHub CI, pull request, and issue conventions for the data-catalogue-upload repository. Use when pushing to GitHub, opening or describing a pull request, filing an issue, or investigating a failing CI run. Covers what CI checks run, reproducing them locally, fixing common failures, and PR/issue templates.
+description: GitHub CI, pull request, and issue conventions for the data-catalogue-upload repository. Use when pushing to GitHub, opening or describing a pull request, filing an issue, or investigating a failing CI run. Covers what CI checks run (dotnet restore/format/build/test), reproducing them locally, fixing common failures, and PR/issue templates plus the project-board workflow.
 ---
 
 # GitHub workflow (data-catalogue-upload)
 
 ## CI
 
-CI runs on every push and pull request to `master` (`.github/workflows/ci.yml`). On Python 3.11 with uv it
-runs `uv lock --check` plus a **per-package matrix** (`uploader`, `biobank_api`); each matrix job installs the
-workspace (`uv sync --all-packages --group dev`) and runs, scoped to its package (`<pkg>`):
+CI runs on every push and pull request to `master` (`.github/workflows/dotnet.yml`). It is a single
+`build-test` job on `ubuntu-latest` that pins the SDK from `global.json` and runs, against
+`DataCatalogueUpload.slnx`:
 
 ```bash
-uv run ruff check apps/<pkg>
-uv run ruff format --check apps/<pkg>
-uv run mypy apps/<pkg>
-uv run pytest apps/<pkg>/tests
+dotnet restore DataCatalogueUpload.slnx
+dotnet format DataCatalogueUpload.slnx --verify-no-changes --no-restore   # code style
+dotnet build DataCatalogueUpload.slnx --configuration Release --no-restore  # warnings as errors
+dotnet test DataCatalogueUpload.slnx --configuration Release --no-build      # all 4 test projects
 ```
 
-Reproduce CI locally before pushing by running those commands for each package you touched, plus
-`uv lock --check`. If they pass locally, CI should pass.
+Reproduce CI locally before pushing by running those four commands. If they pass locally, CI should pass.
 
 ### Fixing common CI failures
 
 | Failure | Fix |
 |---------|-----|
-| `ruff check` errors | `uv run ruff check --fix apps/<pkg>`, then review remaining manual fixes |
-| `ruff format --check` fails | `uv run ruff format apps/<pkg>` to reformat |
-| `mypy` missing stubs | add a typed stub package via `uv add --group dev types-<pkg>` (e.g. `types-requests`, `lxml-stubs` are present) |
-| `mypy` type errors | fix the code; do not loosen `[tool.mypy]` config |
-| `pytest` failures | reproduce with `uv run pytest apps/<pkg>/tests -v`, fix the code or test |
-| `uv lock --check` fails | run `uv lock` and commit the updated `uv.lock` |
+| `dotnet format --verify-no-changes` fails | run `dotnet format DataCatalogueUpload.slnx` to reformat, then commit |
+| Build fails (warning-as-error / analyzer) | fix the code; do not loosen `Directory.Build.props` or suppress the analyzer |
+| Nullable / unused-using warnings | address them - they are errors here |
+| `dotnet test` failures | reproduce with `dotnet test --filter "FullyQualifiedName~Name"`, fix the code or test |
+| Package restore / version error | the version belongs in `Directory.Packages.props` (central package management), not on the `PackageReference` |
 
 ## Pull requests
 
@@ -48,11 +46,15 @@ Why the change is needed (link issues with `Closes #<n>`).
 
 ```
 
-Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`. **Always assign the PR to `mf-16`** (use `--assignee mf-16` on `gh pr create`, or `gh pr edit <n> --add-assignee mf-16` afterwards). PRs are **not** added to the project board.
+Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`. **Always assign the PR to `mf-16`** (use
+`--assignee mf-16` on `gh pr create`, or `gh pr edit <n> --add-assignee mf-16` afterwards). PRs are **not**
+added to the project board.
 
 ## Project board
 
-Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No Status** (cleared — the default for newly added items), **Category = Data catalogue**, and assigned to `mf-16`. PRs are intentionally excluded from the board (assignee only — see above) to keep the table readable.
+Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No
+Status** (cleared - the default for newly added items), **Category = Data catalogue**, and assigned to
+`mf-16`. PRs are intentionally excluded from the board (assignee only - see above) to keep the table readable.
 
 Reference IDs (org `BBMRI-cz`, project number `3`):
 
@@ -63,7 +65,8 @@ Reference IDs (org `BBMRI-cz`, project number `3`):
 | Category field | `PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ` |
 | Category → `Data catalogue` option | `d9fce010` |
 
-Setting fields needs the `project` token scope. If a command fails with `your authentication token is missing required scopes [read:project]`, run once:
+Setting fields needs the `project` token scope. If a command fails with `your authentication token is missing
+required scopes [read:project]`, run once:
 
 ```bash
 gh auth refresh -s read:project,project --hostname github.com
@@ -71,7 +74,8 @@ gh auth refresh -s read:project,project --hostname github.com
 
 ### Adding an issue to the board
 
-After creating the issue (always with `--assignee mf-16`), add it to the board, leave Status as **No Status**, and set Category:
+After creating the issue (always with `--assignee mf-16`), add it to the board, leave Status as **No Status**,
+and set Category:
 
 ```bash
 # 1. Add the issue to the project; capture the returned item id
@@ -92,7 +96,8 @@ gh project item-edit \
 
 ## Issues
 
-When filing an issue, assign it to `mf-16` and add it to the project board with Status = No Status and Category = Data catalogue (see the **Project board** section above for the exact commands):
+When filing an issue, assign it to `mf-16` and add it to the project board with Status = No Status and
+Category = Data catalogue (see the **Project board** section above for the exact commands):
 
 ```bash
 gh issue create --repo BBMRI-cz/data-catalogue-upload \
@@ -116,7 +121,7 @@ What you expected to happen.
 What actually happened (include error output / run summary JSON if relevant).
 
 ## Environment
-Python version, OS, relevant env vars / config.
+.NET SDK version (`dotnet --version`), OS, relevant env vars / config.
 ```
 
 ### Feature request
