@@ -15,7 +15,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 name: "patient_sync_state",
                 columns: table => new
                 {
-                    PatientId = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     SourceFingerprint = table.Column<string>(type: "text", nullable: false),
                     CatalogueRemoteId = table.Column<string>(type: "text", nullable: true),
                     Status = table.Column<string>(type: "text", nullable: false),
@@ -27,7 +27,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_patient_sync_state", x => x.PatientId);
+                    table.PrimaryKey("PK_patient_sync_state", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -53,7 +53,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 name: "imaging_study_sync_state",
                 columns: table => new
                 {
-                    AccessionNumber = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     SourceFingerprint = table.Column<string>(type: "text", nullable: false),
                     CatalogueRemoteId = table.Column<string>(type: "text", nullable: true),
@@ -66,12 +66,12 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_imaging_study_sync_state", x => x.AccessionNumber);
+                    table.PrimaryKey("PK_imaging_study_sync_state", x => x.Id);
                     table.ForeignKey(
                         name: "FK_imaging_study_sync_state_patient_sync_state_PatientId",
                         column: x => x.PatientId,
                         principalTable: "patient_sync_state",
-                        principalColumn: "PatientId",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -79,7 +79,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 name: "sample_sync_state",
                 columns: table => new
                 {
-                    SampleId = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     SourceFingerprint = table.Column<string>(type: "text", nullable: false),
                     CatalogueRemoteId = table.Column<string>(type: "text", nullable: true),
@@ -92,12 +92,12 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_sample_sync_state", x => x.SampleId);
+                    table.PrimaryKey("PK_sample_sync_state", x => x.Id);
                     table.ForeignKey(
                         name: "FK_sample_sync_state_patient_sync_state_PatientId",
                         column: x => x.PatientId,
                         principalTable: "patient_sync_state",
-                        principalColumn: "PatientId",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -105,7 +105,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 name: "sequencing_sync_state",
                 columns: table => new
                 {
-                    PredictiveNumber = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     SourceFingerprint = table.Column<string>(type: "text", nullable: false),
                     CatalogueRemoteId = table.Column<string>(type: "text", nullable: true),
@@ -118,12 +118,12 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_sequencing_sync_state", x => x.PredictiveNumber);
+                    table.PrimaryKey("PK_sequencing_sync_state", x => x.Id);
                     table.ForeignKey(
                         name: "FK_sequencing_sync_state_sample_sync_state_SampleId",
                         column: x => x.SampleId,
                         principalTable: "sample_sync_state",
-                        principalColumn: "SampleId",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -131,7 +131,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 name: "wsi_sync_state",
                 columns: table => new
                 {
-                    BiopticNumber = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     SourceFingerprint = table.Column<string>(type: "text", nullable: false),
                     CatalogueRemoteId = table.Column<string>(type: "text", nullable: true),
@@ -144,12 +144,12 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_wsi_sync_state", x => x.BiopticNumber);
+                    table.PrimaryKey("PK_wsi_sync_state", x => x.Id);
                     table.ForeignKey(
                         name: "FK_wsi_sync_state_sample_sync_state_SampleId",
                         column: x => x.SampleId,
                         principalTable: "sample_sync_state",
-                        principalColumn: "SampleId",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -201,7 +201,8 @@ namespace Uploader.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_sequencing_sync_state_SampleId",
                 table: "sequencing_sync_state",
-                column: "SampleId");
+                column: "SampleId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_sequencing_sync_state_Status",
@@ -216,7 +217,8 @@ namespace Uploader.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_wsi_sync_state_SampleId",
                 table: "wsi_sync_state",
-                column: "SampleId");
+                column: "SampleId",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_wsi_sync_state_Status",

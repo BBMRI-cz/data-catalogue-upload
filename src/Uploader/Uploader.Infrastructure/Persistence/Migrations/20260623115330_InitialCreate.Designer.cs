@@ -12,7 +12,7 @@ using Uploader.Infrastructure.Persistence;
 namespace Uploader.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(UploaderDbContext))]
-    [Migration("20260622170243_InitialCreate")]
+    [Migration("20260623115330_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -25,9 +25,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.ImagingStudySyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.ImagingStudySyncStateEntity", b =>
                 {
-                    b.Property<string>("AccessionNumber")
+                    b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<string>("CatalogueRemoteId")
@@ -61,7 +61,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("AccessionNumber");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
 
@@ -72,9 +72,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.ToTable("imaging_study_sync_state", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.PatientSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.PatientSyncStateEntity", b =>
                 {
-                    b.Property<string>("PatientId")
+                    b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<string>("CatalogueRemoteId")
@@ -104,7 +104,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("PatientId");
+                    b.HasKey("Id");
 
                     b.HasIndex("RunId");
 
@@ -113,9 +113,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.ToTable("patient_sync_state", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.SampleSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SampleSyncStateEntity", b =>
                 {
-                    b.Property<string>("SampleId")
+                    b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<string>("CatalogueRemoteId")
@@ -149,7 +149,7 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("SampleId");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
 
@@ -160,9 +160,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.ToTable("sample_sync_state", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.SequencingSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SequencingSyncStateEntity", b =>
                 {
-                    b.Property<string>("PredictiveNumber")
+                    b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<string>("CatalogueRemoteId")
@@ -196,18 +196,19 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("PredictiveNumber");
+                    b.HasKey("Id");
 
                     b.HasIndex("RunId");
 
-                    b.HasIndex("SampleId");
+                    b.HasIndex("SampleId")
+                        .IsUnique();
 
                     b.HasIndex("Status");
 
                     b.ToTable("sequencing_sync_state", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.SyncRunEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SyncRunEntity", b =>
                 {
                     b.Property<string>("Id")
                         .HasColumnType("text");
@@ -241,9 +242,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.ToTable("sync_run", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.WsiSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.WsiSyncStateEntity", b =>
                 {
-                    b.Property<string>("BiopticNumber")
+                    b.Property<string>("Id")
                         .HasColumnType("text");
 
                     b.Property<string>("CatalogueRemoteId")
@@ -277,51 +278,66 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("BiopticNumber");
+                    b.HasKey("Id");
 
                     b.HasIndex("RunId");
 
-                    b.HasIndex("SampleId");
+                    b.HasIndex("SampleId")
+                        .IsUnique();
 
                     b.HasIndex("Status");
 
                     b.ToTable("wsi_sync_state", (string)null);
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.ImagingStudySyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.ImagingStudySyncStateEntity", b =>
                 {
-                    b.HasOne("Uploader.Infrastructure.Persistence.PatientSyncStateEntity", null)
-                        .WithMany()
+                    b.HasOne("Uploader.Infrastructure.Persistence.Entities.PatientSyncStateEntity", null)
+                        .WithMany("ImagingStudies")
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.SampleSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SampleSyncStateEntity", b =>
                 {
-                    b.HasOne("Uploader.Infrastructure.Persistence.PatientSyncStateEntity", null)
-                        .WithMany()
+                    b.HasOne("Uploader.Infrastructure.Persistence.Entities.PatientSyncStateEntity", null)
+                        .WithMany("Samples")
                         .HasForeignKey("PatientId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.SequencingSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SequencingSyncStateEntity", b =>
                 {
-                    b.HasOne("Uploader.Infrastructure.Persistence.SampleSyncStateEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SampleId")
+                    b.HasOne("Uploader.Infrastructure.Persistence.Entities.SampleSyncStateEntity", null)
+                        .WithOne("Sequencing")
+                        .HasForeignKey("Uploader.Infrastructure.Persistence.Entities.SequencingSyncStateEntity", "SampleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Uploader.Infrastructure.Persistence.WsiSyncStateEntity", b =>
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.WsiSyncStateEntity", b =>
                 {
-                    b.HasOne("Uploader.Infrastructure.Persistence.SampleSyncStateEntity", null)
-                        .WithMany()
-                        .HasForeignKey("SampleId")
+                    b.HasOne("Uploader.Infrastructure.Persistence.Entities.SampleSyncStateEntity", null)
+                        .WithOne("Wsi")
+                        .HasForeignKey("Uploader.Infrastructure.Persistence.Entities.WsiSyncStateEntity", "SampleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.PatientSyncStateEntity", b =>
+                {
+                    b.Navigation("ImagingStudies");
+
+                    b.Navigation("Samples");
+                });
+
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.SampleSyncStateEntity", b =>
+                {
+                    b.Navigation("Sequencing");
+
+                    b.Navigation("Wsi");
                 });
 #pragma warning restore 612, 618
         }
