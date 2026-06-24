@@ -1,6 +1,6 @@
 ---
 name: dotnet-dev
-description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in either service (BiobankApi or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or Mapperly mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr + DomainException, central package management, and the build/format/test loop.
+description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in either service (BiobankApi or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or Mapperly mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr validation, FluentValidation request validators, central package management, and the build/format/test loop.
 ---
 
 # .NET development (data-catalogue-upload)
@@ -40,8 +40,9 @@ concrete infrastructure to the application via `AddApplication()` / `AddInfrastr
 ## Patterns
 
 **Domain models are `record`s; invariants live in a factory.** New aggregates/value objects validate in a
-static `Create(...)` that returns `ErrorOr<T>` (collect validation errors), or throw `DomainException` for
-truly unreachable invariant breaks. Mutable `*SyncState` classes in the uploader are the deliberate exception.
+static `Create(...)` that returns `ErrorOr<T>` (collect validation errors), or throw `InvalidOperationException`
+for truly unreachable invariant breaks (e.g. an exhaustive `switch` default). Mutable `*SyncState` classes in
+the uploader are the deliberate exception.
 
 ```csharp
 public static ErrorOr<PatientAggregate> Create(PatientId id, int? birthYear /* ... */)
@@ -54,7 +55,16 @@ public static ErrorOr<PatientAggregate> Create(PatientId id, int? birthYear /* .
 
 **Use cases are Mediator commands/queries.** One `ICommand<ErrorOr<T>>` / `IQuery<...>` + handler per use
 case under `Features/...`, dispatched via `ISender`. Handlers return `ErrorOr<T>` - do **not** throw for
-expected failures.
+expected failures. When a use case returns a structured payload, name the result type after the request -
+`<Command>Result` (e.g. `RunCatalogueSyncCommandResult`, `IngestExportsCommandResult`) - in the same
+`Features/` folder, one type per file.
+
+**Application-level input validation is FluentValidation.** A request validator is an
+`AbstractValidator<TCommand>` in the Application layer; `AddValidatorsFromAssembly` auto-registers it and the
+`ValidationBehavior<,>` pipeline stage runs it, short-circuiting to an `ErrorOr` validation error before the
+handler. This **complements** the domain `Create(...)` invariants, it does not replace them: validate request
+shape/options here, aggregate invariants in the factory. (Both services' current commands are parameterless,
+so no validators exist yet - the behavior is wired and dormant until a command carries input.)
 
 **Ports are interfaces** in `<Service>.Application/Abstractions`, implemented in `<Service>.Infrastructure`.
 To add an external dependency: define the interface in `Abstractions/`, implement it in `Infrastructure/`,
@@ -82,8 +92,6 @@ CREATE/UPDATE/SKIP/DELETE. Reuse `Fingerprint.Of` - don't hand-roll hashing.
 
 ## What this codebase deliberately does NOT use
 
-- **No FluentValidation / no `ValidationBehavior`.** Input is validated in the domain factory and surfaced as
-  an `ErrorOr` validation error. The only pipeline behavior is `LoggingBehavior`.
 - **No Moq / NSubstitute / FluentAssertions.** Tests use hand-written fakes and plain `Assert` (see the
   `testing` skill).
 

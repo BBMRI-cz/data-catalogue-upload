@@ -9,8 +9,8 @@ Tests live under `tests/`, split into four projects - two per service, **unit** 
 
 ```
 tests/
-├── BiobankApi.UnitTests          DomainModelsTests (aggregates/factories)
-├── BiobankApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests
+├── BiobankApi.UnitTests          DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
+├── BiobankApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── Uploader.UnitTests            FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
 └── Uploader.IntegrationTests     SyncStateRepositoryTests
 ```
@@ -18,9 +18,11 @@ tests/
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
 NSubstitute** - assertions are explicit and ports are faked by hand.
 
-- **UnitTests** reference `*.Application` + `*.Domain` only: pure, no I/O.
+- **UnitTests** reference `*.Application` + `*.Domain` (and, for BiobankApi, `*.Infrastructure` so the internal,
+  pure `XmlPatientReader` can be driven from an inline `XElement`): still pure, no I/O.
 - **IntegrationTests** reference `*.Infrastructure` (+ `*.Web` for the API): they touch a real EF Core engine
-  (in-memory SQLite) or spin up the web host.
+  (in-memory SQLite), read real export files from disk (`XmlExportParserTests` over `TestData/Exports`), or
+  spin up the web host.
 
 ## Running
 
@@ -52,6 +54,16 @@ public void Create_RejectsBirthYearOutOfRange()
 asserts the `SyncOp` per entity: no prior -> CREATE, unchanged fingerprint -> SKIP, changed -> UPDATE,
 soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE. Build the prior state and assert the returned
 operations.
+
+**XML parsing.** `XmlPatientReaderTests` (unit) feeds inline `XElement.Parse(...)` patient XML and asserts the
+mapped `PatientAggregate` per schema category, plus whole-patient-atomic failure (`result.IsError`).
+`XmlExportParserTests` (integration) runs `XmlExportParser` over the dummy `*.xml` files in `TestData/Exports`
+(copied to the test output) and asserts valid patients parse, invalid/malformed files are reported as
+`ExportParseError`s, and a missing directory yields an empty result.
+
+**FluentValidation validators.** When a command gains an `AbstractValidator<TCommand>`, unit-test it directly -
+`new TCommandValidator().Validate(command)` then assert `result.IsValid` / inspect `result.Errors` with plain
+`Assert` (no FluentValidation test helpers). None exist yet - the current commands are parameterless.
 
 ## Faking the ports (uploader)
 

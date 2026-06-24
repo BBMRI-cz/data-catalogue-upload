@@ -32,14 +32,14 @@ Dependency direction per service: `Web`/`Host` -> `Infrastructure` -> `Applicati
 ## Architecture (both services)
 
 - **Clean Architecture + DDD.** Domain holds aggregates (`PatientAggregate` in both services), value objects, and invariants. The uploader adds the domain service `ISyncPlanner` (`FingerprintSyncPlanner`); change detection is aggregate behaviour (`ComputeFingerprint()` over `Fingerprint.Of(...)`). The biobank has no domain service - XML text cleaning lives in infrastructure (`XmlValueReader`). Domain has no I/O and no framework dependencies.
-- **CQRS via Mediator.** Every use case is a `Command`/`Query` with a handler in `*.Application/Features/...`, dispatched through the free `Mediator` source generator (`ISender`). Handlers return `ErrorOr<T>`.
-- **Pipeline behaviors** (`*.Application/Behaviors`): `LoggingBehavior` wraps each request. Input is validated inside the domain (aggregate factories), not by a separate validation behavior.
+- **CQRS via Mediator.** Every use case is a `Command`/`Query` with a handler in `*.Application/Features/...`, dispatched through the free `Mediator` source generator (`ISender`). Handlers return `ErrorOr<T>`. A non-trivial result type is named after its request - `<Command>Result` (e.g. `RunCatalogueSyncCommandResult`, `IngestExportsCommandResult`) - in the same `Features/` folder.
+- **Pipeline behaviors** (`*.Application/Behaviors`): `LoggingBehavior` wraps each request; `ValidationBehavior` runs any FluentValidation `AbstractValidator<TCommand>` (auto-registered via `AddValidatorsFromAssembly`) and short-circuits to an `ErrorOr` validation error before the handler. Application-level request validation lives here; domain invariants stay in the aggregate `Create(...)` factories. (Current commands are parameterless, so no validators exist yet.)
 - **Ports are interfaces** in `*.Application/Abstractions`, implemented in `*.Infrastructure` (EF Core repositories, the biobank XML parser, the uploader's typed `HttpClient` gateways).
 - **API style:** ASP.NET Core Minimal API; endpoints only build a Command/Query and call `ISender`, then map `ErrorOr` to HTTP via `ErrorResults`.
 
 ## biobank_api
 
-EF Core (Npgsql) + `XmlReader`. Domain `Patient` aggregate with `TissueSample`/`SerumSample`/`GenomeSample` and `DiagnosticSpecimen`; invariants in constructors throw `DomainException`. CQRS: `GetPatientsQuery`, `IngestExportsCommand`. Host `BiobankApi.Web` runs the Minimal API (`serve`, the default) or one-shot ingestion (`-- ingest`). Config via env vars (`POSTGRES_*`, `BIOBANK_*`); see `BiobankOptions`.
+EF Core (Npgsql) + LINQ-to-XML (`System.Xml.Linq`). Domain `PatientAggregate` with `TissueSample`/`SerumSample`/`GenomeSample` and `DiagnosticSpecimen`; invariants enforced by `Create(...)` factories returning `ErrorOr`. Ingestion reads exports behind the `IPatientExportSource` port (`XmlExportParser` discovers files, the pure `XmlPatientReader` maps each `<patient>`); the handler aggregates every registered source and reports invalid records in an `IngestExportsCommandResult`. CQRS: `GetPatientsQuery`, `IngestExportsCommand`. Host `BiobankApi.Web` runs the Minimal API (`serve`, the default) or one-shot ingestion (`-- ingest`). Config via env vars (`POSTGRES_*`, `BIOBANK_*`); see `BiobankOptions`.
 
 ## uploader
 
@@ -63,9 +63,9 @@ dotnet ef migrations add <Name> --project src/Uploader/Uploader.Infrastructure  
 ## Conventions
 
 - **Respect layer boundaries.** Domain must not reference Application or Infrastructure. Application depends on Domain and its own port interfaces, never concrete infrastructure. Infrastructure implements the ports.
-- **Domain models are `record`s** (value semantics); invariants live in constructors and throw `DomainException`. Mutable sync-state classes are the deliberate exception.
+- **Domain models are `record`s** (value semantics); invariants live in `Create(...)` factories returning `ErrorOr` (throw `InvalidOperationException` only for unreachable/programmer-error guards). Mutable sync-state classes are the deliberate exception.
 - **New external dependency?** Define an interface in `*.Application/Abstractions` and implement it in `*.Infrastructure`.
-- **Handlers return `ErrorOr<T>`**; don't throw for expected failures. Validate input where the data becomes a domain object - the aggregate factory (`Create(...)`) returns an `ErrorOr` validation error - and let the handler/endpoint propagate it via `ErrorResults`.
+- **Handlers return `ErrorOr<T>`**; don't throw for expected failures. Validate domain invariants where the data becomes a domain object - the aggregate factory (`Create(...)`) returns an `ErrorOr` validation error; validate request shape/options at the application boundary with a FluentValidation `AbstractValidator<TCommand>` (the `ValidationBehavior` runs it) - and let the handler/endpoint propagate failures via `ErrorResults`.
 - **Tests split** into `*.UnitTests` (pure) and `*.IntegrationTests` (EF Core against in-memory SQLite via the `SqliteDatabase` helper; biobank API via `WebApplicationFactory`). Use xUnit; no FluentAssertions.
 - **Add packages via central management:** `dotnet add <project> package <name>` updates `Directory.Packages.props`. Do not hand-edit versions onto a `PackageReference`.
 
