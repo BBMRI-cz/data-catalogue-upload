@@ -21,7 +21,10 @@ public static class DependencyInjection
         services.AddDbContext<BiobankDbContext>(db => db.UseNpgsql(options.ConnectionString));
 
         services.AddScoped<IBiobankRepository, SqlBiobankRepository>();
-        services.AddSingleton<IXmlExportSource>(_ => new XmlExportParser(options.BiobankXmlExportPath));
+
+        // One export source per biobank; the ingestion handler aggregates every registered source.
+        // A biobank with no XML export simply contributes a different source (or none) here.
+        services.AddSingleton<IPatientExportSource>(_ => new XmlExportParser(options.BiobankXmlExportPath));
 
         return services;
     }

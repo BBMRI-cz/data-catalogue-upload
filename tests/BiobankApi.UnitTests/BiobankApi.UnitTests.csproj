@@ -9,6 +9,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BiobankApi\BiobankApi.Application\BiobankApi.Application.csproj" />
     <ProjectReference Include="..\..\src\BiobankApi\BiobankApi.Domain\BiobankApi.Domain.csproj" />
+    <!-- For unit-testing the internal, pure XmlPatientReader (no IO). -->
+    <ProjectReference Include="..\..\src\BiobankApi\BiobankApi.Infrastructure\BiobankApi.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

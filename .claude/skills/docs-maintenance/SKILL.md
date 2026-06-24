@@ -37,8 +37,8 @@ Cross-check each item against the live code/config:
 4. **EF migration commands.** Project/startup-project paths in the docs must match the real
    Infrastructure/Host projects; `dotnet-ef` is the local tool in `dotnet-tools.json`.
 5. **Package/tooling claims.** Every package or tool a doc names must exist in `Directory.Packages.props` /
-   `dotnet-tools.json`. **Watch for dead claims** - e.g. FluentValidation was once documented but used
-   nowhere; a doc must not describe a package the code doesn't reference.
+   `dotnet-tools.json`, and a doc must not describe a package the code doesn't reference. (FluentValidation
+   is referenced now - it backs the application-level `ValidationBehavior` - so it is no longer a dead claim.)
 6. **Type & service names.** Domain services, aggregates, ports, and helpers named in docs/skills must exist
    (`FingerprintSyncPlanner`, `Fingerprint.Of`/`ComputeFingerprint()`, `SourceMapper`, `XmlValueReader`,
    the `I*Gateway`/`I*Repository` ports). The biobank has no domain "cleaning service"; the uploader has no
@@ -54,7 +54,7 @@ rg -n "DataCatalogue\.slnx|pytest|mypy| ruff| uv |dataclass|Protocol|apps/|alemb
    README.md DEVELOPMENT.md ARCHITECTURE.md AGENTS.md .claude/skills
 
 # a documented type that no longer exists in code
-rg -n "FingerprintCalculator|IBiobankCleaningService|FluentValidation" src docs *.md .claude/skills
+rg -n "FingerprintCalculator|IBiobankCleaningService" src docs *.md .claude/skills
 ```
 
 For each hit, open the named source file, decide what the code actually does now, and edit the doc/skill in

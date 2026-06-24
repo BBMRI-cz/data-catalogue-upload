@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="173254" month="--09" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1945">
+  <AccessionNumbers>
+    <Number>RDG2005041156</Number>
+    <Number>RDG2019048259</Number>
+  </AccessionNumbers>
+  <LTS>
+    <genome biopsy="-" number="372" predictive_number="-" sampleId="BBMd:2024:372:PK" year="2024">
+      <AccessionNumbers/>
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>PK</materialType>
+      <takingDate>2024-05-16</takingDate>
+      <retrieved>operational</retrieved>
+    </genome>
+    <serum biopsy="2024/4776-1" number="452" predictive_number="-" sampleId="BBMs:2024:452:K" year="2024">
+      <AccessionNumbers/>
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>K</materialType>
+      <diagnosis>C64</diagnosis>
+      <takingDate>2024-05-16</takingDate>
+    </serum>
+    <tissue biopsy="2024/4776-1" number="317" predictive_number="-" sampleId="BBM:2024:317:1" year="2024">
+      <AccessionNumbers/>
+      <samplesNo>3</samplesNo>
+      <availableSamplesNo>3</availableSamplesNo>
+      <materialType>1</materialType>
+      <pTNM>T1NM</pTNM>
+      <morphology>8310/31</morphology>
+      <diagnosis>C64</diagnosis>
+      <cutTime>2024-05-16T11:45:00</cutTime>
+      <freezeTime>2024-05-16T11:52:00</freezeTime>
+      <retrieved>operational</retrieved>
+    </tissue>
+  </LTS>
+</patient>

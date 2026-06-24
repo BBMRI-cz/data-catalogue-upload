@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="247" month="--02" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1957">
+  <LTS/>
+  <STS>
+    <diagnosisMaterial number="118485" sampleId="&amp;:2022:118485" year="2022">
+      <materialType>S</materialType>
+      <diagnosis>C504</diagnosis>
+      <takingDate>2022-09-20T10:44:00</takingDate>
+      <retrieved>unknown</retrieved>
+    </diagnosisMaterial>
+  </STS>
+</patient>

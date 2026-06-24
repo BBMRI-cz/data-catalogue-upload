@@ -10,10 +10,10 @@ services it reads from. The solution is [`DataCatalogueUpload.slnx`](DataCatalog
 
 Each service is its own set of projects (Domain / Application / Infrastructure / host) following
 **Clean Architecture + DDD**: a rich domain with aggregates and domain services that enforce their
-own invariants (constructors/factories return `ErrorOr` or throw `DomainException`), a CQRS
+own invariants (factories return `ErrorOr` validation errors), a CQRS
 application layer dispatched through the free [`Mediator`](https://github.com/martinothamar/Mediator)
-source generator with handlers returning `ErrorOr`, EF Core for persistence, and ASP.NET Core Minimal
-API for the HTTP surface. Each service owns its own PostgreSQL database and EF Core migrations.
+source generator with handlers returning `ErrorOr` and FluentValidation request validators, EF Core
+for persistence, and ASP.NET Core Minimal API for the HTTP surface. Each service owns its own PostgreSQL database and EF Core migrations.
 
 ## Quickstart
 

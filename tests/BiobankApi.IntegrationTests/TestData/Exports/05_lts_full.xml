@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="463988" month="--10" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1977">
+  <LTS>
+    <genome biopsy="-" number="249" predictive_number="-" sampleId="BBMd:2023:249:PK" year="2023">
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>PK</materialType>
+      <takingDate>2023-03-24</takingDate>
+      <retrieved>unknown</retrieved>
+    </genome>
+    <serum biopsy="2023/2872-1" number="524" predictive_number="2023/1052" sampleId="BBMs:2023:524:K" year="2023">
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>K</materialType>
+      <diagnosis>C56</diagnosis>
+      <takingDate>2023-03-24</takingDate>
+    </serum>
+    <tissue biopsy="2023/2872-1" number="181" predictive_number="2023/1052" sampleId="BBM:2023:181:1" year="2023">
+      <samplesNo>3</samplesNo>
+      <availableSamplesNo>3</availableSamplesNo>
+      <materialType>1</materialType>
+      <pTNM>T1N0M</pTNM>
+      <morphology>8380/31</morphology>
+      <diagnosis>C56</diagnosis>
+      <cutTime>2023-03-24T11:15:00</cutTime>
+      <freezeTime>2023-03-24T11:20:00</freezeTime>
+      <retrieved>operational</retrieved>
+    </tissue>
+  </LTS>
+  <STS>
+    <diagnosisMaterial number="40063" sampleId="&amp;:2023:40063" year="2023">
+      <materialType>S</materialType>
+      <diagnosis>D391</diagnosis>
+      <takingDate>2023-03-22T12:16:00</takingDate>
+      <retrieved>unknown</retrieved>
+    </diagnosisMaterial>
+  </STS>
+</patient>

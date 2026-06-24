@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="138423" month="--05" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1943">
+  <LTS>
+    <serum biopsy="-" number="3249" predictive_number="-" sampleId="BBMs:2022:3249:SD" year="2022">
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>SD</materialType>
+      <takingDate>2022-12-07</takingDate>
+    </serum>
+  </LTS>
+  <STS>
+    <diagnosisMaterial number="155548" sampleId="&amp;:2022:155548" year="2022">
+      <materialType>S</materialType>
+      <diagnosis>Z129</diagnosis>
+      <takingDate>2022-12-07T07:35:00</takingDate>
+      <retrieved>unknown</retrieved>
+    </diagnosisMaterial>
+  </STS>
+</patient>
