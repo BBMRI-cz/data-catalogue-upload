@@ -50,7 +50,7 @@ public sealed class XmlExportParserTests
     [Fact]
     public void MissingDirectoryYieldsEmptyResult()
     {
-        var result = new XmlExportParser(Path.Combine(ExportsPath, "does-not-exist")).ParsePatients();
+        var result = new XmlExportParser(Path.Join(ExportsPath, "does-not-exist")).ParsePatients();
 
         Assert.Empty(result.Patients);
         Assert.Empty(result.Errors);
