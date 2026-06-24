@@ -2,6 +2,7 @@ using BiobankApi.Application.Abstractions;
 using BiobankApi.Domain.Patients;
 using ErrorOr;
 using Mediator;
+using System.Linq;
 
 namespace BiobankApi.Application.Features.Ingest;
 
@@ -23,9 +24,9 @@ internal sealed class IngestExportsCommandHandler(
         var patients = new List<PatientAggregate>();
         var errors = new List<ExportParseError>();
 
-        foreach (var source in sources)
+        var results = sources.Select(source => source.ParsePatients());
+        foreach (var result in results)
         {
-            var result = source.ParsePatients();
             patients.AddRange(result.Patients);
             errors.AddRange(result.Errors);
         }
