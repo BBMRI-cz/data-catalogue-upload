@@ -10,7 +10,7 @@ namespace BiobankApi.IntegrationTests;
 /// </summary>
 public sealed class XmlExportParserTests
 {
-    private static readonly string ExportsPath = Path.Combine(AppContext.BaseDirectory, "TestData", "Exports");
+    private static readonly string ExportsPath = Path.Join(AppContext.BaseDirectory, "TestData", "Exports");
 
     [Fact]
     public void ParsesEveryValidCategoryInOrdinalFileOrder()
