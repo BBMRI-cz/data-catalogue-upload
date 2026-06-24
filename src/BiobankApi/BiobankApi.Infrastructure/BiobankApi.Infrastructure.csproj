@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="BiobankApi.IntegrationTests" />
+    <InternalsVisibleTo Include="BiobankApi.UnitTests" />
   </ItemGroup>
 
   <ItemGroup>
