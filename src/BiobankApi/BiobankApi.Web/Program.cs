@@ -32,9 +32,14 @@ if (args.Contains("ingest"))
     var sender = scope.ServiceProvider.GetRequiredService<ISender>();
     var ingestResult = await sender.Send(new IngestExportsCommand());
     return ingestResult.Match(
-        count =>
+        result =>
         {
-            Console.WriteLine($"Ingested {count} patients.");
+            Console.WriteLine($"Ingested {result.Ingested} patients; {result.Failed} failed.");
+            foreach (var failure in result.Errors)
+            {
+                Console.Error.WriteLine($"  {failure.Source} {failure.Reference}: {failure.Reason}");
+            }
+
             return 0;
         },
         errors =>

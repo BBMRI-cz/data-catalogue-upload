@@ -1,38 +1,64 @@
 using System.Xml;
+using System.Xml.Linq;
 using BiobankApi.Application.Abstractions;
 using BiobankApi.Domain.Patients;
 
 namespace BiobankApi.Infrastructure.Xml;
 
 /// <summary>
-/// Parses biobank XML exports into domain patients.
-///
-/// Scaffold: it discovers and validates that the export files are well-formed, but the concrete
-/// element/XPath mapping to <see cref="PatientAggregate"/> / <see cref="Sample"/> lands with
-/// issue #33. When implemented it will stream each file with <see cref="XmlReader"/>, decode the
-/// raw text with <see cref="XmlValueReader"/>, and build patients via
-/// <see cref="PatientAggregate.Create"/>.
+/// Parses a directory of biobank XML exports into domain patients. Each file holds exactly one
+/// <c>&lt;patient&gt;</c>, so it is loaded whole with <see cref="XDocument"/> and mapped by
+/// <see cref="XmlPatientReader"/>. Malformed files and records that fail validation are reported as
+/// <see cref="ExportParseError"/>s rather than aborting the run.
 /// </summary>
-public sealed class XmlExportParser(string exportPath) : IXmlExportSource
+public sealed class XmlExportParser(string exportPath) : IPatientExportSource
 {
-    public IReadOnlyList<PatientAggregate> ParsePatients()
+    public string Name => $"xml:{exportPath}";
+
+    public ExportParseResult ParsePatients()
     {
         var patients = new List<PatientAggregate>();
+        var errors = new List<ExportParseError>();
+
         if (!Directory.Exists(exportPath))
         {
-            return patients;
+            return new ExportParseResult(patients, errors);
         }
 
         var files = Directory.EnumerateFiles(exportPath, "*.xml").OrderBy(path => path, StringComparer.Ordinal);
         foreach (var file in files)
         {
-            using var reader = XmlReader.Create(file);
-            while (reader.Read())
+            var reference = Path.GetFileName(file);
+
+            XElement? root;
+            try
             {
-                // Read through to validate well-formedness; mapping to Patient/Sample is issue #33.
+                root = XDocument.Load(file).Root;
+            }
+            catch (XmlException exception)
+            {
+                errors.Add(new ExportParseError(Name, reference, exception.Message));
+                continue;
+            }
+
+            if (root is null)
+            {
+                errors.Add(new ExportParseError(Name, reference, "empty document"));
+                continue;
+            }
+
+            var parsed = XmlPatientReader.Read(root);
+            if (parsed.IsError)
+            {
+                var reason = string.Join("; ", parsed.Errors.Select(error => error.Description));
+                errors.Add(new ExportParseError(Name, reference, reason));
+            }
+            else
+            {
+                patients.Add(parsed.Value);
             }
         }
 
-        return patients;
+        return new ExportParseResult(patients, errors);
     }
 }
