@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="999001" month="--04" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1980">
+  <LTS>
+    <tissue biopsy="-" number="500" predictive_number="-" sampleId="BBM:2023:500:1" year="2023">
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>1</materialType>
+      <cutTime>2023-03-24T11:20:00</cutTime>
+      <freezeTime>2023-03-24T11:15:00</freezeTime>
+      <retrieved>operational</retrieved>
+    </tissue>
+  </LTS>
+</patient>

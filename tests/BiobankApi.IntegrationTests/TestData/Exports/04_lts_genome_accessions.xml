@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="true" id="170096" month="--09" sex="female"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1965">
+  <AccessionNumbers>
+    <Number>RDG2004019834</Number>
+  </AccessionNumbers>
+  <LTS>
+    <genome biopsy="-" number="1075" predictive_number="-" sampleId="BBMd:2025:1075:PS" year="2025">
+      <AccessionNumbers/>
+      <samplesNo>1</samplesNo>
+      <availableSamplesNo>1</availableSamplesNo>
+      <materialType>PS</materialType>
+      <takingDate>2025-07-29</takingDate>
+      <retrieved>unknown</retrieved>
+    </genome>
+  </LTS>
+</patient>

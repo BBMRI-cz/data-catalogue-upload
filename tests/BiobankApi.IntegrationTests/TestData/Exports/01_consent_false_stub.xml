@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<patient biobank="MOU" consent="false" id="271801" month="--07" sex="male"
+  xmlns="http://www.bbmri.cz/schemas/biobank/data"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:noNamespaceSchemaLocation="exportNIS.xsd" year="1948"/>
