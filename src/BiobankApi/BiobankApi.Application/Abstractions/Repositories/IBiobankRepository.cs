@@ -1,6 +1,6 @@
 using BiobankApi.Domain.Patients;
 
-namespace BiobankApi.Application.Abstractions;
+namespace BiobankApi.Application.Abstractions.Repositories;
 
 /// <summary>
 /// Persistence port for ingested biobank patients (implemented by the db layer).

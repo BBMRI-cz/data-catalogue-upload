@@ -53,6 +53,12 @@ public static ErrorOr<PatientAggregate> Create(PatientId id, int? birthYear /* .
 }
 ```
 
+**No primary constructors on classes/structs.** Handlers, services, repositories, gateways, DbContexts,
+and test fakes use an explicit constructor assigning `private readonly` fields (`_camelCase`); DbContexts
+chain `: base(options)`. Positional **records** (DTOs, value objects, strongly-typed ids) keep their
+parameter list - that idiom stays. The `IDE0290` "use primary constructor" suggestion is turned off in
+`.editorconfig`.
+
 **Use cases are Mediator commands/queries.** One `ICommand<ErrorOr<T>>` / `IQuery<...>` + handler per use
 case under `Features/...`, dispatched via `ISender`. Handlers return `ErrorOr<T>` - do **not** throw for
 expected failures. When a use case returns a structured payload, name the result type after the request -
@@ -68,7 +74,9 @@ so no validators exist yet - the behavior is wired and dormant until a command c
 
 **Ports are interfaces** in `<Service>.Application/Abstractions`, implemented in `<Service>.Infrastructure`.
 To add an external dependency: define the interface in `Abstractions/`, implement it in `Infrastructure/`,
-register it in that service's `DependencyInjection.cs`.
+register it in that service's `DependencyInjection.cs`. The biobank groups its ports into subfolders -
+`Abstractions/Export/` (`IPatientExportSource` + parse DTOs) and `Abstractions/Repositories/`
+(`IBiobankRepository`); keep new ports grouped likewise.
 
 ```csharp
 public interface IBiobankRepository

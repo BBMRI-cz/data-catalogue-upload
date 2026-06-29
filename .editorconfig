@@ -1,0 +1,7 @@
+root = true
+
+[*.cs]
+# Project convention: no primary constructors on classes/structs. Use explicit
+# constructors with readonly fields (positional records for DTOs/value objects are fine).
+# Turn off the analyzer that suggests converting to a primary constructor.
+dotnet_diagnostic.IDE0290.severity = none

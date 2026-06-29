@@ -1,6 +1,6 @@
 using BiobankApi.Domain.Patients;
 
-namespace BiobankApi.Application.Abstractions;
+namespace BiobankApi.Application.Abstractions.Export;
 
 /// <summary>
 /// The outcome of parsing one export source: the patients that validated successfully and the

@@ -1,4 +1,4 @@
-namespace BiobankApi.Application.Abstractions;
+namespace BiobankApi.Application.Abstractions.Export;
 
 /// <summary>
 /// A single record that could not be turned into a valid patient.

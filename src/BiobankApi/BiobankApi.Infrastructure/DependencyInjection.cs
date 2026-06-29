@@ -1,4 +1,5 @@
-using BiobankApi.Application.Abstractions;
+using BiobankApi.Application.Abstractions.Export;
+using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Infrastructure.Configuration;
 using BiobankApi.Infrastructure.Persistence;
 using BiobankApi.Infrastructure.Xml;
@@ -22,8 +23,7 @@ public static class DependencyInjection
 
         services.AddScoped<IBiobankRepository, SqlBiobankRepository>();
 
-        // One export source per biobank; the ingestion handler aggregates every registered source.
-        // A biobank with no XML export simply contributes a different source (or none) here.
+        // The single export source for this biobank; the ingestion handler reads it.
         services.AddSingleton<IPatientExportSource>(_ => new XmlExportParser(options.BiobankXmlExportPath));
 
         return services;
