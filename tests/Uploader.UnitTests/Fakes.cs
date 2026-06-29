@@ -8,10 +8,14 @@ using Uploader.Domain.Sync;
 
 namespace Uploader.UnitTests;
 
-internal sealed class FakeSourceDataGateway(IReadOnlyList<PatientDto> patients) : ISourceDataGateway
+internal sealed class FakeSourceDataGateway : ISourceDataGateway
 {
+    private readonly IReadOnlyList<PatientDto> _patients;
+
+    public FakeSourceDataGateway(IReadOnlyList<PatientDto> patients) => _patients = patients;
+
     public Task<IReadOnlyList<PatientDto>> FetchPatientsAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(patients);
+        Task.FromResult(_patients);
 
     public Task<IReadOnlyList<ImagingStudyDto>> FetchRadiologyAsync(
         IReadOnlyList<string> accessionNumbers, CancellationToken cancellationToken) =>
