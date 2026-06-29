@@ -70,8 +70,8 @@ At runtime the **uploader** applies migrations on startup; the **biobank_api** a
 # biobank API server (http://localhost:8001)
 RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/BiobankApi.Web
 
-# biobank one-shot XML ingestion
-RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/BiobankApi.Web -- ingest
+# trigger biobank ingestion on the running API (also runs weekly via Quartz)
+curl -X POST http://localhost:8001/admin/ingest
 
 # uploader sync job (prints a JSON summary; exit 0 = no failures, 1 = failures)
 dotnet run --project src/Uploader/Uploader.Host
@@ -92,7 +92,7 @@ dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 
 ```bash
 docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api
-docker compose -f compose.prod.yml --profile ingest run --rm biobank-api-ingest
+curl -X POST http://localhost:8001/admin/ingest                 # ingest on demand
 ```
 
 The Dockerfiles build with the repo root as their context (central package management +

@@ -1,11 +1,9 @@
 using System.Text.Json;
 using BiobankApi.Application;
-using BiobankApi.Application.Features.Ingest;
 using BiobankApi.Infrastructure;
 using BiobankApi.Infrastructure.Persistence;
 using BiobankApi.Web.Endpoints;
 using BiobankApi.Web.Scheduling;
-using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 
@@ -36,30 +34,6 @@ if (string.Equals(Environment.GetEnvironmentVariable("RUN_MIGRATIONS"), "true", 
 {
     using var migrationScope = app.Services.CreateScope();
     await migrationScope.ServiceProvider.GetRequiredService<BiobankDbContext>().Database.MigrateAsync();
-}
-
-// Ingest mode: `biobank-api ingest` parses the XML exports, persists them, and exits.
-if (args.Contains("ingest"))
-{
-    using var scope = app.Services.CreateScope();
-    var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-    var ingestResult = await sender.Send(new IngestExportsCommand());
-    return ingestResult.Match(
-        result =>
-        {
-            Console.WriteLine($"Ingested {result.Ingested} patients; {result.Failed} failed.");
-            foreach (var failure in result.Errors)
-            {
-                Console.Error.WriteLine($"  {failure.Source} {failure.Reference}: {failure.Reason}");
-            }
-
-            return 0;
-        },
-        errors =>
-        {
-            Console.Error.WriteLine(string.Join("; ", errors.Select(error => error.Description)));
-            return 1;
-        });
 }
 
 app.MapOpenApi();

@@ -29,9 +29,8 @@ docker compose -f compose.prod.yml up -d uploader-db biobank-db
 RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
   dotnet run --project src/BiobankApi/BiobankApi.Web          # http://localhost:8001
 
-# one-shot XML ingestion
-RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
-  dotnet run --project src/BiobankApi/BiobankApi.Web -- ingest
+# trigger ingestion on the running API (also runs weekly via the Quartz schedule)
+curl -X POST http://localhost:8001/admin/ingest
 
 # run the sync job (applies its EF migrations on startup, then syncs and prints a JSON summary)
 dotnet run --project src/Uploader/Uploader.Host

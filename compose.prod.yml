@@ -41,32 +41,14 @@ services:
       POSTGRES_DB: biobank_api
       ASPNETCORE_URLS: http://+:8001
       RUN_MIGRATIONS: "true"
+      # Patient XML the parser ingests (weekly Quartz job + POST /admin/ingest).
+      BIOBANK_XML_EXPORT_PATH: /data/exports
     depends_on:
       - biobank-db
     ports:
       - "8001:8001"
-
-  # Ingestion (one-shot). Run on demand / on a schedule:
-  #   docker compose -f compose.prod.yml --profile ingest run --rm biobank-api-ingest
-  biobank-api-ingest:
-    build:
-      context: .
-      dockerfile: src/BiobankApi/BiobankApi.Web/Dockerfile
-    profiles:
-      - ingest
-    environment:
-      POSTGRES_HOST: biobank-db
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: biobank_api
-      BIOBANK_XML_EXPORT_PATH: /data/exports
-      RUN_MIGRATIONS: "true"
-    depends_on:
-      - biobank-db
-    command: ["ingest"]
     volumes:
-      - ./data/exports:/data/exports:ro
+      - /home/mou/patient_data:/data/exports:ro
 
 volumes:
   uploader_db_data:
