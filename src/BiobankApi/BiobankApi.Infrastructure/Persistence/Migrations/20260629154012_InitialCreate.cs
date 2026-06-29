@@ -41,7 +41,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     Year = table.Column<int>(type: "integer", nullable: true),
                     MaterialType = table.Column<string>(type: "text", nullable: true),
                     Diagnosis = table.Column<string>(type: "text", nullable: true),
-                    TakingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    TakingDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
@@ -61,7 +61,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    TakingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    TakingDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
@@ -92,7 +92,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     Id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Diagnosis = table.Column<string>(type: "text", nullable: true),
-                    TakingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    TakingDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
@@ -125,8 +125,8 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     Diagnosis = table.Column<string>(type: "text", nullable: true),
                     PTnm = table.Column<string>(type: "text", nullable: true),
                     Morphology = table.Column<string>(type: "text", nullable: true),
-                    CutTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    FreezeTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    CutTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    FreezeTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),

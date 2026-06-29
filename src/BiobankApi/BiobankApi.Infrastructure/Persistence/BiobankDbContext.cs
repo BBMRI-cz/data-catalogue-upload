@@ -13,6 +13,13 @@ public sealed class BiobankDbContext : DbContext
     {
     }
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // Source dates are zone-less calendar values; timestamp-without-time-zone accepts
+        // DateTimeKind.Unspecified, unlike timestamptz which only accepts UTC.
+        configurationBuilder.Properties<DateTime>().HaveColumnType("timestamp without time zone");
+    }
+
     public DbSet<PatientEntity> Patients => Set<PatientEntity>();
     public DbSet<TissueSampleEntity> TissueSamples => Set<TissueSampleEntity>();
     public DbSet<SerumSampleEntity> SerumSamples => Set<SerumSampleEntity>();
