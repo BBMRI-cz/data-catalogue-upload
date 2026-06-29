@@ -29,6 +29,10 @@ public sealed class XmlExportParser : IPatientExportSource
 
         // Case-insensitive so uppercase `.XML` exports (as produced on the Linux server) are found.
         var options = new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive };
+        // Ordinal sort is intentional: filenames are `BBM{YYMMDD}{batch}-{seq}.XML`, so the fixed-width
+        // YYMMDD makes ordinal order chronological. The repository's delete-then-insert is last-wins, so
+        // a patient recurring across weekly exports ends up with its newest export's data. (Assumes the
+        // 2-digit year stays this century — true for the 2022-2026 dataset.)
         var files = Directory.EnumerateFiles(_exportPath, "*.xml", options)
             .OrderBy(path => path, StringComparer.Ordinal).ToList();
         if (files.Count == 0)
