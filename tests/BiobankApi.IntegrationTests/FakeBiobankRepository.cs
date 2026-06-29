@@ -1,3 +1,4 @@
+using BiobankApi.Application.Abstractions.Export;
 using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Domain.Patients;
 
@@ -13,6 +14,8 @@ internal sealed class FakeBiobankRepository : IBiobankRepository
     public Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken) =>
         Task.FromResult(_patients);
 
-    public Task SavePatientsAsync(IReadOnlyList<PatientAggregate> toSave, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task<IReadOnlyList<ExportParseError>> SavePatientsAsync(
+        IReadOnlyList<PatientAggregate> toSave,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ExportParseError>>([]);
 }

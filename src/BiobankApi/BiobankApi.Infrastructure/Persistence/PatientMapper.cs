@@ -62,18 +62,22 @@ internal static partial class PatientMapper
 
     [MapProperty(nameof(TissueSample.Id), nameof(TissueSampleEntity.SampleId))]
     [MapperIgnoreTarget(nameof(TissueSampleEntity.PatientId))]
+    [MapperIgnoreTarget(nameof(TissueSampleEntity.Id))]
     private static partial TissueSampleEntity ToEntity(TissueSample sample);
 
     [MapProperty(nameof(SerumSample.Id), nameof(SerumSampleEntity.SampleId))]
     [MapperIgnoreTarget(nameof(SerumSampleEntity.PatientId))]
+    [MapperIgnoreTarget(nameof(SerumSampleEntity.Id))]
     private static partial SerumSampleEntity ToEntity(SerumSample sample);
 
     [MapProperty(nameof(GenomeSample.Id), nameof(GenomeSampleEntity.SampleId))]
     [MapperIgnoreTarget(nameof(GenomeSampleEntity.PatientId))]
+    [MapperIgnoreTarget(nameof(GenomeSampleEntity.Id))]
     private static partial GenomeSampleEntity ToEntity(GenomeSample sample);
 
     [MapProperty(nameof(DiagnosticSpecimen.Id), nameof(DiagnosticSpecimenEntity.SampleId))]
     [MapperIgnoreTarget(nameof(DiagnosticSpecimenEntity.PatientId))]
+    [MapperIgnoreTarget(nameof(DiagnosticSpecimenEntity.Id))]
     private static partial DiagnosticSpecimenEntity ToEntity(DiagnosticSpecimen specimen);
 
     private static TEntity WithPatientId<TEntity>(TEntity row, string patientId)
@@ -110,15 +114,19 @@ internal static partial class PatientMapper
     }
 
     [MapProperty(nameof(TissueSampleEntity.SampleId), nameof(TissueSample.Id))]
+    [MapperIgnoreSource(nameof(TissueSampleEntity.Id))]
     private static partial TissueSample ToDomain(TissueSampleEntity row);
 
     [MapProperty(nameof(SerumSampleEntity.SampleId), nameof(SerumSample.Id))]
+    [MapperIgnoreSource(nameof(SerumSampleEntity.Id))]
     private static partial SerumSample ToDomain(SerumSampleEntity row);
 
     [MapProperty(nameof(GenomeSampleEntity.SampleId), nameof(GenomeSample.Id))]
+    [MapperIgnoreSource(nameof(GenomeSampleEntity.Id))]
     private static partial GenomeSample ToDomain(GenomeSampleEntity row);
 
     [MapProperty(nameof(DiagnosticSpecimenEntity.SampleId), nameof(DiagnosticSpecimen.Id))]
+    [MapperIgnoreSource(nameof(DiagnosticSpecimenEntity.Id))]
     private static partial DiagnosticSpecimen ToDomain(DiagnosticSpecimenEntity row);
 
     // --- strongly-typed id <-> string converters (picked up by Mapperly) ---------------

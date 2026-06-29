@@ -1,11 +1,9 @@
 using System.Text.Json;
 using BiobankApi.Application;
-using BiobankApi.Application.Features.Ingest;
 using BiobankApi.Infrastructure;
 using BiobankApi.Infrastructure.Persistence;
 using BiobankApi.Web.Endpoints;
 using BiobankApi.Web.Scheduling;
-using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 
@@ -20,14 +18,19 @@ builder.Services.AddOpenApi();
 
 // Weekly in-process ingestion via Quartz (OS-independent: identical on Windows and Linux). The cron
 // is overridable with BIOBANK_INGEST_CRON for testing; POST /admin/ingest triggers a run on demand.
-var ingestCron = builder.Configuration["BIOBANK_INGEST_CRON"] ?? "0 0 17 ? * SUN"; // Sundays 17:00 UTC
-builder.Services.AddQuartz(quartz =>
+// Disabled with DisableScheduler=true: integration tests spin up many hosts in one process, and
+// Quartz's global static logging provider captures (then over-disposes) a per-host LoggerFactory.
+if (!builder.Configuration.GetValue<bool>("DisableScheduler"))
 {
-    var jobKey = new JobKey("ingestion");
-    quartz.AddJob<IngestionJob>(jobKey);
-    quartz.AddTrigger(trigger => trigger.ForJob(jobKey).WithCronSchedule(ingestCron));
-});
-builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+    var ingestCron = builder.Configuration["BIOBANK_INGEST_CRON"] ?? "0 0 17 ? * SUN"; // Sundays 17:00 UTC
+    builder.Services.AddQuartz(quartz =>
+    {
+        var jobKey = new JobKey("ingestion");
+        quartz.AddJob<IngestionJob>(jobKey);
+        quartz.AddTrigger(trigger => trigger.ForJob(jobKey).WithCronSchedule(ingestCron));
+    });
+    builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+}
 
 var app = builder.Build();
 
@@ -36,30 +39,6 @@ if (string.Equals(Environment.GetEnvironmentVariable("RUN_MIGRATIONS"), "true", 
 {
     using var migrationScope = app.Services.CreateScope();
     await migrationScope.ServiceProvider.GetRequiredService<BiobankDbContext>().Database.MigrateAsync();
-}
-
-// Ingest mode: `biobank-api ingest` parses the XML exports, persists them, and exits.
-if (args.Contains("ingest"))
-{
-    using var scope = app.Services.CreateScope();
-    var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-    var ingestResult = await sender.Send(new IngestExportsCommand());
-    return ingestResult.Match(
-        result =>
-        {
-            Console.WriteLine($"Ingested {result.Ingested} patients; {result.Failed} failed.");
-            foreach (var failure in result.Errors)
-            {
-                Console.Error.WriteLine($"  {failure.Source} {failure.Reference}: {failure.Reason}");
-            }
-
-            return 0;
-        },
-        errors =>
-        {
-            Console.Error.WriteLine(string.Join("; ", errors.Select(error => error.Description)));
-            return 1;
-        });
 }
 
 app.MapOpenApi();

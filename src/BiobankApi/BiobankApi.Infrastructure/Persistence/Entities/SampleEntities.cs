@@ -5,6 +5,9 @@ namespace BiobankApi.Infrastructure.Persistence.Entities;
 /// <summary>Shared LTS sample columns mixed into each per-type sample table.</summary>
 public abstract class SampleEntityBase
 {
+    /// <summary>Surrogate primary key; SampleId is not unique (a patient can repeat one).</summary>
+    public long Id { get; set; }
+
     public string SampleId { get; set; } = default!;
     public string PatientId { get; set; } = default!;
     public string MaterialType { get; set; } = default!;

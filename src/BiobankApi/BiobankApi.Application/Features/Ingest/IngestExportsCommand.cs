@@ -27,10 +27,18 @@ internal sealed class IngestExportsCommandHandler
         IngestExportsCommand command,
         CancellationToken cancellationToken)
     {
-        var result = _source.ParsePatients();
+        var parsed = _source.ParsePatients();
+        if (parsed.IsError)
+        {
+            return parsed.Errors;
+        }
 
-        await _repository.SavePatientsAsync(result.Patients, cancellationToken);
+        var result = parsed.Value;
+        var saveErrors = await _repository.SavePatientsAsync(result.Patients, cancellationToken);
 
-        return new IngestExportsCommandResult(result.Patients.Count, result.Errors.Count, result.Errors);
+        // Parse failures and per-patient persistence failures are both reported, not fatal.
+        var errors = result.Errors.Concat(saveErrors).ToList();
+        var ingested = result.Patients.Count - saveErrors.Count;
+        return new IngestExportsCommandResult(ingested, errors.Count, errors);
     }
 }

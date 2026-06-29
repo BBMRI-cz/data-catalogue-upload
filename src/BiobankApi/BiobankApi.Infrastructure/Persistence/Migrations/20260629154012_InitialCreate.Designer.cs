@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BiobankApi.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BiobankDbContext))]
-    [Migration("20260622124518_InitialCreate")]
+    [Migration("20260629154012_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -27,8 +27,11 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.DiagnosticSpecimenEntity", b =>
                 {
-                    b.Property<string>("SampleId")
-                        .HasColumnType("text");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Diagnosis")
                         .HasColumnType("text");
@@ -43,26 +46,35 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     b.Property<string>("Retrieved")
                         .HasColumnType("text");
 
+                    b.Property<string>("SampleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int?>("SpecimenNumber")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("TakingDate")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int?>("Year")
                         .HasColumnType("integer");
 
-                    b.HasKey("SampleId");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("SampleId");
 
                     b.ToTable("diagnostic_specimen", (string)null);
                 });
 
             modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.GenomeSampleEntity", b =>
                 {
-                    b.Property<string>("SampleId")
-                        .HasColumnType("text");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccessionNumbers")
                         .IsRequired()
@@ -94,15 +106,21 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     b.Property<string>("Retrieved")
                         .HasColumnType("text");
 
+                    b.Property<string>("SampleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int?>("SamplesNo")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("TakingDate")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
-                    b.HasKey("SampleId");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("SampleId");
 
                     b.ToTable("genome_sample", (string)null);
                 });
@@ -138,8 +156,11 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.SerumSampleEntity", b =>
                 {
-                    b.Property<string>("SampleId")
-                        .HasColumnType("text");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccessionNumbers")
                         .IsRequired()
@@ -174,23 +195,32 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     b.Property<string>("Retrieved")
                         .HasColumnType("text");
 
+                    b.Property<string>("SampleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int?>("SamplesNo")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("TakingDate")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
-                    b.HasKey("SampleId");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("SampleId");
 
                     b.ToTable("serum_sample", (string)null);
                 });
 
             modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.TissueSampleEntity", b =>
                 {
-                    b.Property<string>("SampleId")
-                        .HasColumnType("text");
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccessionNumbers")
                         .IsRequired()
@@ -206,7 +236,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("CutTime")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Diagnosis")
                         .HasColumnType("text");
@@ -215,7 +245,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("FreezeTime")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("MaterialType")
                         .IsRequired()
@@ -237,12 +267,18 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     b.Property<string>("Retrieved")
                         .HasColumnType("text");
 
+                    b.Property<string>("SampleId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int?>("SamplesNo")
                         .HasColumnType("integer");
 
-                    b.HasKey("SampleId");
+                    b.HasKey("Id");
 
                     b.HasIndex("PatientId");
+
+                    b.HasIndex("SampleId");
 
                     b.ToTable("tissue_sample", (string)null);
                 });

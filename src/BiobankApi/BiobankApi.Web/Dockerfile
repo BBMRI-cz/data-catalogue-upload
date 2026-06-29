@@ -10,5 +10,5 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
 EXPOSE 8001
-# `serve` (default) runs the HTTP API; pass `ingest` to run the one-shot XML ingestion.
+# Runs the HTTP API (ingestion runs on the weekly Quartz schedule and via POST /admin/ingest).
 ENTRYPOINT ["dotnet", "BiobankApi.Web.dll"]
