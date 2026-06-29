@@ -1,4 +1,5 @@
 using BiobankApi.Application.Abstractions.Export;
+using ErrorOr;
 
 namespace BiobankApi.IntegrationTests;
 
@@ -11,5 +12,5 @@ internal sealed class FakePatientExportSource : IPatientExportSource
 
     public string Name => "fake";
 
-    public ExportParseResult ParsePatients() => _result;
+    public ErrorOr<ExportParseResult> ParsePatients() => _result;
 }

@@ -15,7 +15,7 @@ public sealed class XmlExportParserTests
     [Fact]
     public void ParsesEveryValidCategoryInOrdinalFileOrder()
     {
-        var result = new XmlExportParser(ExportsPath).ParsePatients();
+        var result = new XmlExportParser(ExportsPath).ParsePatients().Value;
 
         Assert.Equal(
             ["271801", "247", "138423", "170096", "463988", "173254"],
@@ -25,7 +25,7 @@ public sealed class XmlExportParserTests
     [Fact]
     public void ReportsInvalidAndMalformedRecordsWithoutDroppingThem()
     {
-        var result = new XmlExportParser(ExportsPath).ParsePatients();
+        var result = new XmlExportParser(ExportsPath).ParsePatients().Value;
 
         Assert.Equal(2, result.Errors.Count);
         Assert.Contains(result.Errors, error => error.Reference == "07_invalid_record.xml");
@@ -39,7 +39,7 @@ public sealed class XmlExportParserTests
     [Fact]
     public void ParsesTheFullPatientTree()
     {
-        var result = new XmlExportParser(ExportsPath).ParsePatients();
+        var result = new XmlExportParser(ExportsPath).ParsePatients().Value;
 
         var patient = Assert.Single(result.Patients, candidate => candidate.Id.Value == "463988");
         Assert.Equal(3, patient.Samples.Count);
@@ -48,11 +48,28 @@ public sealed class XmlExportParserTests
     }
 
     [Fact]
-    public void MissingDirectoryYieldsEmptyResult()
+    public void MissingDirectoryReportsFailure()
     {
         var result = new XmlExportParser(Path.Join(ExportsPath, "does-not-exist")).ParsePatients();
 
-        Assert.Empty(result.Patients);
-        Assert.Empty(result.Errors);
+        Assert.True(result.IsError);
+        Assert.Equal("Export.DirectoryMissing", result.FirstError.Code);
+    }
+
+    [Fact]
+    public void EmptyDirectoryReportsFailure()
+    {
+        var emptyDir = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var result = new XmlExportParser(emptyDir).ParsePatients();
+
+            Assert.True(result.IsError);
+            Assert.Equal("Export.NoFiles", result.FirstError.Code);
+        }
+        finally
+        {
+            Directory.Delete(emptyDir);
+        }
     }
 }
