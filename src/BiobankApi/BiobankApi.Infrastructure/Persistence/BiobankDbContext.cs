@@ -68,7 +68,9 @@ public sealed class BiobankDbContext : DbContext
         modelBuilder.Entity<DiagnosticSpecimenEntity>(builder =>
         {
             builder.ToTable("diagnostic_specimen");
-            builder.HasKey(specimen => specimen.SampleId);
+            builder.HasKey(specimen => specimen.Id);
+            builder.Property(specimen => specimen.Id).ValueGeneratedOnAdd();
+            builder.HasIndex(specimen => specimen.SampleId);
             builder.HasIndex(specimen => specimen.PatientId);
             builder.Property(specimen => specimen.Retrieved).HasConversion<string>();
         });
@@ -84,7 +86,9 @@ public sealed class BiobankDbContext : DbContext
         modelBuilder.Entity<TEntity>(builder =>
         {
             builder.ToTable(tableName);
-            builder.HasKey(sample => sample.SampleId);
+            builder.HasKey(sample => sample.Id);
+            builder.Property(sample => sample.Id).ValueGeneratedOnAdd();
+            builder.HasIndex(sample => sample.SampleId);
             builder.HasIndex(sample => sample.PatientId);
             builder.Property(sample => sample.AccessionNumbers)
                 .HasConversion(jsonConverter, jsonComparer);

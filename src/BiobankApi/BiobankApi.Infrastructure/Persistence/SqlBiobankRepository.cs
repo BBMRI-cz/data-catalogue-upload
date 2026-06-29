@@ -27,6 +27,8 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
 
     public async Task SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken cancellationToken)
     {
+        // ponytail: whole batch in one transaction; add batching + ChangeTracker.Clear() if the
+        // full-export (~893k patients) save becomes too memory/time heavy.
         // Delete-then-insert per patient: removing the existing row cascades to its child
         // tables, so a re-save never leaves stale or duplicate sample/specimen rows.
         foreach (var patient in patients)
