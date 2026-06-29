@@ -1,7 +1,9 @@
 using BiobankApi.Domain;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence;
+using BiobankApi.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Xunit;
 
 namespace BiobankApi.IntegrationTests;
@@ -190,5 +192,65 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal(2, await context.SerumSamples.CountAsync());
         var loaded = Assert.Single(await repository.ListPatientsAsync(CancellationToken.None));
         Assert.Equal(2, loaded.Samples.OfType<SerumSample>().Count());
+    }
+
+    [Fact]
+    public async Task PersistsAcrossMultipleBatches()
+    {
+        await using var context = _db.NewContext();
+        var repository = new SqlBiobankRepository(context);
+        var patients = Enumerable.Range(0, 550)
+            .Select(i => PatientAggregate.Create($"P{i}", consent: true).Value)
+            .ToList();
+
+        var failures = await repository.SavePatientsAsync(patients, CancellationToken.None);
+
+        Assert.Empty(failures);
+        Assert.Equal(550, (await repository.ListPatientsAsync(CancellationToken.None)).Count);
+    }
+
+    [Fact]
+    public async Task IsolatesAFailingPatientAndPersistsTheRest()
+    {
+        await using var context = _db.NewContext(new FailOnPatientInterceptor("BAD"));
+        var repository = new SqlBiobankRepository(context);
+
+        var failures = await repository.SavePatientsAsync(
+            [
+                PatientAggregate.Create("G1", consent: true).Value,
+                PatientAggregate.Create("BAD", consent: true).Value,
+                PatientAggregate.Create("G2", consent: true).Value,
+            ],
+            CancellationToken.None);
+
+        var failure = Assert.Single(failures);
+        Assert.Equal("persistence", failure.Source);
+        Assert.Equal("BAD", failure.Reference);
+
+        var loaded = await repository.ListPatientsAsync(CancellationToken.None);
+        Assert.Equal(["G1", "G2"], loaded.Select(patient => patient.Id.Value).OrderBy(id => id));
+    }
+
+    /// <summary>Fails the save whenever a sentinel patient is being inserted, to exercise isolation.</summary>
+    private sealed class FailOnPatientInterceptor : SaveChangesInterceptor
+    {
+        private readonly string _failOnPatientId;
+
+        public FailOnPatientInterceptor(string failOnPatientId) => _failOnPatientId = failOnPatientId;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            var failing = eventData.Context!.ChangeTracker.Entries<PatientEntity>()
+                .Any(entry => entry.State == EntityState.Added && entry.Entity.PatientId == _failOnPatientId);
+            if (failing)
+            {
+                throw new InvalidOperationException($"simulated persistence failure for {_failOnPatientId}");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

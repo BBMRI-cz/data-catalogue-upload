@@ -1,3 +1,4 @@
+using BiobankApi.Application.Abstractions.Export;
 using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence.Entities;
@@ -8,6 +9,10 @@ namespace BiobankApi.Infrastructure.Persistence;
 /// <summary>EF Core implementation of <see cref="IBiobankRepository"/>.</summary>
 internal sealed class SqlBiobankRepository : IBiobankRepository
 {
+    // Patients saved per transaction. The tuning knob: larger = fewer round-trips, more memory held
+    // by the change tracker before each Clear().
+    private const int BatchSize = 500;
+
     private readonly BiobankDbContext _context;
 
     public SqlBiobankRepository(BiobankDbContext context) => _context = context;
@@ -25,24 +30,57 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
         return entities.Select(PatientMapper.ToDomain).ToList();
     }
 
-    public async Task SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ExportParseError>> SavePatientsAsync(
+        IReadOnlyList<PatientAggregate> patients,
+        CancellationToken cancellationToken)
     {
-        // ponytail: whole batch in one transaction; add batching + ChangeTracker.Clear() if the
-        // full-export (~893k patients) save becomes too memory/time heavy.
-        // Delete-then-insert per patient: removing the existing row cascades to its child
-        // tables, so a re-save never leaves stale or duplicate sample/specimen rows.
-        foreach (var patient in patients)
+        // Save in batches, each its own transaction, so one bad record cannot roll back the run.
+        var failures = new List<ExportParseError>();
+        foreach (var batch in patients.Chunk(BatchSize))
         {
-            var existing = await _context.Patients.FindAsync([patient.Id.Value], cancellationToken);
-            if (existing is not null)
+            try
             {
-                _context.Patients.Remove(existing);
-                await _context.SaveChangesAsync(cancellationToken);
+                await SaveBatchAsync(batch, cancellationToken);
+            }
+            catch (Exception)
+            {
+                // The batch transaction failed; isolate the offender by retrying one at a time so
+                // the rest of the batch still persists and the bad record is reported, not fatal.
+                _context.ChangeTracker.Clear();
+                foreach (var patient in batch)
+                {
+                    try
+                    {
+                        await SaveBatchAsync([patient], cancellationToken);
+                    }
+                    catch (Exception exception)
+                    {
+                        _context.ChangeTracker.Clear();
+                        failures.Add(new ExportParseError("persistence", patient.Id.Value, exception.Message));
+                    }
+                }
             }
 
-            _context.Patients.Add(PatientMapper.ToEntity(patient));
+            _context.ChangeTracker.Clear();
         }
 
+        return failures;
+    }
+
+    // Delete-then-insert per patient: removing the existing row cascades to its child tables, so a
+    // re-save never leaves stale or duplicate sample/specimen rows. One SaveChanges per call.
+    private async Task SaveBatchAsync(IReadOnlyList<PatientAggregate> batch, CancellationToken cancellationToken)
+    {
+        var ids = batch.Select(patient => patient.Id.Value).ToList();
+        var existing = await _context.Patients.Where(patient => ids.Contains(patient.PatientId))
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+        {
+            _context.Patients.RemoveRange(existing);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        _context.Patients.AddRange(batch.Select(PatientMapper.ToEntity));
         await _context.SaveChangesAsync(cancellationToken);
     }
 }

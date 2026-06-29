@@ -1,6 +1,7 @@
 using BiobankApi.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace BiobankApi.IntegrationTests;
 
@@ -19,10 +20,11 @@ internal sealed class SqliteDatabase : IDisposable
         _connection.Open();
     }
 
-    public BiobankDbContext NewContext()
+    public BiobankDbContext NewContext(params IInterceptor[] interceptors)
     {
         var options = new DbContextOptionsBuilder<BiobankDbContext>()
             .UseSqlite(_connection)
+            .AddInterceptors(interceptors)
             .Options;
 
         var context = new BiobankDbContext(options);
