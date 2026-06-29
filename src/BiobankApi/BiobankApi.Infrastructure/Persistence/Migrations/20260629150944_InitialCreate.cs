@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -32,6 +33,8 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 name: "diagnostic_specimen",
                 columns: table => new
                 {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     SpecimenNumber = table.Column<int>(type: "integer", nullable: true),
@@ -43,7 +46,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_diagnostic_specimen", x => x.SampleId);
+                    table.PrimaryKey("PK_diagnostic_specimen", x => x.Id);
                     table.ForeignKey(
                         name: "FK_diagnostic_specimen_patient_PatientId",
                         column: x => x.PatientId,
@@ -56,9 +59,11 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 name: "genome_sample",
                 columns: table => new
                 {
-                    SampleId = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     TakingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
+                    SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     MaterialType = table.Column<string>(type: "text", nullable: false),
                     EventNumber = table.Column<int>(type: "integer", nullable: true),
@@ -71,7 +76,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_genome_sample", x => x.SampleId);
+                    table.PrimaryKey("PK_genome_sample", x => x.Id);
                     table.ForeignKey(
                         name: "FK_genome_sample_patient_PatientId",
                         column: x => x.PatientId,
@@ -84,10 +89,12 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 name: "serum_sample",
                 columns: table => new
                 {
-                    SampleId = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Diagnosis = table.Column<string>(type: "text", nullable: true),
                     TakingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
+                    SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     MaterialType = table.Column<string>(type: "text", nullable: false),
                     EventNumber = table.Column<int>(type: "integer", nullable: true),
@@ -100,7 +107,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_serum_sample", x => x.SampleId);
+                    table.PrimaryKey("PK_serum_sample", x => x.Id);
                     table.ForeignKey(
                         name: "FK_serum_sample_patient_PatientId",
                         column: x => x.PatientId,
@@ -113,13 +120,15 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 name: "tissue_sample",
                 columns: table => new
                 {
-                    SampleId = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Diagnosis = table.Column<string>(type: "text", nullable: true),
                     PTnm = table.Column<string>(type: "text", nullable: true),
                     Morphology = table.Column<string>(type: "text", nullable: true),
                     CutTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     FreezeTime = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     Retrieved = table.Column<string>(type: "text", nullable: true),
+                    SampleId = table.Column<string>(type: "text", nullable: false),
                     PatientId = table.Column<string>(type: "text", nullable: false),
                     MaterialType = table.Column<string>(type: "text", nullable: false),
                     EventNumber = table.Column<int>(type: "integer", nullable: true),
@@ -132,7 +141,7 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_tissue_sample", x => x.SampleId);
+                    table.PrimaryKey("PK_tissue_sample", x => x.Id);
                     table.ForeignKey(
                         name: "FK_tissue_sample_patient_PatientId",
                         column: x => x.PatientId,
@@ -147,9 +156,19 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 column: "PatientId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_diagnostic_specimen_SampleId",
+                table: "diagnostic_specimen",
+                column: "SampleId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_genome_sample_PatientId",
                 table: "genome_sample",
                 column: "PatientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_genome_sample_SampleId",
+                table: "genome_sample",
+                column: "SampleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_serum_sample_PatientId",
@@ -157,9 +176,19 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                 column: "PatientId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_serum_sample_SampleId",
+                table: "serum_sample",
+                column: "SampleId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_tissue_sample_PatientId",
                 table: "tissue_sample",
                 column: "PatientId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_tissue_sample_SampleId",
+                table: "tissue_sample",
+                column: "SampleId");
         }
 
         /// <inheritdoc />
