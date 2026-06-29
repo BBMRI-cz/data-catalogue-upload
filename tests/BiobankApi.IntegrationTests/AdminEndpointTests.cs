@@ -31,13 +31,16 @@ public sealed class AdminEndpointTests
         var source = new FakePatientExportSource(new ExportParseResult(patients, errors));
 
         using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("DisableScheduler", "true");
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IPatientExportSource>();
                 services.AddSingleton<IPatientExportSource>(source);
                 services.RemoveAll<IBiobankRepository>();
                 services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository([]));
-            }));
+            });
+        });
 
         using var client = factory.CreateClient();
         using var response = await client.PostAsync("/admin/ingest", content: null);

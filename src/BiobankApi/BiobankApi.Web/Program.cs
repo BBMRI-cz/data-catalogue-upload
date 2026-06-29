@@ -18,14 +18,19 @@ builder.Services.AddOpenApi();
 
 // Weekly in-process ingestion via Quartz (OS-independent: identical on Windows and Linux). The cron
 // is overridable with BIOBANK_INGEST_CRON for testing; POST /admin/ingest triggers a run on demand.
-var ingestCron = builder.Configuration["BIOBANK_INGEST_CRON"] ?? "0 0 17 ? * SUN"; // Sundays 17:00 UTC
-builder.Services.AddQuartz(quartz =>
+// Disabled with DisableScheduler=true: integration tests spin up many hosts in one process, and
+// Quartz's global static logging provider captures (then over-disposes) a per-host LoggerFactory.
+if (!builder.Configuration.GetValue<bool>("DisableScheduler"))
 {
-    var jobKey = new JobKey("ingestion");
-    quartz.AddJob<IngestionJob>(jobKey);
-    quartz.AddTrigger(trigger => trigger.ForJob(jobKey).WithCronSchedule(ingestCron));
-});
-builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+    var ingestCron = builder.Configuration["BIOBANK_INGEST_CRON"] ?? "0 0 17 ? * SUN"; // Sundays 17:00 UTC
+    builder.Services.AddQuartz(quartz =>
+    {
+        var jobKey = new JobKey("ingestion");
+        quartz.AddJob<IngestionJob>(jobKey);
+        quartz.AddTrigger(trigger => trigger.ForJob(jobKey).WithCronSchedule(ingestCron));
+    });
+    builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
+}
 
 var app = builder.Build();
 

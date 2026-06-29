@@ -22,11 +22,14 @@ public sealed class ApiTests
     private static HttpClient CreateClient(params PatientAggregate[] patients)
     {
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSetting("DisableScheduler", "true");
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IBiobankRepository>();
                 services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository(patients));
-            }));
+            });
+        });
 
         return factory.CreateClient();
     }
