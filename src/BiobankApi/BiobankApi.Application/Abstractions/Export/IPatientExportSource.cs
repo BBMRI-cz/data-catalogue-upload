@@ -1,9 +1,9 @@
-namespace BiobankApi.Application.Abstractions;
+namespace BiobankApi.Application.Abstractions.Export;
 
 /// <summary>
 /// Source port that turns a biobank's raw export into domain patients. XML is one implementation
-/// (<c>XmlExportParser</c>); a biobank with no XML export contributes a different source (or none).
-/// The ingestion use case aggregates every registered source, so this stays format-agnostic.
+/// (<c>XmlExportParser</c>); a biobank with no XML export contributes a different source. There is
+/// exactly one source per biobank, so this stays format-agnostic.
 /// </summary>
 public interface IPatientExportSource
 {

@@ -1,4 +1,4 @@
-using BiobankApi.Application.Abstractions;
+using BiobankApi.Application.Abstractions.Export;
 
 namespace BiobankApi.Application.Features.Ingest;
 
