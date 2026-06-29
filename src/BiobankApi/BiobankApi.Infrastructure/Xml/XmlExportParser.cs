@@ -27,7 +27,10 @@ public sealed class XmlExportParser : IPatientExportSource
             return Error.Failure("Export.DirectoryMissing", $"export directory not found: {_exportPath}");
         }
 
-        var files = Directory.EnumerateFiles(_exportPath, "*.xml").OrderBy(path => path, StringComparer.Ordinal).ToList();
+        // Case-insensitive so uppercase `.XML` exports (as produced on the Linux server) are found.
+        var options = new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive };
+        var files = Directory.EnumerateFiles(_exportPath, "*.xml", options)
+            .OrderBy(path => path, StringComparer.Ordinal).ToList();
         if (files.Count == 0)
         {
             return Error.Failure("Export.NoFiles", $"no XML exports found in: {_exportPath}");
