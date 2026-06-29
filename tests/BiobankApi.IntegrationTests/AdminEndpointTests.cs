@@ -30,7 +30,7 @@ public sealed class AdminEndpointTests
         var errors = new List<ExportParseError> { new("fake", "bad.xml", "broken record") };
         var source = new FakePatientExportSource(new ExportParseResult(patients, errors));
 
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IPatientExportSource>();
@@ -39,7 +39,8 @@ public sealed class AdminEndpointTests
                 services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository([]));
             }));
 
-        var response = await factory.CreateClient().PostAsync("/admin/ingest", content: null);
+        using var client = factory.CreateClient();
+        using var response = await client.PostAsync("/admin/ingest", content: null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var summary = await response.Content.ReadFromJsonAsync<IngestSummary>(JsonOptions);
