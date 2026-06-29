@@ -169,4 +169,26 @@ public sealed class RepositoryTests : IDisposable
         var repository = new SqlBiobankRepository(context);
         Assert.Empty(await repository.ListPatientsAsync(CancellationToken.None));
     }
+
+    [Fact]
+    public async Task PersistsDuplicateSampleIdsWithinPatient()
+    {
+        // Real exports reuse a sampleId within one patient; the surrogate key must let both persist.
+        await using var context = _db.NewContext();
+        var repository = new SqlBiobankRepository(context);
+        var patient = PatientAggregate.Create(
+            "DUP-1",
+            consent: true,
+            samples:
+            [
+                SerumSample.Create("BBMs:2022:2209:SD", "SD").Value,
+                SerumSample.Create("BBMs:2022:2209:SD", "SD").Value,
+            ]).Value;
+
+        await repository.SavePatientsAsync([patient], CancellationToken.None);
+
+        Assert.Equal(2, await context.SerumSamples.CountAsync());
+        var loaded = Assert.Single(await repository.ListPatientsAsync(CancellationToken.None));
+        Assert.Equal(2, loaded.Samples.OfType<SerumSample>().Count());
+    }
 }

@@ -57,6 +57,26 @@ public sealed class XmlExportParserTests
     }
 
     [Fact]
+    public void DiscoversUppercaseXmlExtension()
+    {
+        // Server exports are uppercase `.XML`; the glob must match them (case-sensitive on Linux).
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            File.Copy(Path.Join(ExportsPath, "05_lts_full.xml"), Path.Join(dir, "PATIENT.XML"));
+
+            var result = new XmlExportParser(dir).ParsePatients();
+
+            Assert.False(result.IsError);
+            Assert.Single(result.Value.Patients);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void EmptyDirectoryReportsFailure()
     {
         var emptyDir = Directory.CreateTempSubdirectory().FullName;
