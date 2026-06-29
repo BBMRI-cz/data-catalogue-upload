@@ -7,8 +7,12 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BiobankApi.Infrastructure.Persistence;
 
 /// <summary>EF Core context for the biobank_api database (normalized patient schema).</summary>
-public sealed class BiobankDbContext(DbContextOptions<BiobankDbContext> options) : DbContext(options)
+public sealed class BiobankDbContext : DbContext
 {
+    public BiobankDbContext(DbContextOptions<BiobankDbContext> options) : base(options)
+    {
+    }
+
     public DbSet<PatientEntity> Patients => Set<PatientEntity>();
     public DbSet<TissueSampleEntity> TissueSamples => Set<TissueSampleEntity>();
     public DbSet<SerumSampleEntity> SerumSamples => Set<SerumSampleEntity>();

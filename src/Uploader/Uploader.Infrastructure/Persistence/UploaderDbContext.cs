@@ -4,8 +4,12 @@ using Uploader.Infrastructure.Persistence.Entities;
 namespace Uploader.Infrastructure.Persistence;
 
 /// <summary>EF Core context for the uploader's sync-state database.</summary>
-public sealed class UploaderDbContext(DbContextOptions<UploaderDbContext> options) : DbContext(options)
+public sealed class UploaderDbContext : DbContext
 {
+    public UploaderDbContext(DbContextOptions<UploaderDbContext> options) : base(options)
+    {
+    }
+
     public DbSet<SyncRunEntity> SyncRuns => Set<SyncRunEntity>();
     public DbSet<PatientSyncStateEntity> PatientSyncStates => Set<PatientSyncStateEntity>();
     public DbSet<SampleSyncStateEntity> SampleSyncStates => Set<SampleSyncStateEntity>();

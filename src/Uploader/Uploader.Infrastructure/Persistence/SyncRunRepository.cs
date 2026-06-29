@@ -5,16 +5,25 @@ using Uploader.Infrastructure.Persistence.Entities;
 namespace Uploader.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation of <see cref="ISyncRunRepository"/>.</summary>
-internal sealed class SyncRunRepository(UploaderDbContext context, TimeProvider timeProvider) : ISyncRunRepository
+internal sealed class SyncRunRepository : ISyncRunRepository
 {
+    private readonly UploaderDbContext _context;
+    private readonly TimeProvider _timeProvider;
+
+    public SyncRunRepository(UploaderDbContext context, TimeProvider timeProvider)
+    {
+        _context = context;
+        _timeProvider = timeProvider;
+    }
+
     public async Task FinishAsync(RunCatalogueSyncCommandResult result, CancellationToken cancellationToken)
     {
-        var now = timeProvider.GetUtcNow();
-        var run = await context.SyncRuns.FindAsync([result.RunId], cancellationToken);
+        var now = _timeProvider.GetUtcNow();
+        var run = await _context.SyncRuns.FindAsync([result.RunId], cancellationToken);
         if (run is null)
         {
             run = new SyncRunEntity { Id = result.RunId, StartedAt = now };
-            context.SyncRuns.Add(run);
+            _context.SyncRuns.Add(run);
         }
 
         run.FinishedAt = now;
@@ -25,6 +34,6 @@ internal sealed class SyncRunRepository(UploaderDbContext context, TimeProvider 
         run.SkippedCount = result.Skipped;
         run.FailedCount = result.Failed;
 
-        await context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

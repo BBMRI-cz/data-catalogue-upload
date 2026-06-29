@@ -9,9 +9,13 @@ using Uploader.Domain;
 namespace Uploader.Infrastructure.Http;
 
 /// <summary>Per-aggregate catalogue gateway. Failures are returned as <see cref="Error"/>s, not thrown.</summary>
-internal sealed class HttpCatalogueGateway(IHttpClientFactory httpClientFactory) : ICatalogueGateway
+internal sealed class HttpCatalogueGateway : ICatalogueGateway
 {
     public const string CatalogueClient = "catalogue";
+
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public HttpCatalogueGateway(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
 
     private static readonly JsonSerializerOptions PayloadOptions = new()
     {
@@ -71,7 +75,7 @@ internal sealed class HttpCatalogueGateway(IHttpClientFactory httpClientFactory)
         var targetId = string.IsNullOrEmpty(remoteId) ? entityKey : remoteId;
         try
         {
-            var client = httpClientFactory.CreateClient(CatalogueClient);
+            var client = _httpClientFactory.CreateClient(CatalogueClient);
             using var response = await client.DeleteAsync(
                 $"/{entityType}/{Uri.EscapeDataString(targetId)}", cancellationToken);
             response.EnsureSuccessStatusCode();
@@ -91,7 +95,7 @@ internal sealed class HttpCatalogueGateway(IHttpClientFactory httpClientFactory)
     {
         try
         {
-            var client = httpClientFactory.CreateClient(CatalogueClient);
+            var client = _httpClientFactory.CreateClient(CatalogueClient);
             var json = JsonSerializer.Serialize(payload, PayloadOptions);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var response = await client.PostAsync(path, content, cancellationToken);

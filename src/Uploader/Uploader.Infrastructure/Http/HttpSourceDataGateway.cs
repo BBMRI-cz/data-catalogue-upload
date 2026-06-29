@@ -6,7 +6,7 @@ using Uploader.Application.Dtos;
 namespace Uploader.Infrastructure.Http;
 
 /// <summary>Reads the four upstream source APIs over HTTP (biobank, radiology, sequencing, WSI).</summary>
-internal sealed class HttpSourceDataGateway(IHttpClientFactory httpClientFactory) : ISourceDataGateway
+internal sealed class HttpSourceDataGateway : ISourceDataGateway
 {
     public const string BiobankClient = "source-biobank";
     public const string RadiologyClient = "source-radiology";
@@ -19,6 +19,10 @@ internal sealed class HttpSourceDataGateway(IHttpClientFactory httpClientFactory
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
     };
+
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public HttpSourceDataGateway(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
 
     public async Task<IReadOnlyList<PatientDto>> FetchPatientsAsync(CancellationToken cancellationToken) =>
         await GetAsync<List<PatientDto>>(BiobankClient, "/patients", cancellationToken) ?? [];
@@ -50,7 +54,7 @@ internal sealed class HttpSourceDataGateway(IHttpClientFactory httpClientFactory
 
     private async Task<T?> GetAsync<T>(string clientName, string path, CancellationToken cancellationToken)
     {
-        var client = httpClientFactory.CreateClient(clientName);
+        var client = _httpClientFactory.CreateClient(clientName);
         using var response = await client.GetAsync(path, cancellationToken);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(cancellationToken);

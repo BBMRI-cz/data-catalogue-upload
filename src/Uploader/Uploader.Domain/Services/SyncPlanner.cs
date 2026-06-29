@@ -16,9 +16,12 @@ public interface ISyncPlanner
 /// dependency order: patient, then samples, their sequencing/WSI, then imaging studies, then
 /// deletions.
 /// </summary>
-public sealed class FingerprintSyncPlanner(TimeProvider? timeProvider = null) : ISyncPlanner
+public sealed class FingerprintSyncPlanner : ISyncPlanner
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly TimeProvider _timeProvider;
+
+    public FingerprintSyncPlanner(TimeProvider? timeProvider = null) =>
+        _timeProvider = timeProvider ?? TimeProvider.System;
 
     public IReadOnlyList<SyncOperation> Plan(PatientCatalogueData data, PatientSyncStates existing)
     {

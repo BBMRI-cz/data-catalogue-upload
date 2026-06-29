@@ -16,9 +16,11 @@ namespace Uploader.Application.Features.Sync;
 public sealed record RunCatalogueSyncCommand : ICommand<ErrorOr<RunCatalogueSyncCommandResult>>;
 
 /// <summary>Mutable tally of one catalogue-sync run, persisted to the <c>sync_run</c> table.</summary>
-public sealed class RunCatalogueSyncCommandResult(string runId)
+public sealed class RunCatalogueSyncCommandResult
 {
-    public string RunId { get; } = runId;
+    public RunCatalogueSyncCommandResult(string runId) => RunId = runId;
+
+    public string RunId { get; }
     public int Scanned { get; set; }
     public int Changed { get; set; }
     public int Uploaded { get; set; }
@@ -27,18 +29,39 @@ public sealed class RunCatalogueSyncCommandResult(string runId)
     public int Failed { get; set; }
 }
 
-internal sealed class RunCatalogueSyncCommandHandler(
-    ISourceDataGateway sourceGateway,
-    ICatalogueGateway catalogueGateway,
-    ISyncStateRepository stateRepository,
-    ISyncRunRepository runRepository,
-    ISyncPlanner planner,
-    SourceMapper mapper,
-    TimeProvider timeProvider,
-    ILogger<RunCatalogueSyncCommandHandler> logger)
+internal sealed class RunCatalogueSyncCommandHandler
     : ICommandHandler<RunCatalogueSyncCommand, ErrorOr<RunCatalogueSyncCommandResult>>
 {
     private const string DeleteEntityType = "patient";
+
+    private readonly ISourceDataGateway _sourceGateway;
+    private readonly ICatalogueGateway _catalogueGateway;
+    private readonly ISyncStateRepository _stateRepository;
+    private readonly ISyncRunRepository _runRepository;
+    private readonly ISyncPlanner _planner;
+    private readonly SourceMapper _mapper;
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<RunCatalogueSyncCommandHandler> _logger;
+
+    public RunCatalogueSyncCommandHandler(
+        ISourceDataGateway sourceGateway,
+        ICatalogueGateway catalogueGateway,
+        ISyncStateRepository stateRepository,
+        ISyncRunRepository runRepository,
+        ISyncPlanner planner,
+        SourceMapper mapper,
+        TimeProvider timeProvider,
+        ILogger<RunCatalogueSyncCommandHandler> logger)
+    {
+        _sourceGateway = sourceGateway;
+        _catalogueGateway = catalogueGateway;
+        _stateRepository = stateRepository;
+        _runRepository = runRepository;
+        _planner = planner;
+        _mapper = mapper;
+        _timeProvider = timeProvider;
+        _logger = logger;
+    }
 
     public async ValueTask<ErrorOr<RunCatalogueSyncCommandResult>> Handle(
         RunCatalogueSyncCommand command,
@@ -47,7 +70,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
         var runId = Guid.NewGuid().ToString();
         var result = new RunCatalogueSyncCommandResult(runId);
 
-        var rawPatients = await sourceGateway.FetchPatientsAsync(cancellationToken);
+        var rawPatients = await _sourceGateway.FetchPatientsAsync(cancellationToken);
         var seenPatientIds = new HashSet<PatientId>();
 
         foreach (var rawPatient in rawPatients)
@@ -62,14 +85,14 @@ internal sealed class RunCatalogueSyncCommandHandler(
             catch (JsonException exception)
             {
                 result.Failed++;
-                logger.LogWarning(exception, "Skipping unparseable patient payload ({PatientId})", rawPatient.PatientId);
+                _logger.LogWarning(exception, "Skipping unparseable patient payload ({PatientId})", rawPatient.PatientId);
                 continue;
             }
 
             if (built.IsError)
             {
                 result.Failed++;
-                logger.LogWarning(
+                _logger.LogWarning(
                     "Skipping invalid patient {PatientId}: {Error}",
                     rawPatient.PatientId,
                     built.Errors[0].Description);
@@ -79,15 +102,15 @@ internal sealed class RunCatalogueSyncCommandHandler(
             var data = built.Value;
             seenPatientIds.Add(data.Patient.Id);
 
-            var existing = await stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
-            foreach (var operation in planner.Plan(data, existing))
+            var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
+            foreach (var operation in _planner.Plan(data, existing))
             {
                 await ExecuteAsync(operation, runId, result, cancellationToken);
             }
         }
 
         await DeleteMissingPatientsAsync(seenPatientIds, runId, result, cancellationToken);
-        await runRepository.FinishAsync(result, cancellationToken);
+        await _runRepository.FinishAsync(result, cancellationToken);
         return result;
     }
 
@@ -102,7 +125,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
         if (operation.Op == SyncOp.Skip)
         {
             result.Skipped++;
-            await stateRepository.SaveAsync(operation.State, cancellationToken);
+            await _stateRepository.SaveAsync(operation.State, cancellationToken);
             return;
         }
 
@@ -110,7 +133,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
         {
             // Soft delete: the planner already marked the state deleted; DB only.
             result.Deleted++;
-            await stateRepository.SaveAsync(operation.State, cancellationToken);
+            await _stateRepository.SaveAsync(operation.State, cancellationToken);
             return;
         }
 
@@ -121,7 +144,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
             operation.State.CatalogueRemoteId = upserted.Value;
             operation.State.Status = SyncStatus.Synced;
             operation.State.IsDeleted = false;
-            operation.State.LastSyncedAt = timeProvider.GetUtcNow();
+            operation.State.LastSyncedAt = _timeProvider.GetUtcNow();
             result.Uploaded++;
         }
         else
@@ -131,19 +154,19 @@ internal sealed class RunCatalogueSyncCommandHandler(
             operation.State.LastError = upserted.Errors[0].Description;
         }
 
-        await stateRepository.SaveAsync(operation.State, cancellationToken);
+        await _stateRepository.SaveAsync(operation.State, cancellationToken);
     }
 
     private Task<ErrorOr<string>> UpsertAsync(SyncOperation operation, CancellationToken cancellationToken) =>
         operation switch
         {
-            PatientOperation { Patient: { } patient } => catalogueGateway.UpsertPatientAsync(patient, cancellationToken),
-            SampleOperation { Sample: { } sample } => catalogueGateway.UpsertSampleAsync(sample, cancellationToken),
+            PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(patient, cancellationToken),
+            SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(sample, cancellationToken),
             SequencingOperation { Sequencing: { } sequencing } =>
-                catalogueGateway.UpsertSequencingAsync(sequencing, cancellationToken),
-            WsiOperation { Wsi: { } wsi } => catalogueGateway.UpsertWsiAsync(wsi, cancellationToken),
+                _catalogueGateway.UpsertSequencingAsync(sequencing, cancellationToken),
+            WsiOperation { Wsi: { } wsi } => _catalogueGateway.UpsertWsiAsync(wsi, cancellationToken),
             ImagingStudyOperation { ImagingStudy: { } study } =>
-                catalogueGateway.UpsertImagingStudyAsync(study, cancellationToken),
+                _catalogueGateway.UpsertImagingStudyAsync(study, cancellationToken),
 
             // Unreachable: Skip/Delete are handled before this, and create/update operations always
             // carry their aggregate. Reaching here is a programmer error, not bad source data.
@@ -156,12 +179,12 @@ internal sealed class RunCatalogueSyncCommandHandler(
         RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
     {
-        var missing = await stateRepository.MarkMissingPatientsAsDeletedAsync(
+        var missing = await _stateRepository.MarkMissingPatientsAsDeletedAsync(
             seenPatientIds, runId, cancellationToken);
 
         foreach (var state in missing)
         {
-            var deleted = await catalogueGateway.DeleteAsync(
+            var deleted = await _catalogueGateway.DeleteAsync(
                 DeleteEntityType, state.Id.Value, state.CatalogueRemoteId, cancellationToken);
             if (!deleted.IsError)
             {
@@ -173,7 +196,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
             }
 
             // Children are soft-deleted in the DB only, no gateway calls.
-            await stateRepository.SoftDeleteChildrenAsync(state.Id, runId, cancellationToken);
+            await _stateRepository.SoftDeleteChildrenAsync(state.Id, runId, cancellationToken);
         }
     }
 
@@ -181,7 +204,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
         PatientDto rawPatient,
         CancellationToken cancellationToken)
     {
-        var patientResult = mapper.ToPatient(rawPatient);
+        var patientResult = _mapper.ToPatient(rawPatient);
         if (patientResult.IsError)
         {
             return patientResult.Errors;
@@ -194,7 +217,7 @@ internal sealed class RunCatalogueSyncCommandHandler(
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
-            var sampleResult = mapper.ToSample(rawSample, patient.Id);
+            var sampleResult = _mapper.ToSample(rawSample, patient.Id);
             if (sampleResult.IsError)
             {
                 return sampleResult.Errors;
@@ -205,10 +228,10 @@ internal sealed class RunCatalogueSyncCommandHandler(
 
             if (sample.SequencingId is { } sequencingId)
             {
-                var sequencingDto = await sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
+                var sequencingDto = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
                 if (sequencingDto is not null)
                 {
-                    var sequencingResult = mapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
+                    var sequencingResult = _mapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
                     if (sequencingResult.IsError)
                     {
                         return sequencingResult.Errors;
@@ -220,10 +243,10 @@ internal sealed class RunCatalogueSyncCommandHandler(
 
             if (sample.WsiId is { } wsiId)
             {
-                var wsiDto = await sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
+                var wsiDto = await _sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
                 if (wsiDto is not null)
                 {
-                    var wsiResult = mapper.ToWsi(wsiDto, wsiId, sample.Id);
+                    var wsiResult = _mapper.ToWsi(wsiDto, wsiId, sample.Id);
                     if (wsiResult.IsError)
                     {
                         return wsiResult.Errors;
@@ -236,9 +259,9 @@ internal sealed class RunCatalogueSyncCommandHandler(
 
         var accessionNumbers = rawPatient.AccessionNumbers ?? [];
         var studies = new List<ImagingStudyAggregate>();
-        foreach (var studyDto in await sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
+        foreach (var studyDto in await _sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
         {
-            var studyResult = mapper.ToImagingStudy(studyDto, patient.Id);
+            var studyResult = _mapper.ToImagingStudy(studyDto, patient.Id);
             if (studyResult.IsError)
             {
                 return studyResult.Errors;

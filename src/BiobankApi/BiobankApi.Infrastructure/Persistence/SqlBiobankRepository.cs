@@ -1,4 +1,4 @@
-using BiobankApi.Application.Abstractions;
+using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -6,11 +6,15 @@ using Microsoft.EntityFrameworkCore;
 namespace BiobankApi.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation of <see cref="IBiobankRepository"/>.</summary>
-internal sealed class SqlBiobankRepository(BiobankDbContext context) : IBiobankRepository
+internal sealed class SqlBiobankRepository : IBiobankRepository
 {
+    private readonly BiobankDbContext _context;
+
+    public SqlBiobankRepository(BiobankDbContext context) => _context = context;
+
     public async Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken)
     {
-        var entities = await context.Patients
+        var entities = await _context.Patients
             .AsNoTracking()
             .Include(patient => patient.TissueSamples)
             .Include(patient => patient.SerumSamples)
@@ -27,16 +31,16 @@ internal sealed class SqlBiobankRepository(BiobankDbContext context) : IBiobankR
         // tables, so a re-save never leaves stale or duplicate sample/specimen rows.
         foreach (var patient in patients)
         {
-            var existing = await context.Patients.FindAsync([patient.Id.Value], cancellationToken);
+            var existing = await _context.Patients.FindAsync([patient.Id.Value], cancellationToken);
             if (existing is not null)
             {
-                context.Patients.Remove(existing);
-                await context.SaveChangesAsync(cancellationToken);
+                _context.Patients.Remove(existing);
+                await _context.SaveChangesAsync(cancellationToken);
             }
 
-            context.Patients.Add(PatientMapper.ToEntity(patient));
+            _context.Patients.Add(PatientMapper.ToEntity(patient));
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

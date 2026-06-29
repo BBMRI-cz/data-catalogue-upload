@@ -7,12 +7,21 @@ using Uploader.Infrastructure.Persistence.Entities;
 namespace Uploader.Infrastructure.Persistence;
 
 /// <summary>EF Core implementation of <see cref="ISyncStateRepository"/>.</summary>
-internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvider timeProvider) : ISyncStateRepository
+internal sealed class SyncStateRepository : ISyncStateRepository
 {
+    private readonly UploaderDbContext _context;
+    private readonly TimeProvider _timeProvider;
+
+    public SyncStateRepository(UploaderDbContext context, TimeProvider timeProvider)
+    {
+        _context = context;
+        _timeProvider = timeProvider;
+    }
+
     public async Task<PatientSyncStates> GetAllForPatientAsync(PatientId patientId, CancellationToken cancellationToken)
     {
         var id = patientId.Value;
-        var patient = await context.PatientSyncStates.AsNoTracking()
+        var patient = await _context.PatientSyncStates.AsNoTracking()
             .Include(state => state.Samples).ThenInclude(sample => sample.Sequencing)
             .Include(state => state.Samples).ThenInclude(sample => sample.Wsi)
             .Include(state => state.ImagingStudies)
@@ -48,7 +57,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
         {
             case PatientSyncState patient:
                 await UpsertAsync(
-                    context.PatientSyncStates,
+                    _context.PatientSyncStates,
                     patient.Id.Value,
                     () => new PatientSyncStateEntity { Id = patient.Id.Value },
                     _ => { },
@@ -57,7 +66,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
                 break;
             case SampleSyncState sample:
                 await UpsertAsync(
-                    context.SampleSyncStates,
+                    _context.SampleSyncStates,
                     sample.Id.Value,
                     () => new SampleSyncStateEntity { Id = sample.Id.Value, PatientId = sample.PatientId.Value },
                     entity => entity.PatientId = sample.PatientId.Value,
@@ -66,7 +75,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
                 break;
             case SequencingSyncState sequencing:
                 await UpsertAsync(
-                    context.SequencingSyncStates,
+                    _context.SequencingSyncStates,
                     sequencing.Id.Value,
                     () => new SequencingSyncStateEntity { Id = sequencing.Id.Value, SampleId = sequencing.SampleId.Value },
                     entity => entity.SampleId = sequencing.SampleId.Value,
@@ -75,7 +84,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
                 break;
             case WsiSyncState wsi:
                 await UpsertAsync(
-                    context.WsiSyncStates,
+                    _context.WsiSyncStates,
                     wsi.Id.Value,
                     () => new WsiSyncStateEntity { Id = wsi.Id.Value, SampleId = wsi.SampleId.Value },
                     entity => entity.SampleId = wsi.SampleId.Value,
@@ -84,7 +93,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
                 break;
             case ImagingStudySyncState imaging:
                 await UpsertAsync(
-                    context.ImagingStudySyncStates,
+                    _context.ImagingStudySyncStates,
                     imaging.Id.Value,
                     () => new ImagingStudySyncStateEntity { Id = imaging.Id.Value, PatientId = imaging.PatientId.Value },
                     entity => entity.PatientId = imaging.PatientId.Value,
@@ -95,17 +104,17 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
                 throw new InvalidOperationException($"Unsupported sync state type: {state.GetType().Name}");
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task SoftDeleteChildrenAsync(PatientId parentId, string runId, CancellationToken cancellationToken)
     {
         var id = parentId.Value;
-        var now = timeProvider.GetUtcNow();
+        var now = _timeProvider.GetUtcNow();
 
-        var samples = await context.SampleSyncStates
+        var samples = await _context.SampleSyncStates
             .Where(state => state.PatientId == id).ToListAsync(cancellationToken);
-        var imaging = await context.ImagingStudySyncStates
+        var imaging = await _context.ImagingStudySyncStates
             .Where(state => state.PatientId == id).ToListAsync(cancellationToken);
         MarkDeleted(samples, runId, now);
         MarkDeleted(imaging, runId, now);
@@ -113,15 +122,15 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
         var sampleIds = samples.Select(state => state.Id).ToList();
         if (sampleIds.Count > 0)
         {
-            var sequencing = await context.SequencingSyncStates
+            var sequencing = await _context.SequencingSyncStates
                 .Where(state => sampleIds.Contains(state.SampleId)).ToListAsync(cancellationToken);
-            var wsi = await context.WsiSyncStates
+            var wsi = await _context.WsiSyncStates
                 .Where(state => sampleIds.Contains(state.SampleId)).ToListAsync(cancellationToken);
             MarkDeleted(sequencing, runId, now);
             MarkDeleted(wsi, runId, now);
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(
@@ -130,8 +139,8 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
         CancellationToken cancellationToken)
     {
         var seen = seenIds.Select(seenId => seenId.Value).ToHashSet();
-        var now = timeProvider.GetUtcNow();
-        var rows = await context.PatientSyncStates.ToListAsync(cancellationToken);
+        var now = _timeProvider.GetUtcNow();
+        var rows = await _context.PatientSyncStates.ToListAsync(cancellationToken);
         var missing = new List<PatientSyncState>();
 
         foreach (var row in rows)
@@ -145,7 +154,7 @@ internal sealed class SyncStateRepository(UploaderDbContext context, TimeProvide
             missing.Add(SyncStateMapper.ToDomain(row));
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
         return missing;
     }
 

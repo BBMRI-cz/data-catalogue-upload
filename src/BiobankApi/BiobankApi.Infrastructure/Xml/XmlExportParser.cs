@@ -1,6 +1,6 @@
 using System.Xml;
 using System.Xml.Linq;
-using BiobankApi.Application.Abstractions;
+using BiobankApi.Application.Abstractions.Export;
 using BiobankApi.Domain.Patients;
 
 namespace BiobankApi.Infrastructure.Xml;
@@ -11,21 +11,25 @@ namespace BiobankApi.Infrastructure.Xml;
 /// <see cref="XmlPatientReader"/>. Malformed files and records that fail validation are reported as
 /// <see cref="ExportParseError"/>s rather than aborting the run.
 /// </summary>
-public sealed class XmlExportParser(string exportPath) : IPatientExportSource
+public sealed class XmlExportParser : IPatientExportSource
 {
-    public string Name => $"xml:{exportPath}";
+    private readonly string _exportPath;
+
+    public XmlExportParser(string exportPath) => _exportPath = exportPath;
+
+    public string Name => $"xml:{_exportPath}";
 
     public ExportParseResult ParsePatients()
     {
         var patients = new List<PatientAggregate>();
         var errors = new List<ExportParseError>();
 
-        if (!Directory.Exists(exportPath))
+        if (!Directory.Exists(_exportPath))
         {
             return new ExportParseResult(patients, errors);
         }
 
-        var files = Directory.EnumerateFiles(exportPath, "*.xml").OrderBy(path => path, StringComparer.Ordinal);
+        var files = Directory.EnumerateFiles(_exportPath, "*.xml").OrderBy(path => path, StringComparer.Ordinal);
         foreach (var file in files)
         {
             var reference = Path.GetFileName(file);
