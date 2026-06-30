@@ -6,21 +6,19 @@ using Xunit;
 
 namespace Uploader.UnitTests;
 
-public sealed class SourceMapperTests
+public sealed class UploaderMapperTests
 {
-    private readonly SourceMapper _mapper = new();
-
     [Fact]
     public void MapsPersonalClinicalAndMaterial()
     {
-        var patient = _mapper.ToPatient(new PatientDto
+        var patient = PatientMapper.ToPatient(new PatientDto
         {
             PatientId = "P1",
             PersonalIdentifier = "P1",
             YearOfBirth = 1980,
             ClinicalDiagnosis = ["C50", "C51"],
         }).Value;
-        var sample = _mapper.ToSample(
+        var sample = SampleMapper.ToSample(
             new SampleDto { SampleId = "S1", PercentageTumorCells = 12.5, BiospecimenType = "tissue" },
             new PatientId("P1")).Value;
 
@@ -34,7 +32,7 @@ public sealed class SourceMapperTests
     [Fact]
     public void BlankPatientIdIsAValidationError()
     {
-        var result = _mapper.ToPatient(new PatientDto { PatientId = "" });
+        var result = PatientMapper.ToPatient(new PatientDto { PatientId = "" });
 
         Assert.True(result.IsError);
         Assert.Equal(ErrorType.Validation, result.FirstError.Type);
@@ -43,7 +41,7 @@ public sealed class SourceMapperTests
     [Fact]
     public void SampleCarriesTypedReferences()
     {
-        var sample = _mapper.ToSample(
+        var sample = SampleMapper.ToSample(
             new SampleDto { SampleId = "S1", PredictiveNumber = "PRED1", BiopticNumber = "BIO1" },
             new PatientId("P1")).Value;
 
@@ -56,7 +54,7 @@ public sealed class SourceMapperTests
     [Fact]
     public void SequencingEntryHasNoPrepWhenAbsent()
     {
-        var sequencing = _mapper.ToSequencing(new SequencingDto(), new SequencingId("PRED1"), new SampleId("S1")).Value;
+        var sequencing = SequencingMapper.ToSequencing(new SequencingDto(), new SequencingId("PRED1"), new SampleId("S1")).Value;
 
         var entry = Assert.Single(sequencing.Entries);
         Assert.Null(entry.SamplePreparation);
@@ -80,7 +78,7 @@ public sealed class SourceMapperTests
             },
         };
 
-        var entry = Assert.Single(_mapper.ToSequencing(dto, new SequencingId("PRED1"), new SampleId("S1")).Value.Entries);
+        var entry = Assert.Single(SequencingMapper.ToSequencing(dto, new SequencingId("PRED1"), new SampleId("S1")).Value.Entries);
 
         Assert.Equal(new FixedBlockId("FB1"), entry.FixedBlockId);
         Assert.Equal("KitA", entry.SamplePreparation!.LibraryPreparationKit);
@@ -91,7 +89,7 @@ public sealed class SourceMapperTests
     [Fact]
     public void WsiReturnsNullFixedBlockWhenNoKeys()
     {
-        var wsi = _mapper.ToWsi(new WsiDto(), new WsiId("BIO1"), new SampleId("S1")).Value;
+        var wsi = WsiMapper.ToWsi(new WsiDto(), new WsiId("BIO1"), new SampleId("S1")).Value;
 
         Assert.Equal(new WsiId("BIO1"), wsi.Id);
         Assert.Null(wsi.FixedBlock);
@@ -114,7 +112,7 @@ public sealed class SourceMapperTests
             },
         };
 
-        var wsi = _mapper.ToWsi(dto, new WsiId("BIO1"), new SampleId("S1")).Value;
+        var wsi = WsiMapper.ToWsi(dto, new WsiId("BIO1"), new SampleId("S1")).Value;
 
         Assert.Equal(new FixedBlockId("FB1"), wsi.FixedBlock!.Id);
         Assert.Equal("glass", wsi.FixedBlock.SlideContainer!.ContainerType);
@@ -132,7 +130,7 @@ public sealed class SourceMapperTests
             CtSeries = new CtSeriesDto { SeriesIdentifier = "CT-1", TubeVoltageKvp = 120 },
         };
 
-        var study = _mapper.ToImagingStudy(dto, new PatientId("P1")).Value;
+        var study = ImagingStudyMapper.ToImagingStudy(dto, new PatientId("P1")).Value;
 
         Assert.Equal(new AccessionNumber("ACC1"), study.Id);
         Assert.Equal(new PatientId("P1"), study.PatientId);

@@ -39,7 +39,6 @@ internal sealed class RunCatalogueSyncCommandHandler
     private readonly ISyncStateRepository _stateRepository;
     private readonly ISyncRunRepository _runRepository;
     private readonly ISyncPlanner _planner;
-    private readonly SourceMapper _mapper;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RunCatalogueSyncCommandHandler> _logger;
 
@@ -49,7 +48,6 @@ internal sealed class RunCatalogueSyncCommandHandler
         ISyncStateRepository stateRepository,
         ISyncRunRepository runRepository,
         ISyncPlanner planner,
-        SourceMapper mapper,
         TimeProvider timeProvider,
         ILogger<RunCatalogueSyncCommandHandler> logger)
     {
@@ -58,7 +56,6 @@ internal sealed class RunCatalogueSyncCommandHandler
         _stateRepository = stateRepository;
         _runRepository = runRepository;
         _planner = planner;
-        _mapper = mapper;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -204,7 +201,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         PatientDto rawPatient,
         CancellationToken cancellationToken)
     {
-        var patientResult = _mapper.ToPatient(rawPatient);
+        var patientResult = PatientMapper.ToPatient(rawPatient);
         if (patientResult.IsError)
         {
             return patientResult.Errors;
@@ -217,7 +214,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
-            var sampleResult = _mapper.ToSample(rawSample, patient.Id);
+            var sampleResult = SampleMapper.ToSample(rawSample, patient.Id);
             if (sampleResult.IsError)
             {
                 return sampleResult.Errors;
@@ -231,7 +228,7 @@ internal sealed class RunCatalogueSyncCommandHandler
                 var sequencingDto = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
                 if (sequencingDto is not null)
                 {
-                    var sequencingResult = _mapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
+                    var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
                     if (sequencingResult.IsError)
                     {
                         return sequencingResult.Errors;
@@ -246,7 +243,7 @@ internal sealed class RunCatalogueSyncCommandHandler
                 var wsiDto = await _sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
                 if (wsiDto is not null)
                 {
-                    var wsiResult = _mapper.ToWsi(wsiDto, wsiId, sample.Id);
+                    var wsiResult = WsiMapper.ToWsi(wsiDto, wsiId, sample.Id);
                     if (wsiResult.IsError)
                     {
                         return wsiResult.Errors;
@@ -261,7 +258,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         var studies = new List<ImagingStudyAggregate>();
         foreach (var studyDto in await _sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
         {
-            var studyResult = _mapper.ToImagingStudy(studyDto, patient.Id);
+            var studyResult = ImagingStudyMapper.ToImagingStudy(studyDto, patient.Id);
             if (studyResult.IsError)
             {
                 return studyResult.Errors;
