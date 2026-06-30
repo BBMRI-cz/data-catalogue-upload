@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Uploader.Application.Features.Sync;
-using Uploader.Application.Mapping;
 using Uploader.Application.Dtos;
 using Uploader.Domain.Common;
 using Uploader.Domain.Services;
@@ -22,7 +21,6 @@ public sealed class RunCatalogueSyncHandlerTests
             state,
             runs,
             new FingerprintSyncPlanner(),
-            new SourceMapper(),
             TimeProvider.System,
             NullLogger<RunCatalogueSyncCommandHandler>.Instance);
 

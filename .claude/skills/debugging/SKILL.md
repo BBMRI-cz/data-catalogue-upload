@@ -35,7 +35,7 @@ inner layers are pure and trivial to test.
 
 | Symptom | Most likely layer | First thing to check |
 |---------|-------------------|----------------------|
-| Wrong/missing field on a domain object | `Application/Mapping/SourceMapper` (uploader) or `Xml/XmlValueReader` (biobank) | The Mapperly mapping / DTO property name vs the source JSON key; `XmlValueReader` normalization. |
+| Wrong/missing field on a domain object | `Application/Mapping/SourceMapper` (uploader) or `Xml/XmlValueReader` (biobank) | The hand-written mapping / DTO property name vs the source JSON key; `XmlValueReader` normalization. |
 | Validation `ErrorOr` you didn't expect | `Domain` aggregate `Create(...)` | Which invariant fired - the `Error.Validation` code points at the field. |
 | Wrong CREATE/UPDATE/SKIP/DELETE decision | `Domain/Services/FingerprintSyncPlanner` + aggregate `ComputeFingerprint()` | What `Fingerprint.Of(...)` serializes, and the prior `SyncStatus`/`IsDeleted`. |
 | HTTP error, timeout, bad URL, auth | `Infrastructure/Http/*Gateway` | Request URL/params (from `UploaderOptions`) and the source/catalogue response. |

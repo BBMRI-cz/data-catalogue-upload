@@ -2,12 +2,6 @@
 
   <PropertyGroup>
     <RootNamespace>Uploader.Infrastructure</RootNamespace>
-    <!--
-      Mapperly RMG020 (source member not mapped): the EF sync-state rows carry navigation
-      collections (Samples, Sequencing, Wsi, ImagingStudies) that the flat domain sync states do
-      not, so each ToDomain map intentionally leaves them unmapped.
-    -->
-    <NoWarn>$(NoWarn);RMG020</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,7 +17,6 @@
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="Riok.Mapperly" />
   </ItemGroup>
 
 </Project>

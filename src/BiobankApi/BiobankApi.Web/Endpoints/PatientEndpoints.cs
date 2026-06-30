@@ -1,6 +1,6 @@
 using BiobankApi.Application.Features.Patients;
-using BiobankApi.Web.Contracts;
 using BiobankApi.Web.Http;
+using BiobankApi.Web.Mapping;
 using Mediator;
 
 namespace BiobankApi.Web.Endpoints;
@@ -13,13 +13,7 @@ internal static class PatientEndpoints
         {
             var result = await sender.Send(new GetPatientsQuery(), cancellationToken);
             return result.Match(
-                patients => Results.Ok(patients
-                    .Select(patient => new PatientResponse(
-                        patient.Id.Value,
-                        patient.Samples
-                            .Select(sample => new SampleResponse(sample.Id.Value, sample.MaterialType))
-                            .ToList()))
-                    .ToList()),
+                patients => Results.Ok(patients.Select(PatientResponseMapper.ToResponse).ToList()),
                 ErrorResults.Problem);
         })
         .WithTags("patients");

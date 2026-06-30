@@ -25,5 +25,22 @@ jobs:
         run: dotnet format DataCatalogueUpload.slnx --verify-no-changes --no-restore
       - name: Build (warnings as errors)
         run: dotnet build DataCatalogueUpload.slnx --configuration Release --no-restore
-      - name: Test
-        run: dotnet test DataCatalogueUpload.slnx --configuration Release --no-build
+      - name: Test (with coverage)
+        run: >
+          dotnet test DataCatalogueUpload.slnx --configuration Release --no-build
+          --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Coverage summary
+        if: always()
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator -reports:"coverage/**/coverage.cobertura.xml" \
+            -targetdir:coverage/report \
+            -reporttypes:"MarkdownSummaryGithub;Html" \
+            -classfilters:"-Microsoft.*;-Mediator.*;-System.*;-*.Migrations.*;-*DbContextFactory"
+          cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/report

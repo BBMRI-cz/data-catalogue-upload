@@ -1,6 +1,7 @@
 using BiobankApi.Application.Abstractions.Export;
 using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Domain.Patients;
+using BiobankApi.Infrastructure.Mapping;
 using BiobankApi.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
