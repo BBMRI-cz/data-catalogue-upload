@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Uploader.Application.Abstractions;
 using Uploader.Domain.Common;
 using Uploader.Domain.Sync;
+using Uploader.Infrastructure.Mapping;
 using Uploader.Infrastructure.Persistence.Entities;
 
 namespace Uploader.Infrastructure.Persistence;
@@ -32,18 +33,18 @@ internal sealed class SyncStateRepository : ISyncStateRepository
             return PatientSyncStates.Empty();
         }
 
-        var samples = patient.Samples.Select(sample => SyncStateMapper.ToDomain(sample)).ToList();
+        var samples = patient.Samples.Select(sample => SampleSyncStateMapper.ToDomain(sample)).ToList();
         var sequencing = patient.Samples
             .Where(sample => sample.Sequencing is not null)
-            .Select(sample => SyncStateMapper.ToDomain(sample.Sequencing!)).ToList();
+            .Select(sample => SequencingSyncStateMapper.ToDomain(sample.Sequencing!)).ToList();
         var wsi = patient.Samples
             .Where(sample => sample.Wsi is not null)
-            .Select(sample => SyncStateMapper.ToDomain(sample.Wsi!)).ToList();
-        var imaging = patient.ImagingStudies.Select(study => SyncStateMapper.ToDomain(study)).ToList();
+            .Select(sample => WsiSyncStateMapper.ToDomain(sample.Wsi!)).ToList();
+        var imaging = patient.ImagingStudies.Select(study => ImagingStudySyncStateMapper.ToDomain(study)).ToList();
 
         return new PatientSyncStates
         {
-            Patient = SyncStateMapper.ToDomain(patient),
+            Patient = PatientSyncStateMapper.ToDomain(patient),
             Samples = samples.ToDictionary(state => state.Id),
             Sequencing = sequencing.ToDictionary(state => state.Id),
             Wsi = wsi.ToDictionary(state => state.Id),
@@ -151,7 +152,7 @@ internal sealed class SyncStateRepository : ISyncStateRepository
             }
 
             MarkOneDeleted(row, runId, now);
-            missing.Add(SyncStateMapper.ToDomain(row));
+            missing.Add(PatientSyncStateMapper.ToDomain(row));
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -178,7 +179,20 @@ internal sealed class SyncStateRepository : ISyncStateRepository
             applyKeys(entity);
         }
 
-        SyncStateMapper.ApplyToEntity(state, entity);
+        ApplyToEntity(state, entity);
+    }
+
+    // Copy the shared mutable tracking columns from a domain state onto an existing EF row.
+    private static void ApplyToEntity(ISyncState state, SyncStateEntityBase entity)
+    {
+        entity.SourceFingerprint = state.SourceFingerprint;
+        entity.CatalogueRemoteId = state.CatalogueRemoteId;
+        entity.Status = state.Status;
+        entity.IsDeleted = state.IsDeleted;
+        entity.LastSeenAt = state.LastSeenAt;
+        entity.LastSyncedAt = state.LastSyncedAt;
+        entity.LastError = state.LastError;
+        entity.RunId = state.RunId;
     }
 
     private static void MarkDeleted(IEnumerable<SyncStateEntityBase> entities, string runId, DateTimeOffset now)

@@ -59,11 +59,33 @@ public sealed class SyncStateRepositoryTests : IDisposable
         await repository.SaveAsync(
             Init(new PatientSyncState { Id = new PatientId("P1") }, "first"), CancellationToken.None);
 
+        // Re-save with every tracking column set, to cover the repository's in-place column copy.
+        var seenAt = new DateTimeOffset(2024, 5, 6, 7, 8, 9, TimeSpan.Zero);
+        var syncedAt = new DateTimeOffset(2024, 5, 6, 8, 0, 0, TimeSpan.Zero);
         await repository.SaveAsync(
-            Init(new PatientSyncState { Id = new PatientId("P1") }, "second"), CancellationToken.None);
+            new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = "second",
+                CatalogueRemoteId = "remote-9",
+                Status = SyncStatus.Failed,
+                IsDeleted = true,
+                LastSeenAt = seenAt,
+                LastSyncedAt = syncedAt,
+                LastError = "boom",
+                RunId = "run-9",
+            },
+            CancellationToken.None);
 
-        var states = await repository.GetAllForPatientAsync(new PatientId("P1"), CancellationToken.None);
-        Assert.Equal("second", states.Patient!.SourceFingerprint);
+        var patient = (await repository.GetAllForPatientAsync(new PatientId("P1"), CancellationToken.None)).Patient!;
+        Assert.Equal("second", patient.SourceFingerprint);
+        Assert.Equal("remote-9", patient.CatalogueRemoteId);
+        Assert.Equal(SyncStatus.Failed, patient.Status);
+        Assert.True(patient.IsDeleted);
+        Assert.Equal(seenAt, patient.LastSeenAt);
+        Assert.Equal(syncedAt, patient.LastSyncedAt);
+        Assert.Equal("boom", patient.LastError);
+        Assert.Equal("run-9", patient.RunId);
         Assert.Equal(1, await CountPatients(context));
     }
 
