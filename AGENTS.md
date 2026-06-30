@@ -82,6 +82,7 @@ dotnet test DataCatalogueUpload.slnx
 
 ## What to avoid
 
+- **Do not `git commit`, `git push`, or create branches/PRs without the user's explicit permission.** Make changes in the working tree and let the user review and commit.
 - Do not commit secrets or a real `.env`; configuration comes from environment variables.
 - Do not bypass the layers (no EF Core / `HttpClient` / `XmlReader` in `Application` or `Domain`).
 - Do not put NuGet versions on individual `PackageReference`s - use central package management.
