@@ -1,3 +1,4 @@
+using System.Linq;
 using BiobankApi.Domain.Common;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence.Entities;
@@ -47,12 +48,13 @@ internal static class PatientMapper
             }
         }
 
-        foreach (var specimen in patient.DiagnosticSpecimens)
-        {
-            var row = ToEntity(specimen);
-            row.PatientId = patientId;
-            entity.DiagnosticSpecimens.Add(row);
-        }
+        entity.DiagnosticSpecimens.AddRange(
+            patient.DiagnosticSpecimens.Select(specimen =>
+            {
+                var row = ToEntity(specimen);
+                row.PatientId = patientId;
+                return row;
+            }));
 
         return entity;
     }
