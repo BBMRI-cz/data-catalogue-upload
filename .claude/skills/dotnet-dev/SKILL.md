@@ -1,6 +1,6 @@
 ---
 name: dotnet-dev
-description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in either service (BiobankApi or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or Mapperly mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr validation, FluentValidation request validators, central package management, and the build/format/test loop.
+description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in either service (BiobankApi or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or hand-written mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr validation, FluentValidation request validators, central package management, and the build/format/test loop.
 ---
 
 # .NET development (data-catalogue-upload)
@@ -31,7 +31,7 @@ Per service, dependencies only point inward: `Web|Host -> Infrastructure -> Appl
 | Layer | Path (per service) | Put here | Never reference |
 |-------|--------------------|----------|-----------------|
 | Domain | `<Service>.Domain/` | Aggregates, value objects, invariants, domain services (uploader `FingerprintSyncPlanner`) | Application, Infrastructure, EF Core, `HttpClient`, `XmlReader` |
-| Application | `<Service>.Application/` | Mediator commands/queries + handlers (`Features/`), ports (`Abstractions/`), DTOs, Mapperly mappers (`Mapping/`), `Behaviors/` | concrete infrastructure types |
+| Application | `<Service>.Application/` | Mediator commands/queries + handlers (`Features/`), ports (`Abstractions/`), DTOs, hand-written mappers (`Mapping/`), `Behaviors/` | concrete infrastructure types |
 | Infrastructure | `<Service>.Infrastructure/` | EF Core `DbContext` + repositories (`Persistence/`), biobank `XmlValueReader`/parser (`Xml/`), uploader typed `HttpClient` gateways (`Http/`), `Configuration/` options | - |
 
 The host (`Web/Program.cs`, `Host/Program.cs`) is the **composition root** - the only place that wires
@@ -86,9 +86,12 @@ public interface IBiobankRepository
 }
 ```
 
-**Mapping is source-generated with Mapperly.** DTO -> domain (uploader `SourceMapper`) and domain <-> EF
-entity (`PatientMapper`, `SyncStateMapper`) use `[Mapper]` partial classes. Reconstitute aggregates through
-their internal constructor; don't re-run `Create` validation on data already persisted.
+**Mapping is hand-written.** DTO -> domain (uploader `SourceMapper`) and domain <-> EF entity
+(`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field
+copies. There is no source generator, so a dropped or mis-sourced field is **not** a compile error: keep the
+public mapper signatures stable and cover every field with a round-trip / record-equality test (see the
+`*MapperTests` / `*FieldParityTests`). Reconstitute aggregates through their internal constructor; don't
+re-run `Create` validation on data already persisted.
 
 **API endpoints are Minimal API.** An endpoint only builds a Command/Query, calls `ISender`, and maps the
 `ErrorOr` to HTTP via `ErrorResults`. No business logic in endpoints; JSON is snake_case (matches the

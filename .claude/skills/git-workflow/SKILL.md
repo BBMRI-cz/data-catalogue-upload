@@ -30,7 +30,7 @@ feat(uploader): add radiology imaging-study mapping
 fix(sync): count per-entity failures without aborting the run
 chore: bump EF Core to 10.0.9
 refactor(domain): reshape the biobank domain into DDD aggregates
-test(biobank-api): cover the Mapperly persistence mapper
+test(biobank-api): cover the hand-written persistence mapper
 docs: document required API URL env vars
 ```
 
