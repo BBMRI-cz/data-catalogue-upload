@@ -8,25 +8,28 @@ using Xunit;
 
 namespace SequencingApi.IntegrationTests;
 
-public sealed class ApiTests
+public sealed class ApiTests : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    private static HttpClient CreateClient()
-    {
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-            builder.UseSetting("DisableScheduler", "true"));
+    private static readonly WebApplicationFactory<Program> Factory = new WebApplicationFactory<Program>()
+        .WithWebHostBuilder(builder => builder.UseSetting("DisableScheduler", "true"));
 
-        return factory.CreateClient();
+    private static readonly HttpClient Client = Factory.CreateClient();
+
+    public void Dispose()
+    {
+        Client.Dispose();
+        Factory.Dispose();
     }
 
     [Fact]
     public async Task HealthReturnsOk()
     {
-        var response = await CreateClient().GetAsync("/health");
+        var response = await Client.GetAsync("/health");
 
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadFromJsonAsync<HealthResponse>(JsonOptions);
@@ -36,7 +39,7 @@ public sealed class ApiTests
     [Fact]
     public async Task IngestReturnsZeroCounts()
     {
-        var response = await CreateClient().PostAsync("/admin/ingest", content: null);
+        var response = await Client.PostAsync("/admin/ingest", content: null);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<IngestRecordsCommandResult>(JsonOptions);
