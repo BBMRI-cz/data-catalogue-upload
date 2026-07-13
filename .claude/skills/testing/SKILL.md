@@ -1,18 +1,20 @@
 ---
 name: testing
-description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the four test projects under tests/ - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the SourceMapper and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper) and the biobank API with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
+description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the test projects under tests/ (unit + integration per service) - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the SourceMapper and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper) and the API hosts with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
 ---
 
 # Testing (data-catalogue-upload)
 
-Tests live under `tests/`, split into four projects - two per service, **unit** and **integration**:
+Tests live under `tests/`, two projects per service - **unit** and **integration**:
 
 ```
 tests/
-├── BiobankApi.UnitTests          DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
-├── BiobankApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
-├── Uploader.UnitTests            FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
-└── Uploader.IntegrationTests     SyncStateRepositoryTests
+├── BiobankApi.UnitTests             DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
+├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
+├── SequencingApi.UnitTests          StubDataSourceTests (scaffold; grows with #30)
+├── SequencingApi.IntegrationTests   ApiTests (health + POST /admin/ingest over WebApplicationFactory)
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
+└── Uploader.IntegrationTests        SyncStateRepositoryTests
 ```
 
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /

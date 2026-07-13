@@ -1,9 +1,9 @@
 # Architecture Overview
 
-> This repository is a **.NET solution** (`DataCatalogueUpload.slnx`). The two services - the `uploader`
-> sync job and the `biobank_api` source API - live under `src/`. This document describes the
-> **uploader** and the end-to-end data flow; each service follows the same Clean Architecture layering.
-> See [`AGENTS.md`](AGENTS.md) for the solution layout.
+> This repository is a **.NET solution** (`DataCatalogueUpload.slnx`). The services - the `uploader`
+> sync job and the source APIs (`biobank_api`, plus the `sequencing_api` scaffold) - live under `src/`.
+> This document describes the **uploader** and the end-to-end data flow; each service follows the same
+> Clean Architecture layering. See [`AGENTS.md`](AGENTS.md) for the solution layout.
 
 The uploader synchronizes patient-related data from multiple source systems into the data catalogue.
 

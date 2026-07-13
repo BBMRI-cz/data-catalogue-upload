@@ -6,6 +6,12 @@
     <Project Path="src/BiobankApi/BiobankApi.Infrastructure/BiobankApi.Infrastructure.csproj" />
     <Project Path="src/BiobankApi/BiobankApi.Web/BiobankApi.Web.csproj" />
   </Folder>
+  <Folder Name="/src/SequencingApi/">
+    <Project Path="src/SequencingApi/SequencingApi.Application/SequencingApi.Application.csproj" />
+    <Project Path="src/SequencingApi/SequencingApi.Domain/SequencingApi.Domain.csproj" />
+    <Project Path="src/SequencingApi/SequencingApi.Infrastructure/SequencingApi.Infrastructure.csproj" />
+    <Project Path="src/SequencingApi/SequencingApi.Web/SequencingApi.Web.csproj" />
+  </Folder>
   <Folder Name="/src/Uploader/">
     <Project Path="src/Uploader/Uploader.Application/Uploader.Application.csproj" />
     <Project Path="src/Uploader/Uploader.Domain/Uploader.Domain.csproj" />
@@ -15,6 +21,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/BiobankApi.IntegrationTests/BiobankApi.IntegrationTests.csproj" />
     <Project Path="tests/BiobankApi.UnitTests/BiobankApi.UnitTests.csproj" />
+    <Project Path="tests/SequencingApi.IntegrationTests/SequencingApi.IntegrationTests.csproj" />
+    <Project Path="tests/SequencingApi.UnitTests/SequencingApi.UnitTests.csproj" />
     <Project Path="tests/Uploader.IntegrationTests/Uploader.IntegrationTests.csproj" />
     <Project Path="tests/Uploader.UnitTests/Uploader.UnitTests.csproj" />
   </Folder>

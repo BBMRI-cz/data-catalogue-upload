@@ -1,11 +1,11 @@
 ---
 name: dotnet-dev
-description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in either service (BiobankApi or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or hand-written mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr validation, FluentValidation request validators, central package management, and the build/format/test loop.
+description: Coding patterns and architecture rules for the data-catalogue-upload .NET solution. Use when writing or modifying C# under src/ in any service (BiobankApi, SequencingApi, or Uploader) - adding domain aggregates/value objects, application use cases (Mediator commands/queries) and ports, infrastructure adapters (EF Core repositories, the biobank XML reader, the uploader's typed HttpClient gateways), or hand-written mappers. Covers the solution layout, Clean Architecture layer boundaries, ErrorOr validation, FluentValidation request validators, central package management, and the build/format/test loop.
 ---
 
 # .NET development (data-catalogue-upload)
 
-One **.NET 10 solution** (`DataCatalogueUpload.slnx`) with two services under `src/`, each its own set of
+One **.NET 10 solution** (`DataCatalogueUpload.slnx`) with services under `src/`, each its own set of
 projects following **Clean Architecture + DDD**. Keep changes inside the right layer and the right service,
 and validate with `dotnet format` + `dotnet build` before finishing.
 
@@ -13,8 +13,9 @@ and validate with `dotnet format` + `dotnet build` before finishing.
 
 ```
 src/
-├── BiobankApi/   BiobankApi.{Domain,Application,Infrastructure,Web}
-└── Uploader/     Uploader.{Domain,Application,Infrastructure,Host}
+├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
+├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (scaffold - stub host, no domain/migration yet)
+└── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
 ```
 
 - **TFM `net10.0`**, nullable + implicit usings on, **warnings are errors** (set in `Directory.Build.props`).

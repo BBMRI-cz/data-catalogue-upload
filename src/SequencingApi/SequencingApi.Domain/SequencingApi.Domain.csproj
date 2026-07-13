@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SequencingApi.Domain</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The persistence mapper reconstitutes aggregates via their internal initializer. -->
+    <InternalsVisibleTo Include="SequencingApi.Infrastructure" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ErrorOr" />
+  </ItemGroup>
+
+</Project>

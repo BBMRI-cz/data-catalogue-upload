@@ -50,6 +50,40 @@ services:
     volumes:
       - /home/mou/patient_data:/data/exports:ro
 
+  # --- sequencing_api: its own PostgreSQL + server + (profiled) ingestion ---
+  sequencing-db:
+    image: postgres:16
+    container_name: sequencing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+    ports:
+      - "5434:5432"
+    volumes:
+      - sequencing_db_data:/var/lib/postgresql/data
+
+  sequencing-api:
+    build:
+      context: .
+      dockerfile: src/SequencingApi/SequencingApi.Web/Dockerfile
+    container_name: sequencing-api
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: sequencing-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+      ASPNETCORE_URLS: http://+:8002
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      - sequencing-db
+    ports:
+      - "8002:8002"
+
 volumes:
   uploader_db_data:
   biobank_db_data:
+  sequencing_db_data:
