@@ -39,3 +39,7 @@ dotnet run --project src/Uploader/Uploader.Host
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
 design, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
