@@ -52,9 +52,10 @@ added to the project board.
 
 ## Project board
 
-Every **issue** must be added to the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No
-Status** (cleared - the default for newly added items), **Category = Data catalogue**, and assigned to
-`mf-16`. PRs are intentionally excluded from the board (assignee only - see above) to keep the table readable.
+Every **issue** must be on the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No Status**
+(cleared), **Category = Data catalogue**, and assigned to `mf-16`. A project workflow auto-adds new issues to
+the board (see below), so the task is to fix the auto-added item's fields, not to add it. PRs are intentionally
+excluded from the board (assignee only - see above) to keep the table readable.
 
 Reference IDs (org `BBMRI-cz`, project number `3`):
 
@@ -74,25 +75,27 @@ gh auth refresh -s read:project,project --hostname github.com
 
 ### Adding an issue to the board
 
-After creating the issue (always with `--assignee mf-16`), add it to the board, leave Status as **No Status**,
-and set Category:
+A project **auto-add workflow already puts every new issue on the board** (usually with a wrong/blank Category
+and Status = `Todo`). So do **not** run `gh project item-add` — it creates a *duplicate* board item. Instead,
+after creating the issue (always with `--assignee mf-16`), find the item the workflow added and fix its fields:
 
 ```bash
-# 1. Add the issue to the project; capture the returned item id
-ITEM_ID=$(gh project item-add 3 --owner BBMRI-cz --url <issue-url> --format json -q .id)
+# 1. Find the board item id for the issue (item-list defaults to 30 rows - always pass --limit).
+#    The auto-add can lag a few seconds after issue creation.
+ITEM_ID=$(gh project item-list 3 --owner BBMRI-cz --limit 500 --format json \
+  -q ".items[] | select(.content.number==<issue-number>) | .id")
 
-# 2. Status = No Status. Newly added items default to No Status, so nothing to
-#    set. If an item already has a status, clear it back to No Status with:
-#    gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
-#      --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg --clear
+# 2. Category = Data catalogue
+gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
+  --field-id PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ --single-select-option-id d9fce010
 
-# 3. Category = Data catalogue
-gh project item-edit \
-  --project-id PVT_kwDOBuSb9M4AbC0J \
-  --id "$ITEM_ID" \
-  --field-id PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ \
-  --single-select-option-id d9fce010
+# 3. Status = No Status (auto-added items default to Todo, so clear it)
+gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
+  --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg --clear
 ```
+
+If you already ran `item-add` and created duplicates, delete the extra item(s) with
+`gh project item-delete 3 --owner BBMRI-cz --id <item-id>` so exactly one remains per issue.
 
 ## Issues
 
