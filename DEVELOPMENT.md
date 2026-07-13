@@ -28,16 +28,21 @@ docker compose -f compose.prod.yml up -d uploader-db biobank-db
 
 - `uploader-db` -> `localhost:5432`, database `data_catalogue_upload`
 - `biobank-db` -> `localhost:5433`, database `biobank_api`
+- `sequencing-db` -> `localhost:5434`, database `sequencing_api`
 
 Both default to `postgres` / `postgres`.
 
 ## Configuration
 
 Configuration is read from **environment variables** (no `.env` files are tracked). Defaults in
-`BiobankOptions` / `UploaderOptions` match the Docker databases above.
+`BiobankOptions` / `SequencingOptions` / `UploaderOptions` match the Docker databases above.
 
 **biobank_api:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `BIOBANK_HOST|PORT`, `BIOBANK_XML_EXPORT_PATH`.
 For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
+
+**sequencing_api** (scaffold): `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `SEQUENCING_HOST|PORT`,
+`SEQUENCING_DATA_PATH`, `SEQUENCING_INGEST_CRON`. For local runs against `sequencing-db`, set
+`POSTGRES_PORT=5434`.
 
 **uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
 `BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`.
@@ -61,8 +66,11 @@ dotnet ef migrations add <Name> \
   --output-dir Persistence/Migrations
 ```
 
-At runtime the **uploader** applies migrations on startup; the **biobank_api** applies them when
-`RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).
+The **sequencing_api** has no entities yet (#30); the same commands with its `SequencingApi` paths
+apply once it does.
+
+At runtime the **uploader** applies migrations on startup; the **biobank_api** and **sequencing_api**
+apply them when `RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).
 
 ## Running the services
 
@@ -73,6 +81,10 @@ RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/Bioba
 # trigger biobank ingestion on the running API (also runs weekly via Quartz)
 curl -X POST http://localhost:8001/admin/ingest
 
+# sequencing API server (scaffold; http://localhost:8002)
+RUN_MIGRATIONS=true POSTGRES_PORT=5434 dotnet run --project src/SequencingApi/SequencingApi.Web
+curl -X POST http://localhost:8002/admin/ingest    # {"ingested":0,"failed":0,"errors":[]}
+
 # uploader sync job (prints a JSON summary; exit 0 = no failures, 1 = failures)
 dotnet run --project src/Uploader/Uploader.Host
 ```
@@ -80,8 +92,8 @@ dotnet run --project src/Uploader/Uploader.Host
 ## Tests
 
 - `*.UnitTests` - pure tests (domain services, planner, builders, handlers with fakes).
-- `*.IntegrationTests` - EF Core against in-memory SQLite via the `SqliteDatabase` helper; the biobank
-  API is exercised end-to-end with `WebApplicationFactory<Program>`.
+- `*.IntegrationTests` - EF Core against in-memory SQLite via the `SqliteDatabase` helper; the API
+  hosts are exercised end-to-end with `WebApplicationFactory<Program>`.
 
 ```bash
 dotnet test DataCatalogueUpload.slnx                                  # everything
@@ -91,7 +103,7 @@ dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 ## Containers
 
 ```bash
-docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api
+docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api + sequencing-api
 curl -X POST http://localhost:8001/admin/ingest                 # ingest on demand
 ```
 

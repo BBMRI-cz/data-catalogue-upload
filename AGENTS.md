@@ -4,10 +4,11 @@ Guidance for AI coding agents (primarily Claude Code) working in this repository
 
 ## Project
 
-`data-catalogue-upload` is a **.NET solution** for the data-catalogue sync system. The solution is `DataCatalogueUpload.slnx` at the repo root. The two services:
+`data-catalogue-upload` is a **.NET solution** for the data-catalogue sync system. The solution is `DataCatalogueUpload.slnx` at the repo root. The services:
 
 - **uploader** (`src/Uploader`) - a scheduled, one-shot sync job. For each patient it reads from four source APIs (biobank, radiology, sequencing, WSI), aggregates the data into one FAIR Genomes-shaped patient record, compares it against fingerprints stored in PostgreSQL, and upserts/deletes records in a central data catalogue API.
 - **biobank_api** (`src/BiobankApi`) - a source API service that parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes.
+- **sequencing_api** (`src/SequencingApi`) - source API service for sequencing data. Currently a **scaffold** (host + stub ingestion; no domain aggregate or EF migration yet - those land with #30). Same layering and in-process Quartz ingestion as biobank_api.
 
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data flow and layering, and [`DEVELOPMENT.md`](DEVELOPMENT.md) for setup and local run instructions.
 
@@ -20,10 +21,12 @@ Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data flow and layering, and [`
 ```
 DataCatalogueUpload.slnx  Directory.Build.props  Directory.Packages.props  global.json
 src/
-├── BiobankApi/   BiobankApi.{Domain,Application,Infrastructure,Web}
-└── Uploader/     Uploader.{Domain,Application,Infrastructure,Host}
+├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
+├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}
+└── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
 tests/
 ├── BiobankApi.{UnitTests,IntegrationTests}
+├── SequencingApi.{UnitTests,IntegrationTests}
 └── Uploader.{UnitTests,IntegrationTests}
 ```
 
@@ -40,6 +43,10 @@ Dependency direction per service: `Web`/`Host` -> `Infrastructure` -> `Applicati
 ## biobank_api
 
 EF Core (Npgsql) + LINQ-to-XML (`System.Xml.Linq`). Domain `PatientAggregate` with `TissueSample`/`SerumSample`/`GenomeSample` and `DiagnosticSpecimen`; invariants enforced by `Create(...)` factories returning `ErrorOr`. Ingestion reads exports behind the `IPatientExportSource` port (`XmlExportParser` discovers files, the pure `XmlPatientReader` maps each `<patient>`); there is exactly one source per biobank, and the handler reads it and reports invalid records in an `IngestExportsCommandResult`. The Application ports live in subfolders: `Abstractions/Export/` (`IPatientExportSource`, `ExportParseResult`, `ExportParseError`) and `Abstractions/Repositories/` (`IBiobankRepository`). CQRS: `GetPatientsQuery`, `IngestExportsCommand`. Host `BiobankApi.Web` runs the Minimal API and a **weekly Quartz job** (`IngestionJob`) that dispatches `IngestExportsCommand`; ingestion can also be triggered on demand via `POST /admin/ingest`. Config via env vars (`POSTGRES_*`, `BIOBANK_*` incl. `BIOBANK_INGEST_CRON` for the schedule); see `BiobankOptions`.
+
+## sequencing_api
+
+**Scaffold** mirroring biobank_api (host + stub ingestion; the sequencing domain, repository and first EF migration land with #30). Domain has only the `Common/` base types. Ingestion reads the `ISequencingDataSource` port (`Abstractions/DataSource/`); the current `StubSequencingDataSource` reports zero records so `IngestRecordsCommand` runs end-to-end. Host `SequencingApi.Web` runs the Minimal API (`GET /health`, `POST /admin/ingest`) and a **weekly Quartz job** (`IngestionJob`). Config via env vars (`POSTGRES_*`, `SEQUENCING_*` incl. `SEQUENCING_INGEST_CRON`); see `SequencingOptions`. Search for `ponytail:` to find the spots to fill in.
 
 ## uploader
 
@@ -58,6 +65,7 @@ dotnet format DataCatalogueUpload.slnx --verify-no-changes   # lint/format (drop
 # EF Core migrations
 dotnet ef migrations add <Name> --project src/BiobankApi/BiobankApi.Infrastructure --startup-project src/BiobankApi/BiobankApi.Web -o Persistence/Migrations
 dotnet ef migrations add <Name> --project src/Uploader/Uploader.Infrastructure   --startup-project src/Uploader/Uploader.Host    -o Persistence/Migrations
+# sequencing_api has no entities yet (#30); once it does, the same command with SequencingApi paths applies.
 ```
 
 ## Conventions
@@ -87,4 +95,4 @@ dotnet test DataCatalogueUpload.slnx
 - Do not bypass the layers (no EF Core / `HttpClient` / `XmlReader` in `Application` or `Domain`).
 - Do not put NuGet versions on individual `PackageReference`s - use central package management.
 - Do not loosen analyzer/format settings to silence errors; fix the code instead.
-- Do not introduce a shared project between the two services - keep their domains decoupled.
+- Do not introduce a shared project between the services - keep their domains decoupled.

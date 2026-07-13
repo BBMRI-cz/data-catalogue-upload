@@ -7,6 +7,7 @@ services it reads from. The solution is [`DataCatalogueUpload.slnx`](DataCatalog
 |---------|----------|------------|
 | uploader | [`src/Uploader`](src/Uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and upserts it into the data catalogue. |
 | biobank_api | [`src/BiobankApi`](src/BiobankApi) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
+| sequencing_api | [`src/SequencingApi`](src/SequencingApi) | Source API service for sequencing data (scaffold — domain and endpoints land with #30). Same Clean Architecture layering and in-process Quartz ingestion as biobank_api. |
 
 Each service is its own set of projects (Domain / Application / Infrastructure / host) following
 **Clean Architecture + DDD**: a rich domain with aggregates and domain services that enforce their
