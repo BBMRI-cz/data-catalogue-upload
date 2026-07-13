@@ -53,9 +53,18 @@ added to the project board.
 ## Project board
 
 Every **issue** must be on the **BBMRI-IT coordination** project (org `BBMRI-cz`) with **Status = No Status**
-(cleared), **Category = Data catalogue**, and assigned to `mf-16`. A project workflow auto-adds new issues to
-the board (see below), so the task is to fix the auto-added item's fields, not to add it. PRs are intentionally
-excluded from the board (assignee only - see above) to keep the table readable.
+(cleared), **Category = Data catalogue**, and assigned to `mf-16`. A project workflow is *supposed* to auto-add
+new issues, but it is **unreliable/laggy** - issues have been left off the board entirely. So **add the issue
+yourself, idempotently**: check whether it is already on the board, add it only if missing, then fix the fields
+and delete any duplicates (see below). PRs are intentionally excluded from the board (assignee only - see above)
+to keep the table readable.
+
+> **Rate-limit caution.** `gh project item-list` / `item-add` / `item-edit` use the **GraphQL** API (5000
+> points/hour, separate from REST). Do **not** poll `item-list` in a tight loop - one background poll every few
+> seconds will exhaust the hour's GraphQL budget and every `gh project` call then fails with the misleading
+> error `unknown owner type`. Check board state with a **single** `item-list` call (it returns all items); if you
+> must wait for the auto-add, sleep 20-30s between checks, not seconds. Verify the budget with
+> `gh api rate_limit --jq '.resources.graphql'`.
 
 Reference IDs (org `BBMRI-cz`, project number `3`):
 
@@ -75,27 +84,39 @@ gh auth refresh -s read:project,project --hostname github.com
 
 ### Adding an issue to the board
 
-A project **auto-add workflow already puts every new issue on the board** (usually with a wrong/blank Category
-and Status = `Todo`). So do **not** run `gh project item-add` — it creates a *duplicate* board item. Instead,
-after creating the issue (always with `--assignee mf-16`), find the item the workflow added and fix its fields:
+Do this **once per issue**, after creating it with `--assignee mf-16`. It is idempotent - safe whether or not the
+flaky auto-add workflow already fired.
+
+> **Filter by repository, not just number.** This project aggregates issues from **many** repos, so
+> `select(.content.number==61)` alone matches unrelated issues that happen to be `#61` elsewhere. Always also
+> match `.content.repository=="BBMRI-cz/data-catalogue-upload"`.
 
 ```bash
-# 1. Find the board item id for the issue (item-list defaults to 30 rows - always pass --limit).
-#    The auto-add can lag a few seconds after issue creation.
-ITEM_ID=$(gh project item-list 3 --owner BBMRI-cz --limit 500 --format json \
-  -q ".items[] | select(.content.number==<issue-number>) | .id")
+ISSUE=<issue-number>
 
-# 2. Category = Data catalogue
+# 1. Single list call. Find any existing board items for THIS repo's issue (repo + number).
+ITEMS=$(gh project item-list 3 --owner BBMRI-cz --limit 500 --format json \
+  -q ".items[] | select(.content.repository==\"BBMRI-cz/data-catalogue-upload\" and .content.number==$ISSUE) | .id")
+
+# 2. If none, add it. If one or more already exist (auto-add fired), keep the first, delete the rest.
+if [ -z "$ITEMS" ]; then
+  ITEM_ID=$(gh project item-add 3 --owner BBMRI-cz \
+    --url "https://github.com/BBMRI-cz/data-catalogue-upload/issues/$ISSUE" --format json -q .id)
+else
+  ITEM_ID=$(echo "$ITEMS" | head -1)
+  echo "$ITEMS" | tail -n +2 | while read -r dup; do
+    gh project item-delete 3 --owner BBMRI-cz --id "$dup"   # remove duplicates
+  done
+fi
+
+# 3. Category = Data catalogue
 gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
   --field-id PVTSSF_lADOBuSb9M4AbC0Jzg3LQOQ --single-select-option-id d9fce010
 
-# 3. Status = No Status (auto-added items default to Todo, so clear it)
+# 4. Status = No Status (clear it; auto-added items default to Todo)
 gh project item-edit --project-id PVT_kwDOBuSb9M4AbC0J --id "$ITEM_ID" \
   --field-id PVTSSF_lADOBuSb9M4AbC0JzgRYUBg --clear
 ```
-
-If you already ran `item-add` and created duplicates, delete the extra item(s) with
-`gh project item-delete 3 --owner BBMRI-cz --id <item-id>` so exactly one remains per issue.
 
 ## Issues
 
