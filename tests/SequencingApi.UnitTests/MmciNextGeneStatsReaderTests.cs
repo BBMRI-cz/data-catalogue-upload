@@ -1,3 +1,5 @@
+using ErrorOr;
+using SequencingApi.Domain;
 using SequencingApi.Infrastructure.DataSource.Mmci;
 using Xunit;
 
@@ -34,14 +36,23 @@ public sealed class MmciNextGeneStatsReaderTests
         Ts/Tv Ratio: 2,1
         """;
 
+    /// <summary>
+    /// Unwrap a parse that is expected to have produced metrics, failing the test if it produced
+    /// none or an error. Keeps the assertions below reading as assertions rather than as a chain of
+    /// nullable and ErrorOr unwrapping.
+    /// </summary>
+    private static QualityMetrics Parsed(ErrorOr<QualityMetrics>? metrics)
+    {
+        Assert.NotNull(metrics);
+        var result = metrics.Value;
+        Assert.False(result.IsError);
+        return result.Value;
+    }
+
     [Fact]
     public void ReadsTheCommaDecimalNumbersFromAllThreeReports()
     {
-        var metrics = MmciNextGeneStatsReader.Read(StatInfo, Coverage, Mutations);
-
-        Assert.NotNull(metrics);
-        Assert.False(metrics!.Value.IsError);
-        var quality = metrics.Value.Value;
+        var quality = Parsed(MmciNextGeneStatsReader.Read(StatInfo, Coverage, Mutations));
 
         Assert.Equal(812.5, quality.AverageCoverage);
         Assert.Equal(97.25, quality.PctTargetOver100x);
@@ -58,7 +69,7 @@ public sealed class MmciNextGeneStatsReaderTests
     [Fact]
     public void DerivesTheOnTargetRateFromReadsOnTarget()
     {
-        var quality = MmciNextGeneStatsReader.Read(null, Coverage, null)!.Value.Value;
+        var quality = Parsed(MmciNextGeneStatsReader.Read(null, Coverage, null));
 
         Assert.Equal(92.5, quality.OnTargetRatePercent);
     }
@@ -66,7 +77,7 @@ public sealed class MmciNextGeneStatsReaderTests
     [Fact]
     public void LeavesTheVerdictUnsetBecauseNoSourceStatesOne()
     {
-        var quality = MmciNextGeneStatsReader.Read(StatInfo, Coverage, Mutations)!.Value.Value;
+        var quality = Parsed(MmciNextGeneStatsReader.Read(StatInfo, Coverage, Mutations));
 
         // The domain stores a verdict someone else reached; the thresholds are configuration.
         Assert.Null(quality.Verdict);
@@ -75,7 +86,7 @@ public sealed class MmciNextGeneStatsReaderTests
     [Fact]
     public void MissingKeysBecomeNullsRatherThanZeroes()
     {
-        var quality = MmciNextGeneStatsReader.Read(null, "Average Coverage: 500", null)!.Value.Value;
+        var quality = Parsed(MmciNextGeneStatsReader.Read(null, "Average Coverage: 500", null));
 
         Assert.Equal(500d, quality.AverageCoverage);
         Assert.Null(quality.TotalReads);
@@ -87,7 +98,7 @@ public sealed class MmciNextGeneStatsReaderTests
     public void KeySpellingDriftIsAbsorbed()
     {
         // Case, spaces and underscores in these key names have all varied between pipeline versions.
-        var quality = MmciNextGeneStatsReader.Read(null, "average_coverage: 700\nTOTAL READS: 10", null)!.Value.Value;
+        var quality = Parsed(MmciNextGeneStatsReader.Read(null, "average_coverage: 700\nTOTAL READS: 10", null));
 
         Assert.Equal(700d, quality.AverageCoverage);
         Assert.Equal(10L, quality.TotalReads);
@@ -100,7 +111,7 @@ public sealed class MmciNextGeneStatsReaderTests
         var metrics = MmciNextGeneStatsReader.Read(null, "Total Reads: 100\nAligned Reads: 200", null);
 
         Assert.NotNull(metrics);
-        Assert.True(metrics!.Value.IsError);
+        Assert.True(metrics.Value.IsError);
     }
 
     [Fact]
