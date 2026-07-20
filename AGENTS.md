@@ -8,7 +8,7 @@ Guidance for AI coding agents (primarily Claude Code) working in this repository
 
 - **uploader** (`src/Uploader`) - a scheduled, one-shot sync job. For each patient it reads from four source APIs (biobank, radiology, sequencing, WSI), aggregates the data into one FAIR Genomes-shaped patient record, compares it against fingerprints stored in PostgreSQL, and upserts/deletes records in a central data catalogue API.
 - **biobank_api** (`src/BiobankApi`) - a source API service that parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes.
-- **sequencing_api** (`src/SequencingApi`) - source API service for sequencing data. Currently a **scaffold** (host + stub ingestion; no domain aggregate or EF migration yet - those land with #30). Same layering and in-process Quartz ingestion as biobank_api.
+- **sequencing_api** (`src/SequencingApi`) - source API service for sequencing data. Domain model landed (#54); ingestion is still stubbed and there is no repository or EF migration yet (those land with #55/#56). Same layering and in-process Quartz ingestion as biobank_api.
 
 Read [`ARCHITECTURE.md`](ARCHITECTURE.md) for the data flow and layering, and [`DEVELOPMENT.md`](DEVELOPMENT.md) for setup and local run instructions.
 
@@ -34,7 +34,7 @@ Dependency direction per service: `Web`/`Host` -> `Infrastructure` -> `Applicati
 
 ## Architecture (both services)
 
-- **Clean Architecture + DDD.** Domain holds aggregates (`PatientAggregate` in both services), value objects, and invariants. The uploader adds the domain service `ISyncPlanner` (`FingerprintSyncPlanner`); change detection is aggregate behaviour (`ComputeFingerprint()` over `Fingerprint.Of(...)`). The biobank has no domain service - XML text cleaning lives in infrastructure (`XmlValueReader`). Domain has no I/O and no framework dependencies.
+- **Clean Architecture + DDD.** Domain holds aggregates (`PatientAggregate` in biobank_api and the uploader; `SampleAggregate`/`SequencingRunAggregate`/`PanelAggregate` in sequencing_api), value objects, and invariants. The uploader adds the domain service `ISyncPlanner` (`FingerprintSyncPlanner`); change detection is aggregate behaviour (`ComputeFingerprint()` over `Fingerprint.Of(...)`). The biobank has no domain service - XML text cleaning lives in infrastructure (`XmlValueReader`). Domain has no I/O and no framework dependencies.
 - **CQRS via Mediator.** Every use case is a `Command`/`Query` with a handler in `*.Application/Features/...`, dispatched through the free `Mediator` source generator (`ISender`). Handlers return `ErrorOr<T>`. A non-trivial result type is named after its request - `<Command>Result` (e.g. `RunCatalogueSyncCommandResult`, `IngestExportsCommandResult`) - in the same `Features/` folder.
 - **Pipeline behaviors** (`*.Application/Behaviors`): `LoggingBehavior` wraps each request; `ValidationBehavior` runs any FluentValidation `AbstractValidator<TCommand>` (auto-registered via `AddValidatorsFromAssembly`) and short-circuits to an `ErrorOr` validation error before the handler. Application-level request validation lives here; domain invariants stay in the aggregate `Create(...)` factories. (Current commands are parameterless, so no validators exist yet.)
 - **Ports are interfaces** in `*.Application/Abstractions`, implemented in `*.Infrastructure` (EF Core repositories, the biobank XML parser, the uploader's typed `HttpClient` gateways).
@@ -46,7 +46,7 @@ EF Core (Npgsql) + LINQ-to-XML (`System.Xml.Linq`). Domain `PatientAggregate` wi
 
 ## sequencing_api
 
-**Scaffold** mirroring biobank_api (host + stub ingestion; the sequencing domain, repository and first EF migration land with #30). Domain has only the `Common/` base types. Ingestion reads the `ISequencingDataSource` port (`Abstractions/DataSource/`); the current `StubSequencingDataSource` reports zero records so `IngestRecordsCommand` runs end-to-end. Host `SequencingApi.Web` runs the Minimal API (`GET /health`, `POST /admin/ingest`) and a **weekly Quartz job** (`IngestionJob`). Config via env vars (`POSTGRES_*`, `SEQUENCING_*` incl. `SEQUENCING_INGEST_CRON`); see `SequencingOptions`. Search for `ponytail:` to find the spots to fill in.
+Mirrors biobank_api (host + stub ingestion; the repository and first EF migration land with #55). Domain is a biobank-agnostic sequencing model derived from [`docs/sequencing-data-report.md`](docs/sequencing-data-report.md) §4, with **three aggregate roots**: `SampleAggregate` (`Samples/`, keyed by an opaque `external_id` + `IdScheme`, owning `RunSample` -> `LibraryPreparation`/`SequencingFile`/`Analysis`), `SequencingRunAggregate` (`Runs/`, + `ReadDefinition`) and `PanelAggregate` (`Panels/`). Runs and panels are shared by many samples, so they are referenced by id, never embedded. `QualityMetrics` and the enums (`SampleType`, `FileRole`, `AnalysisType`, `QualityVerdict`) sit at the Domain root. **Individual variant records are deliberately not modelled** - the catalogue consumes none of them; analyses reference their calls as files (`FileRole.Vcf`/`VariantReport`) and summarise them in `QualityMetrics`. **`QualityMetrics` attaches to `Analysis` only** - every metric in it is computed by the pipeline, so the run carries a plain `PercentageQ30` instead and `RunSample` carries no quality at all. Invariants **and value cleaning** live in the `Create(...)` factories via the internal `Common/Normalize` helper (trim/collapse/case-fold/symbol lists); source decoding - text encoding, decimal commas, panel alias matching - stays in Infrastructure. Ingestion reads the `ISequencingDataSource` port (`Abstractions/DataSource/`); the current `StubSequencingDataSource` reports zero records so `IngestRecordsCommand` runs end-to-end. Host `SequencingApi.Web` runs the Minimal API (`GET /health`, `POST /admin/ingest`) and a **weekly Quartz job** (`IngestionJob`). Config via env vars (`POSTGRES_*`, `SEQUENCING_*` incl. `SEQUENCING_INGEST_CRON`); see `SequencingOptions`. Search for `ponytail:` to find the remaining spots to fill in.
 
 ## uploader
 
@@ -65,7 +65,7 @@ dotnet format DataCatalogueUpload.slnx --verify-no-changes   # lint/format (drop
 # EF Core migrations
 dotnet ef migrations add <Name> --project src/BiobankApi/BiobankApi.Infrastructure --startup-project src/BiobankApi/BiobankApi.Web -o Persistence/Migrations
 dotnet ef migrations add <Name> --project src/Uploader/Uploader.Infrastructure   --startup-project src/Uploader/Uploader.Host    -o Persistence/Migrations
-# sequencing_api has no entities yet (#30); once it does, the same command with SequencingApi paths applies.
+# sequencing_api has a domain model but no EF entities yet (#55); once it does, the same command with SequencingApi paths applies.
 ```
 
 ## Conventions
