@@ -16,7 +16,21 @@ public sealed class SequencingOptions
     public int PostgresPort { get; init; } = 5434;
     public string SequencingHost { get; init; } = "0.0.0.0";
     public int SequencingPort { get; init; } = 8002;
-    public string SequencingDataPath { get; init; } = "data/records";
+
+    /// <summary>Root of the organised sequencing run tree — the primary data source.</summary>
+    public string SequencingDataPath { get; init; } = "data/organised-runs";
+
+    /// <summary>
+    /// Directory holding the versioned libraries table and its BED files. Separate from the run tree
+    /// because it is maintained by hand, outside the sequencing pipeline that produces the runs.
+    /// </summary>
+    public string SequencingLibrariesPath { get; init; } = "data/libraries";
+
+    /// <summary>
+    /// Directory holding the pseudonymizer's mapping files. Only the predictive-number mapping is
+    /// read; the patient and sample mappings beside it are out of this service's scope.
+    /// </summary>
+    public string SequencingMappingTablePath { get; init; } = "data/mapping-table";
 
     public string ConnectionString =>
         $"Host={PostgresHost};Port={PostgresPort};Database={PostgresDb};Username={PostgresUser};Password={PostgresPassword}";
@@ -34,6 +48,9 @@ public sealed class SequencingOptions
             SequencingHost = configuration["SEQUENCING_HOST"] ?? defaults.SequencingHost,
             SequencingPort = ParseInt(configuration["SEQUENCING_PORT"], defaults.SequencingPort),
             SequencingDataPath = configuration["SEQUENCING_DATA_PATH"] ?? defaults.SequencingDataPath,
+            SequencingLibrariesPath = configuration["SEQUENCING_LIBRARIES_PATH"] ?? defaults.SequencingLibrariesPath,
+            SequencingMappingTablePath =
+                configuration["SEQUENCING_MAPPING_TABLE_PATH"] ?? defaults.SequencingMappingTablePath,
         };
     }
 
