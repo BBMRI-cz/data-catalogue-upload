@@ -73,14 +73,15 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
         // under two different subtype folders. Without this guard the duplicate would be stored
         // twice and RunSample's run-scoped identity would stop being unique inside the aggregate.
         var seenRunIds = new HashSet<SequencingRunId>();
-        foreach (var runSample in resolvedRunSamples)
+        var duplicateRunSample = resolvedRunSamples
+            .Where(runSample => !seenRunIds.Add(runSample.RunId))
+            .FirstOrDefault();
+
+        if (duplicateRunSample is not null)
         {
-            if (!seenRunIds.Add(runSample.RunId))
-            {
-                return Error.Validation(
-                    "Sample.RunSamples",
-                    $"duplicate run_id in sample runs: {runSample.RunId}");
-            }
+            return Error.Validation(
+                "Sample.RunSamples",
+                $"duplicate run_id in sample runs: {duplicateRunSample.RunId}");
         }
 
         return new SampleAggregate
