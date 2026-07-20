@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BiobankApi.Infrastructure.Persistence;
 
-/// <summary>EF Core implementation of <see cref="IBiobankRepository"/>.</summary>
-internal sealed class SqlBiobankRepository : IBiobankRepository
+/// <summary>EF Core implementation of <see cref="IPatientRepository"/>.</summary>
+internal sealed class SqlPatientRepository : IPatientRepository
 {
     // Patients saved per transaction. The tuning knob: larger = fewer round-trips, more memory held
     // by the change tracker before each Clear().
@@ -16,7 +16,7 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
 
     private readonly BiobankDbContext _context;
 
-    public SqlBiobankRepository(BiobankDbContext context) => _context = context;
+    public SqlPatientRepository(BiobankDbContext context) => _context = context;
 
     public async Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken)
     {
@@ -43,7 +43,10 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
             {
                 await SaveBatchAsync(batch, cancellationToken);
             }
-            catch (Exception)
+            // Deliberately broad - whatever went wrong with one record must not abort the run - but
+            // never cancellation: that is the caller stopping us, not a bad record, and swallowing
+            // it would turn a cancelled run into a list of bogus per-record failures.
+            catch (Exception batchException) when (batchException is not OperationCanceledException)
             {
                 // The batch transaction failed; isolate the offender by retrying one at a time so
                 // the rest of the batch still persists and the bad record is reported, not fatal.
@@ -54,7 +57,7 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
                     {
                         await SaveBatchAsync([patient], cancellationToken);
                     }
-                    catch (Exception exception)
+                    catch (Exception exception) when (exception is not OperationCanceledException)
                     {
                         _context.ChangeTracker.Clear();
                         failures.Add(new ExportParseError("persistence", patient.Id.Value, exception.Message));

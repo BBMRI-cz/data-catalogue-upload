@@ -59,15 +59,18 @@ dotnet ef database update \
   --project src/BiobankApi/BiobankApi.Infrastructure \
   --startup-project src/BiobankApi/BiobankApi.Web
 
+# sequencing_api (swap the project/startup paths)
+dotnet ef migrations add <Name> \
+  --project src/SequencingApi/SequencingApi.Infrastructure \
+  --startup-project src/SequencingApi/SequencingApi.Web \
+  --output-dir Persistence/Migrations
+
 # uploader (swap the project/startup paths)
 dotnet ef migrations add <Name> \
   --project src/Uploader/Uploader.Infrastructure \
   --startup-project src/Uploader/Uploader.Host \
   --output-dir Persistence/Migrations
 ```
-
-The **sequencing_api** has a domain model but no EF entities yet (#55); the same commands with its
-`SequencingApi` paths apply once it does.
 
 At runtime the **uploader** applies migrations on startup; the **biobank_api** and **sequencing_api**
 apply them when `RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).

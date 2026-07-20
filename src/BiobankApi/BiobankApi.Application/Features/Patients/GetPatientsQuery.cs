@@ -11,9 +11,9 @@ public sealed record GetPatientsQuery : IQuery<ErrorOr<IReadOnlyList<PatientAggr
 internal sealed class GetPatientsQueryHandler
     : IQueryHandler<GetPatientsQuery, ErrorOr<IReadOnlyList<PatientAggregate>>>
 {
-    private readonly IBiobankRepository _repository;
+    private readonly IPatientRepository _repository;
 
-    public GetPatientsQueryHandler(IBiobankRepository repository) => _repository = repository;
+    public GetPatientsQueryHandler(IPatientRepository repository) => _repository = repository;
 
     public async ValueTask<ErrorOr<IReadOnlyList<PatientAggregate>>> Handle(
         GetPatientsQuery query,

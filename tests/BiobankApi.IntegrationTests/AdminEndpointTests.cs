@@ -37,8 +37,8 @@ public sealed class AdminEndpointTests
             {
                 services.RemoveAll<IPatientExportSource>();
                 services.AddSingleton<IPatientExportSource>(source);
-                services.RemoveAll<IBiobankRepository>();
-                services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository([]));
+                services.RemoveAll<IPatientRepository>();
+                services.AddScoped<IPatientRepository>(_ => new FakePatientRepository([]));
             });
         });
 
