@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SequencingApi.Application.Abstractions.DataSource;
+using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Infrastructure.Configuration;
 using SequencingApi.Infrastructure.DataSource;
 using SequencingApi.Infrastructure.Persistence;
@@ -19,6 +20,12 @@ public static class DependencyInjection
         services.AddSingleton(options);
 
         services.AddDbContext<SequencingDbContext>(db => db.UseNpgsql(options.ConnectionString));
+
+        // One repository per aggregate root, plus the cross-aggregate read model.
+        services.AddScoped<ISampleRepository, SqlSampleRepository>();
+        services.AddScoped<ISequencingRunRepository, SqlSequencingRunRepository>();
+        services.AddScoped<IPanelRepository, SqlPanelRepository>();
+        services.AddScoped<ISequencingStatsReader, SqlSequencingStatsReader>();
 
         // The single data source for this facility; the ingestion handler reads it.
         services.AddSingleton<ISequencingDataSource, StubSequencingDataSource>();
