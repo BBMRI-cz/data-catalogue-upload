@@ -14,7 +14,7 @@ and validate with `dotnet format` + `dotnet build` before finishing.
 ```
 src/
 ├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
-├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (domain landed; stub ingestion, no repository/migration yet)
+├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (domain + schema landed; ingestion still a stub)
 └── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
 ```
 
@@ -75,17 +75,48 @@ so no validators exist yet - the behavior is wired and dormant until a command c
 
 **Ports are interfaces** in `<Service>.Application/Abstractions`, implemented in `<Service>.Infrastructure`.
 To add an external dependency: define the interface in `Abstractions/`, implement it in `Infrastructure/`,
-register it in that service's `DependencyInjection.cs`. The biobank groups its ports into subfolders -
-`Abstractions/Export/` (`IPatientExportSource` + parse DTOs) and `Abstractions/Repositories/`
-(`IBiobankRepository`); keep new ports grouped likewise.
+register it in that service's `DependencyInjection.cs`. Both API services group their ports into subfolders -
+`Abstractions/Export/` or `Abstractions/DataSource/` (source port + parse DTOs) and
+`Abstractions/Repositories/`; keep new ports grouped likewise.
+
+**One aggregate root = one repository, named after the root** - never after the service:
+
+| Kind | Name | Returns |
+|------|------|---------|
+| Port (`Application/Abstractions/Repositories`) | `I<Root>Repository` | aggregates |
+| EF implementation (`Infrastructure/Persistence`) | `Sql<Root>Repository` | aggregates |
+| Test fake | `Fake<Root>Repository` | aggregates |
+| Read-model port for cross-aggregate projections | `I<Thing>Reader` - **never** `Repository` | flat DTOs |
+
+So biobank has `IPatientRepository`; sequencing has `ISampleRepository`, `ISequencingRunRepository` and
+`IPanelRepository`, plus `ISequencingStatsReader`. The `Reader` suffix is load-bearing: a repository hands
+back aggregates through the mappers, a reader projects in SQL and never round-trips the domain. Do not mix
+the two in one interface.
 
 ```csharp
-public interface IBiobankRepository
+public interface IPatientRepository
 {
     Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken ct);
-    Task SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken ct);
+    Task<IReadOnlyList<ExportParseError>> SavePatientsAsync(IReadOnlyList<PatientAggregate> patients, CancellationToken ct);
 }
 ```
+
+**Saves are idempotent delete-then-insert** keyed on the aggregate's natural id, with the failure of one
+record reported rather than aborting the run (`Save*Async` returns the per-record errors). `SqlSampleRepository`
+and `SqlPatientRepository` also batch, then retry a failed batch one record at a time to isolate the offender;
+the small aggregates (runs, panels) skip batching deliberately.
+
+**Aggregate roots reference each other by id, never by foreign key.** `run_sample.RunId` and
+`library_preparation.PanelId` are indexed but unconstrained, so a sample can be saved before its run or panel
+exists - a real FK would make ingest order load-bearing.
+
+**Never flatten a value object into its owner's row.** A 0..1 value object gets its **own table keyed on the
+owner's primary key** - `library_preparation(RunSampleId PK/FK)`, `quality_metrics(AnalysisId PK/FK)`. Sharing
+the owner's key is what enforces one-to-one, and it makes absence an absent row rather than a nullable column
+group that needs a marker to distinguish "not recorded" from "recorded, every field unknown". An **ordered**
+child collection gets rows with an explicit `Position` column (`run_read`), never a JSON blob - order that
+lives in a serialized string is order a query cannot restore. JSON columns are reserved for **scalar** lists
+(`patient.AccessionNumbers`, `panel.Genes`), stored via a `ValueConverter` + `ValueComparer` pair.
 
 **Mapping is hand-written.** DTO -> domain (uploader `SourceMapper`) and domain <-> EF entity
 (`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field

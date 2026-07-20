@@ -92,26 +92,40 @@ Repositories are tested against a **real engine**, not a mocked `DbContext`. Use
 
 ```csharp
 using var db = new SqliteDatabase();
-await new SqlBiobankRepository(db.NewContext()).SavePatientsAsync([PatientAggregate.Create("P1").Value], default);
-var loaded = await new SqlBiobankRepository(db.NewContext()).ListPatientsAsync(default);
+await new SqlPatientRepository(db.NewContext()).SavePatientsAsync([PatientAggregate.Create("P1").Value], default);
+var loaded = await new SqlPatientRepository(db.NewContext()).ListPatientsAsync(default);
 Assert.Equal("P1", Assert.Single(loaded).Id.Value);
 ```
 
 Call `NewContext()` again for the read to prove the round-trip went through the DB, not an in-memory tracked
-graph. The schema only uses column types SQLite supports, so this stays representative of PostgreSQL. Keep
-pure mapping logic (domain <-> EF entity) in `MapperTests` where it needs no engine.
+graph. The schema only uses column types SQLite supports, so this stays representative of PostgreSQL - SQLite
+also honours `CHECK` constraints and `ON DELETE CASCADE`, so both are worth asserting there. Keep pure mapping
+logic (domain <-> EF entity) in `MapperTests` where it needs no engine.
+
+**Repositories are per aggregate root** (`SqlPatientRepository`, `SqlSampleRepository`,
+`SqlSequencingRunRepository`, `SqlPanelRepository`), so each gets its own round-trip test. Cover the
+idempotent re-save as well as the happy path: these repositories delete-then-insert, and a broken cascade only
+shows up as duplicate children on the *second* save.
+
+`SequencingApi.IntegrationTests` shares one fixture file, `SequencingFixtures`, across its mapper, repository
+and stats tests. Its aggregates set **every** optional field to a distinct non-default value on purpose:
+mappers are hand-written, so a dropped field is only caught if the fixture would notice it going missing.
+
+Cross-aggregate read models are `*StatsReader`, not repositories, and are tested against the database too -
+their counters are computed by `GROUP BY` on every call, so a test is the only thing between a mis-written
+query and a wrong number (`StatsReaderTests`). Always include the empty-database case.
 
 ## Integration tests: the biobank API
 
-`ApiTests` uses `WebApplicationFactory<Program>` and replaces the repository with a `FakeBiobankRepository`
+`ApiTests` uses `WebApplicationFactory<Program>` and replaces the repository with a `FakePatientRepository`
 via `ConfigureTestServices` (no live database):
 
 ```csharp
 var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     builder.ConfigureTestServices(services =>
     {
-        services.RemoveAll<IBiobankRepository>();
-        services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository(patients));
+        services.RemoveAll<IPatientRepository>();
+        services.AddScoped<IPatientRepository>(_ => new FakePatientRepository(patients));
     }));
 var client = factory.CreateClient();
 ```
