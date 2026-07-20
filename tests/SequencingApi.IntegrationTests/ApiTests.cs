@@ -33,14 +33,13 @@ public sealed class ApiTests : IClassFixture<SequencingWebApplicationFactory>
     }
 
     [Fact]
-    public async Task IngestReturnsZeroCounts()
+    public async Task IngestFailsLoudlyWhenTheDataSourceIsNotConfigured()
     {
+        // No data path is set for this host, so the source is missing. That must surface as a problem
+        // response rather than a successful ingest of nothing — a misconfigured deployment reporting
+        // "0 ingested, 0 failed" would look exactly like a healthy one with an empty tree.
         var response = await _client.PostAsync("/admin/ingest", content: null);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<IngestRecordsCommandResult>(JsonOptions);
-        Assert.Equal(0, body!.Ingested);
-        Assert.Equal(0, body.Failed);
-        Assert.Empty(body.Errors);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
     }
 }

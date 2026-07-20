@@ -1,6 +1,7 @@
 using ErrorOr;
 using Mediator;
 using SequencingApi.Application.Abstractions.DataSource;
+using SequencingApi.Application.Abstractions.Repositories;
 
 namespace SequencingApi.Application.Features.Ingest;
 
@@ -14,27 +15,47 @@ internal sealed class IngestRecordsCommandHandler
     : ICommandHandler<IngestRecordsCommand, ErrorOr<IngestRecordsCommandResult>>
 {
     private readonly ISequencingDataSource _source;
+    private readonly ISampleRepository _samples;
+    private readonly ISequencingRunRepository _runs;
+    private readonly IPanelRepository _panels;
 
-    public IngestRecordsCommandHandler(ISequencingDataSource source)
+    public IngestRecordsCommandHandler(
+        ISequencingDataSource source,
+        ISampleRepository samples,
+        ISequencingRunRepository runs,
+        IPanelRepository panels)
     {
         _source = source;
+        _samples = samples;
+        _runs = runs;
+        _panels = panels;
     }
 
-    public ValueTask<ErrorOr<IngestRecordsCommandResult>> Handle(
+    public async ValueTask<ErrorOr<IngestRecordsCommandResult>> Handle(
         IngestRecordsCommand command,
         CancellationToken cancellationToken)
     {
-        // ponytail: no repository yet — the sequencing domain and persistence land with #30. For now
-        // the handler just reads the (stub) source and reports its counts; wire the repository save
-        // in the same shape as BiobankApi's ingestion handler when the aggregate exists.
-        var read = _source.ReadRecords();
+        var read = _source.ReadRecords(cancellationToken);
         if (read.IsError)
         {
-            return ValueTask.FromResult<ErrorOr<IngestRecordsCommandResult>>(read.Errors);
+            return read.Errors;
         }
 
         var result = read.Value;
-        return ValueTask.FromResult<ErrorOr<IngestRecordsCommandResult>>(
-            new IngestRecordsCommandResult(result.RecordCount, result.Errors.Count, result.Errors));
+
+        // Saved dependency-first for readability only: the aggregates reference each other by id with
+        // no foreign keys, precisely so ingest order is never load-bearing.
+        var panelErrors = await _panels.SavePanelsAsync(result.Panels, cancellationToken);
+        var runErrors = await _runs.SaveRunsAsync(result.Runs, cancellationToken);
+        var sampleErrors = await _samples.SaveSamplesAsync(result.Samples, cancellationToken);
+
+        // Read failures and per-record persistence failures are both reported, not fatal.
+        var errors = result.Errors.Concat(panelErrors).Concat(runErrors).Concat(sampleErrors).ToList();
+        return new IngestRecordsCommandResult(
+            Ingested: result.Samples.Count - sampleErrors.Count,
+            IngestedRuns: result.Runs.Count - runErrors.Count,
+            IngestedPanels: result.Panels.Count - panelErrors.Count,
+            Failed: errors.Count,
+            Errors: errors);
     }
 }

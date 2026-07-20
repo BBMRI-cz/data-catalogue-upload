@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SequencingApi.Application.Abstractions.DataSource;
 using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Infrastructure.Configuration;
-using SequencingApi.Infrastructure.DataSource;
+using SequencingApi.Infrastructure.DataSource.Mmci;
 using SequencingApi.Infrastructure.Persistence;
 
 namespace SequencingApi.Infrastructure;
@@ -27,8 +27,12 @@ public static class DependencyInjection
         services.AddScoped<IPanelRepository, SqlPanelRepository>();
         services.AddScoped<ISequencingStatsReader, SqlSequencingStatsReader>();
 
-        // The single data source for this facility; the ingestion handler reads it.
-        services.AddSingleton<ISequencingDataSource, StubSequencingDataSource>();
+        // The single data source for this facility; the ingestion handler reads it. Another facility
+        // would supply its own adapter under DataSource/<Facility>/ and be registered here instead.
+        services.AddSingleton<ISequencingDataSource>(_ => new MmciSequencingDataSource(
+            options.SequencingDataPath,
+            options.SequencingLibrariesPath,
+            options.SequencingMappingTablePath));
 
         return services;
     }

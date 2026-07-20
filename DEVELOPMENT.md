@@ -40,9 +40,10 @@ Configuration is read from **environment variables** (no `.env` files are tracke
 **biobank_api:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `BIOBANK_HOST|PORT`, `BIOBANK_XML_EXPORT_PATH`.
 For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 
-**sequencing_api** (ingestion still stubbed): `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `SEQUENCING_HOST|PORT`,
-`SEQUENCING_DATA_PATH`, `SEQUENCING_INGEST_CRON`. For local runs against `sequencing-db`, set
-`POSTGRES_PORT=5434`.
+**sequencing_api:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `SEQUENCING_HOST|PORT`,
+`SEQUENCING_DATA_PATH` (organised run tree), `SEQUENCING_LIBRARIES_PATH` (libraries table + BEDs),
+`SEQUENCING_MAPPING_TABLE_PATH` (pseudonymizer mappings), `SEQUENCING_INGEST_CRON`. For local runs
+against `sequencing-db`, set `POSTGRES_PORT=5434`.
 
 **uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
 `BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`.

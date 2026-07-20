@@ -1,0 +1,9 @@
+[Header]
+Experiment Name,MP_18_2024
+Workflow,GenerateFASTQ
+Application,FASTQ Only
+
+[Data]
+Sample_ID,Sample_Name
+p0001,S1
+p0050,S2

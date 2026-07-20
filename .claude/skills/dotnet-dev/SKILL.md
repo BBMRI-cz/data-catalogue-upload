@@ -14,7 +14,7 @@ and validate with `dotnet format` + `dotnet build` before finishing.
 ```
 src/
 ├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
-├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (domain + schema landed; ingestion still a stub)
+├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}
 └── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
 ```
 
@@ -72,6 +72,14 @@ expected failures. When a use case returns a structured payload, name the result
 handler. This **complements** the domain `Create(...)` invariants, it does not replace them: validate request
 shape/options here, aggregate invariants in the factory. (Both services' current commands are parameterless,
 so no validators exist yet - the behavior is wired and dormant until a command carries input.)
+
+**One directory per source adapter.** A service that reads an external facility's data puts each
+implementation in its own folder under `Infrastructure/DataSource/<Facility>/`, with types prefixed by the
+facility name - `DataSource/Mmci/MmciSequencingDataSource.cs`, `MmciSampleSheetReader.cs`, `MmciSourceValues.cs`.
+The port and its DTOs stay in `Application/Abstractions/DataSource/`. All of a facility's quirks (text
+encoding, decimal commas, folder-layout rules, id mapping) live in its folder and nowhere else - that
+boundary is what keeps the domain biobank-agnostic. Parsers take **string content, not a path**, so they
+unit-test without touching disk; only the top-level source and the folder reader do I/O.
 
 **Ports are interfaces** in `<Service>.Application/Abstractions`, implemented in `<Service>.Infrastructure`.
 To add an external dependency: define the interface in `Abstractions/`, implement it in `Infrastructure/`,

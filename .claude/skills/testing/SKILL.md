@@ -11,8 +11,8 @@ Tests live under `tests/`, two projects per service - **unit** and **integration
 tests/
 ├── BiobankApi.UnitTests             DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
 ├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
-├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (sequencing aggregates/factories), StubDataSourceTests
-├── SequencingApi.IntegrationTests   ApiTests (health + POST /admin/ingest over WebApplicationFactory)
+├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
+├── SequencingApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
 ├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
 └── Uploader.IntegrationTests        SyncStateRepositoryTests
 ```
@@ -106,6 +106,22 @@ logic (domain <-> EF entity) in `MapperTests` where it needs no engine.
 `SqlSequencingRunRepository`, `SqlPanelRepository`), so each gets its own round-trip test. Cover the
 idempotent re-save as well as the happy path: these repositories delete-then-insert, and a broken cascade only
 shows up as duplicate children on the *second* save.
+
+**Source adapters get both.** The pure parsers (`MmciSourceValuesTests`, `MmciSampleSheetReaderTests`,
+`MmciNextGeneStatsReaderTests`, `MmciPanelMatcherTests`, `MmciMappingTableReaderTests`,
+`MmciLibrariesTableReaderTests`) are **unit** tests driven from inline strings, because those readers take
+content rather than paths. `MmciSequencingDataSourceTests` is an **integration** test over the miniature
+source tree committed at `tests/SequencingApi.IntegrationTests/TestData/` (copied to the test output by a
+csproj `Content` glob, as BiobankApi's `TestData/Exports` is). That fixture deliberately encodes the
+source's hazards - a run filed under two subtypes, a sample sequenced in three runs, a sample folder with
+no reads, an orphan folder absent from the sample sheet, a single-read run, and two libraries-table
+versions with differing columns - so read its `README.md` before changing it. Identifiers in it are
+shortened because the real ones exceed Windows' 260-character path limit once copied under `bin/`.
+
+`IngestEndToEndTests` runs the whole pipeline over that tree through `POST /admin/ingest` with the real
+repositories on SQLite, and **ingests twice** to prove idempotency: these repositories delete-then-insert,
+so a broken cascade only shows up as duplicated children on the second save. It doubles as the coverage
+for the Quartz `IngestionJob`, which dispatches the identical command.
 
 `SequencingApi.IntegrationTests` shares one fixture file, `SequencingFixtures`, across its mapper, repository
 and stats tests. Its aggregates set **every** optional field to a distinct non-default value on purpose:

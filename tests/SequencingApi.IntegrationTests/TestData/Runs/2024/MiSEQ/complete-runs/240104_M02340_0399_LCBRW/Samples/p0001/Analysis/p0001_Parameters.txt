@@ -1,0 +1,3 @@
+NextGENe parameter dump
+Mutation filter: default
+MMCI_MOP_2024a

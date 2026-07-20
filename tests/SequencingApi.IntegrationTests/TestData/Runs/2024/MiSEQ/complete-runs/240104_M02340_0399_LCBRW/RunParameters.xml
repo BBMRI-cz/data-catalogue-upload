@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<RunParameters>
+  <ScannerID>M02340</ScannerID>
+  <RunNumber>399</RunNumber>
+  <ExperimentName>HyperCap-EP-240103</ExperimentName>
+  <Chemistry>Amplicon</Chemistry>
+  <ReagentKitVersion>MiSeq v2</ReagentKitVersion>
+</RunParameters>

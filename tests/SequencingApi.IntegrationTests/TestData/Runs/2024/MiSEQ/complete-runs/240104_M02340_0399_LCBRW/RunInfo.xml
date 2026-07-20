@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<RunInfo Version="5">
+  <Run Id="240104_M02340_0399_LCBRW" Number="399">
+    <Flowcell>000000000-LCBRW</Flowcell>
+    <Instrument>M02340</Instrument>
+    <Date>240104</Date>
+    <Reads>
+      <Read Number="1" NumCycles="151" IsIndexedRead="N" />
+      <Read Number="2" NumCycles="8" IsIndexedRead="Y" />
+      <Read Number="3" NumCycles="151" IsIndexedRead="N" />
+    </Reads>
+    <FlowcellLayout LaneCount="1" SurfaceCount="2" SwathCount="1" TileCount="19" />
+  </Run>
+</RunInfo>

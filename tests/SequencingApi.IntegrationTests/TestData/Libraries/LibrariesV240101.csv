@@ -1,0 +1,3 @@
+Panel;Text in parameters;code in the molgenis catalogue;Availability Date Range;Genes (*all coding regions covered);Vendor;Abbreviation;Input Amount;Intended Insert Size;Intended Read Length;Library Preparation Kit;PCR Free;Target Enrichment Kit;UMIs Present;BED file
+HyperCap MOP;MMCI_MOP_2022d;MOP2022D;1.1.2022 - 31.12.2023;BRCA1, BRCA2;Roche;HC;250;350;151;KAPA HyperPlus;NEPRAVDA;KAPA HyperCap;PRAVDA;MMCI_MOP_2022d_capture_targets.bed
+TruSight Oncology 500;TSO500_v2;TSO500;1.1.2021 - ;ALK, EGFR;Illumina;TSO;100;200;101;TSO500 DNA;NEPRAVDA;TSO500;NEPRAVDA;TSO500bedTargetVisible.bed

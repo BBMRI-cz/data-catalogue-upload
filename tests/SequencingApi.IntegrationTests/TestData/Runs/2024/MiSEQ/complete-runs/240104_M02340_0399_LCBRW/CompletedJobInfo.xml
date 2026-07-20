@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<AnalysisJobInfo>
+  <StartTime>2024-01-04T14:00:00</StartTime>
+  <CompletionTime>2024-01-05T02:30:00</CompletionTime>
+  <Workflow>GenerateFASTQ</Workflow>
+</AnalysisJobInfo>
