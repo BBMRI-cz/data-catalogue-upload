@@ -18,7 +18,7 @@ using Xunit;
 namespace BiobankApi.IntegrationTests;
 
 /// <summary>
-/// Full-stack flow against the real <see cref="SqlBiobankRepository"/> (over in-memory SQLite, not a
+/// Full-stack flow against the real <see cref="SqlPatientRepository"/> (over in-memory SQLite, not a
 /// fake): POST /admin/ingest stores a fully-populated patient, then GET /patients serves it back.
 /// Exercises the endpoint, response mapper, query handler, EF Core mapping and persistence at once.
 /// </summary>

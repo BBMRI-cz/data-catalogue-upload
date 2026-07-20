@@ -26,8 +26,8 @@ public sealed class ApiTests
             builder.UseSetting("DisableScheduler", "true");
             builder.ConfigureTestServices(services =>
             {
-                services.RemoveAll<IBiobankRepository>();
-                services.AddScoped<IBiobankRepository>(_ => new FakeBiobankRepository(patients));
+                services.RemoveAll<IPatientRepository>();
+                services.AddScoped<IPatientRepository>(_ => new FakePatientRepository(patients));
             });
         });
 

@@ -75,7 +75,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task SaveAndListRoundTripsFullPatient()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         var patient = FullPatient();
 
         await repository.SavePatientsAsync([patient], CancellationToken.None);
@@ -109,7 +109,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task RoundTripsConsentFalseStub()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         var stub = PatientAggregate.Create("P-STUB", biobank: "MOU", consent: false).Value;
 
         await repository.SavePatientsAsync([stub], CancellationToken.None);
@@ -125,7 +125,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task ResavingSamePatientIsIdempotent()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
 
         await repository.SavePatientsAsync([FullPatient()], CancellationToken.None);
         await repository.SavePatientsAsync([FullPatient()], CancellationToken.None);
@@ -144,7 +144,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task ResavingReplacesChildren()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         await repository.SavePatientsAsync([FullPatient()], CancellationToken.None);
 
         var updated = PatientAggregate.Create(
@@ -168,7 +168,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task ListPatientsEmpty()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         Assert.Empty(await repository.ListPatientsAsync(CancellationToken.None));
     }
 
@@ -177,7 +177,7 @@ public sealed class RepositoryTests : IDisposable
     {
         // Real exports reuse a sampleId within one patient; the surrogate key must let both persist.
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         var patient = PatientAggregate.Create(
             "DUP-1",
             consent: true,
@@ -198,7 +198,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task PersistsAcrossMultipleBatches()
     {
         await using var context = _db.NewContext();
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
         var patients = Enumerable.Range(0, 550)
             .Select(i => PatientAggregate.Create($"P{i}", consent: true).Value)
             .ToList();
@@ -213,7 +213,7 @@ public sealed class RepositoryTests : IDisposable
     public async Task IsolatesAFailingPatientAndPersistsTheRest()
     {
         await using var context = _db.NewContext(new FailOnPatientInterceptor("BAD"));
-        var repository = new SqlBiobankRepository(context);
+        var repository = new SqlPatientRepository(context);
 
         var failures = await repository.SavePatientsAsync(
             [

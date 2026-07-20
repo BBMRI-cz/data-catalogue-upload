@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BiobankApi.Infrastructure.Persistence;
 
-/// <summary>EF Core implementation of <see cref="IBiobankRepository"/>.</summary>
-internal sealed class SqlBiobankRepository : IBiobankRepository
+/// <summary>EF Core implementation of <see cref="IPatientRepository"/>.</summary>
+internal sealed class SqlPatientRepository : IPatientRepository
 {
     // Patients saved per transaction. The tuning knob: larger = fewer round-trips, more memory held
     // by the change tracker before each Clear().
@@ -16,7 +16,7 @@ internal sealed class SqlBiobankRepository : IBiobankRepository
 
     private readonly BiobankDbContext _context;
 
-    public SqlBiobankRepository(BiobankDbContext context) => _context = context;
+    public SqlPatientRepository(BiobankDbContext context) => _context = context;
 
     public async Task<IReadOnlyList<PatientAggregate>> ListPatientsAsync(CancellationToken cancellationToken)
     {

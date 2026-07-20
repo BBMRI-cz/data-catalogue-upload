@@ -15,9 +15,9 @@ internal sealed class IngestExportsCommandHandler
     : ICommandHandler<IngestExportsCommand, ErrorOr<IngestExportsCommandResult>>
 {
     private readonly IPatientExportSource _source;
-    private readonly IBiobankRepository _repository;
+    private readonly IPatientRepository _repository;
 
-    public IngestExportsCommandHandler(IPatientExportSource source, IBiobankRepository repository)
+    public IngestExportsCommandHandler(IPatientExportSource source, IPatientRepository repository)
     {
         _source = source;
         _repository = repository;
