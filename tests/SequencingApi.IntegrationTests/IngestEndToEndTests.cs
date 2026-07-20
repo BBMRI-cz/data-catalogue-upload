@@ -42,7 +42,11 @@ public sealed class IngestEndToEndTests
         using var connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
 
-        using var factory = CreateFactory(connection);
+        // WithWebHostBuilder derives a second factory from this root rather than configuring it in
+        // place, and disposing the derived one does not dispose the root. Owning the root here and
+        // letting it dispose its derived factories keeps both accounted for.
+        using var rootFactory = new WebApplicationFactory<Program>();
+        var factory = ConfigureFactory(rootFactory, connection);
         using (var scope = factory.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<SequencingDbContext>().Database.EnsureCreated();
@@ -89,7 +93,11 @@ public sealed class IngestEndToEndTests
         using var connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
 
-        using var factory = CreateFactory(connection);
+        // WithWebHostBuilder derives a second factory from this root rather than configuring it in
+        // place, and disposing the derived one does not dispose the root. Owning the root here and
+        // letting it dispose its derived factories keeps both accounted for.
+        using var rootFactory = new WebApplicationFactory<Program>();
+        var factory = ConfigureFactory(rootFactory, connection);
         using (var scope = factory.Services.CreateScope())
         {
             scope.ServiceProvider.GetRequiredService<SequencingDbContext>().Database.EnsureCreated();
@@ -140,8 +148,14 @@ public sealed class IngestEndToEndTests
             default))!;
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(SqliteConnection connection) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+    /// <summary>
+    /// Derive a configured factory from <paramref name="root"/>. The caller owns and disposes the
+    /// root; the factory returned here is disposed with it.
+    /// </summary>
+    private static WebApplicationFactory<Program> ConfigureFactory(
+        WebApplicationFactory<Program> root,
+        SqliteConnection connection) =>
+        root.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("DisableScheduler", "true");
             builder.UseSetting("SEQUENCING_DATA_PATH", Path.Join(TestDataPath, "Runs"));
