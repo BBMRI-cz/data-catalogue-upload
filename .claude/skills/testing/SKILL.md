@@ -11,7 +11,7 @@ Tests live under `tests/`, two projects per service - **unit** and **integration
 tests/
 ├── BiobankApi.UnitTests             DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
 ├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
-├── SequencingApi.UnitTests          StubDataSourceTests (scaffold; grows with #30)
+├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (sequencing aggregates/factories), StubDataSourceTests
 ├── SequencingApi.IntegrationTests   ApiTests (health + POST /admin/ingest over WebApplicationFactory)
 ├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
 └── Uploader.IntegrationTests        SyncStateRepositoryTests

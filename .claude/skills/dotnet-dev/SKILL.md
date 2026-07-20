@@ -14,7 +14,7 @@ and validate with `dotnet format` + `dotnet build` before finishing.
 ```
 src/
 ├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
-├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (scaffold - stub host, no domain/migration yet)
+├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}   (domain landed; stub ingestion, no repository/migration yet)
 └── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
 ```
 
