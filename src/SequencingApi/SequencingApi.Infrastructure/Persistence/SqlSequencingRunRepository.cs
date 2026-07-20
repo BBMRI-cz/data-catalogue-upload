@@ -42,7 +42,10 @@ internal sealed class SqlSequencingRunRepository : ISequencingRunRepository
             await SaveAsync(runs, cancellationToken);
             return [];
         }
-        catch (Exception)
+        // Deliberately broad - whatever went wrong with one record must not abort the run - but
+        // never cancellation: that is the caller stopping us, not a bad record, and swallowing it
+        // would turn a cancelled run into a list of bogus per-record failures.
+        catch (Exception saveException) when (saveException is not OperationCanceledException)
         {
             // Isolate the offender by retrying one at a time so the rest still persists and the bad
             // record is reported, not fatal.
@@ -54,7 +57,7 @@ internal sealed class SqlSequencingRunRepository : ISequencingRunRepository
                 {
                     await SaveAsync([run], cancellationToken);
                 }
-                catch (Exception exception)
+                catch (Exception exception) when (exception is not OperationCanceledException)
                 {
                     failures.Add(new RecordReadError(SourceName, run.Id.Value, exception.Message));
                 }

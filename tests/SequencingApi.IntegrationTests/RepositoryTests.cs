@@ -287,6 +287,30 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task CancellationPropagatesInsteadOfBeingReportedAsRecordFailures()
+    {
+        // The save loops catch broadly so one bad record cannot abort a run. Cancellation must be
+        // the exception to that: caught, it would be retried per record, fail again, and come back
+        // as a list of invented RecordReadErrors while the caller believes the run merely had bad
+        // data - the run would look completed rather than cancelled.
+        await using var context = _db.NewContext();
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new SqlSampleRepository(context)
+                .SaveSamplesAsync([SequencingFixtures.FullSample()], cancelled.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new SqlSequencingRunRepository(context)
+                .SaveRunsAsync([SequencingFixtures.FullRun()], cancelled.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => new SqlPanelRepository(context)
+                .SavePanelsAsync([SequencingFixtures.FullPanel()], cancelled.Token));
+    }
+
+    [Fact]
     public async Task AFileWithBothOwnersIsRejectedByTheDatabase()
     {
         // Proves the single-owner check constraint is actually live rather than silently dropped -

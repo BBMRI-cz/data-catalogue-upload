@@ -47,7 +47,10 @@ internal sealed class SqlSampleRepository : ISampleRepository
             {
                 await SaveBatchAsync(batch, cancellationToken);
             }
-            catch (Exception)
+            // Deliberately broad - whatever went wrong with one record must not abort the run - but
+            // never cancellation: that is the caller stopping us, not a bad record, and swallowing
+            // it would turn a cancelled run into a list of bogus per-record failures.
+            catch (Exception batchException) when (batchException is not OperationCanceledException)
             {
                 // The batch transaction failed; isolate the offender by retrying one at a time so
                 // the rest of the batch still persists and the bad record is reported, not fatal.
@@ -58,7 +61,7 @@ internal sealed class SqlSampleRepository : ISampleRepository
                     {
                         await SaveBatchAsync([sample], cancellationToken);
                     }
-                    catch (Exception exception)
+                    catch (Exception exception) when (exception is not OperationCanceledException)
                     {
                         _context.ChangeTracker.Clear();
                         failures.Add(new RecordReadError(SourceName, sample.Id.Value, exception.Message));
