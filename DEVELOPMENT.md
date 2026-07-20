@@ -40,7 +40,7 @@ Configuration is read from **environment variables** (no `.env` files are tracke
 **biobank_api:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `BIOBANK_HOST|PORT`, `BIOBANK_XML_EXPORT_PATH`.
 For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 
-**sequencing_api** (scaffold): `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `SEQUENCING_HOST|PORT`,
+**sequencing_api** (ingestion still stubbed): `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, `SEQUENCING_HOST|PORT`,
 `SEQUENCING_DATA_PATH`, `SEQUENCING_INGEST_CRON`. For local runs against `sequencing-db`, set
 `POSTGRES_PORT=5434`.
 
@@ -66,8 +66,8 @@ dotnet ef migrations add <Name> \
   --output-dir Persistence/Migrations
 ```
 
-The **sequencing_api** has no entities yet (#30); the same commands with its `SequencingApi` paths
-apply once it does.
+The **sequencing_api** has a domain model but no EF entities yet (#55); the same commands with its
+`SequencingApi` paths apply once it does.
 
 At runtime the **uploader** applies migrations on startup; the **biobank_api** and **sequencing_api**
 apply them when `RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).
