@@ -48,7 +48,10 @@ internal static class SampleMapper
 
     private static LibraryPreparationEntity ToEntity(LibraryPreparation library) => new()
     {
-        PanelId = library.PanelId?.Value,
+        // Unwrapped explicitly rather than with `library.PanelId?.Value`: there PanelId is a
+        // Nullable<PanelId> wrapping a record struct that also has a `Value`, so the two `Value`s
+        // read as the same thing and are not. This mirrors ToDomain's pattern.
+        PanelId = library.PanelId is { } panelId ? panelId.Value : null,
         InputAmount = library.InputAmount,
         LibraryPrepKit = library.LibraryPrepKit,
         PcrFree = library.PcrFree,
