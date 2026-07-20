@@ -1,0 +1,2 @@
+Index	Chrom	Pos
+1	chr17	41245466

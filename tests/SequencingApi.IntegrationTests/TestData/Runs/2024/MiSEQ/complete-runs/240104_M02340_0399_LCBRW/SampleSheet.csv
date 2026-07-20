@@ -1,0 +1,16 @@
+[Header]
+IEMFileVersion,4
+Experiment Name,HyperCap-EP-240103
+Workflow,GenerateFASTQ
+Application,FASTQ Only
+Assay,KAPA HyperPlus
+Chemistry,Amplicon
+
+[Reads]
+151
+151
+
+[Data]
+Sample_ID,Sample_Name,I7_Index_ID,index
+p0001,S1,N701,TAAGGCGA
+p0002,S2,N702,CGTACTAG

@@ -1,0 +1,8 @@
+[Header]
+Experiment Name,TSO500_Run2024_9
+Application,NextSeq FASTQ Only
+
+[Data]
+Sample_ID,Sample_Type,Pair_ID,index
+p0001,DNA,P1,TAAGGCGA
+p0009,RNA,P1,CGTACTAG

@@ -1,0 +1,5 @@
+# These fixtures are byte-sensitive: the vendor reports and the libraries table are Windows-1250,
+# not UTF-8, and several of them deliberately mix CR and CRLF endings because the real files do.
+# Git's line-ending normalisation would quietly rewrite exactly the properties these fixtures exist
+# to prove, so nothing here is treated as text.
+* -text

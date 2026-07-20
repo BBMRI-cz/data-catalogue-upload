@@ -1,0 +1,6 @@
+NextGENe V2.4.2.2
+Datum: pátek 5. leden 2024Reference: C:\NextGENe\Human_v37p10_dbsnp135.fasta
+[Alignment Statistics]
+Total Reads: 4200000
+Matched Reads: 4100000
+Observed Read Length: 151

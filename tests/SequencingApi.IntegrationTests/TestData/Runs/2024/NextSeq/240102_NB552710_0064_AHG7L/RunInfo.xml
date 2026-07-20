@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<RunInfo Version="5">
+  <Run Id="240102_NB552710_0064_AHG7L" Number="64">
+    <Flowcell>AHG7LGBGXV</Flowcell>
+    <Instrument>NB552710</Instrument>
+    <Date>240102</Date>
+    <Reads>
+      <Read Number="1" NumCycles="101" IsIndexedRead="N" />
+      <Read Number="2" NumCycles="8" IsIndexedRead="Y" />
+      <Read Number="3" NumCycles="8" IsIndexedRead="Y" />
+      <Read Number="4" NumCycles="101" IsIndexedRead="N" />
+    </Reads>
+    <FlowcellLayout LaneCount="4" SurfaceCount="2" SwathCount="3" TileCount="12" />
+  </Run>
+</RunInfo>

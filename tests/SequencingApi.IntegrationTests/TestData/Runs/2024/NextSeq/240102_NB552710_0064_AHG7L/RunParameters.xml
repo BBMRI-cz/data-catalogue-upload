@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<RunParameters>
+  <ScannerID>NB552710</ScannerID>
+  <RunNumber>64</RunNumber>
+  <ExperimentName>TSO500_Run2024_9</ExperimentName>
+  <Chemistry>NextSeq High</Chemistry>
+  <ApplicationName>NextSeq Control Software</ApplicationName>
+</RunParameters>
