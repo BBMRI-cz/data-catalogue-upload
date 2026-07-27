@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -12,6 +12,7 @@ using SequencingApi.Application.Features.Ingest;
 using SequencingApi.Domain;
 using SequencingApi.Domain.Common;
 using SequencingApi.Infrastructure.Persistence;
+using SequencingApi.Web.Endpoints;
 using Xunit;
 
 namespace SequencingApi.IntegrationTests;
@@ -138,12 +139,12 @@ public sealed class IngestEndToEndTests
             runSample => runSample.RunId.Value == "240104_M02340_0399_LCBRW").Files.Count);
     }
 
-    private static async Task<IngestRecordsCommandResult> Ingest(HttpClient client)
+    private static async Task<IngestResponse> Ingest(HttpClient client)
     {
         using var response = await client.PostAsync("/admin/ingest", content: null, default);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return (await response.Content.ReadFromJsonAsync<IngestRecordsCommandResult>(
+        return (await response.Content.ReadFromJsonAsync<IngestResponse>(
             JsonOptions,
             default))!;
     }
