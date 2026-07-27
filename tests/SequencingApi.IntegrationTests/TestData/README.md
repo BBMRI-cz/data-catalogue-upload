@@ -26,11 +26,13 @@ size; it never opens them.
 | ” `Samples/p0002/FASTQ` (empty) | A sample folder that exists with no reads at all — over a hundred real ones do. |
 | ” `Samples/p0003` (empty) | An orphan folder absent from the sample sheet: reported, not ingested. |
 | `.../complete-runs/240430_M02340_0412_ABCDE` | Single-read run (R1 only, no R2) — the MammaPrint case; also re-sequences `p0001`. |
+| ” `Samples/p0050/FASTQ` | Carries an R2 in a single-read run: **more** read files than the read structure implies, which is reported. |
 | `.../mamma-print/240430_M02340_0412_ABCDE` | **The same run id in a second subtype folder**, with fewer samples: de-duplicated away and reported. |
 | `Runs/2024/NextSeq/240102_NB552710_0064_AHG7L` | NextSeq: 4 lanes (8 read files/sample), `Sample_Type` DNA/RNA, no analysis. Re-sequences `p0001` a third time. |
+| ” `Samples/p0009/FASTQ` | Seven files, one lane's R2 missing: **fewer** than the read structure implies, also reported. |
 | `Runs/backups`, `Runs/errors`, `Runs/logs` | Top-level folders that must be excluded from the walk. |
 | `Libraries/LibrariesV240101.csv` | The older table version — the only one carrying input amount / insert size / read length. |
-| `Libraries/LibrariesV250101.csv` | The newest by mtime: authoritative, but dropped those three columns. |
+| `Libraries/LibrariesV250101.csv` | The newest by the version in its name: authoritative, but dropped those three columns. |
 | `MappingTable/predictive.json` | Pseudonymized → real predictive number. Covers `p0001`/`p0009`/`p0050` but **not** `p0002`. |
 | `MappingTable/patient.json`, `samples.json` | Present so it is visible that this service never opens them. |
 

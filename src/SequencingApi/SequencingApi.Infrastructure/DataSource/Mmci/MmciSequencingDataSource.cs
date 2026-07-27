@@ -226,7 +226,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             }
 
             var withPanel = AttachPanel(runSample.Value, samplePath, libraryRows, sheet, run.Value.RunDate);
-            ReportMissingReads(withPanel, run.Value, samplePath, errors);
+            ReportUnexpectedReadCount(withPanel, run.Value, samplePath, errors);
 
             if (!runSamplesByExternalId.TryGetValue(externalId, out var list))
             {
@@ -283,11 +283,18 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
     }
 
     /// <summary>
-    /// Flag a sample that produced fewer read files than the run's own read structure implies. The
-    /// expectation is derived from what the instrument actually did — reads times lanes — never from
-    /// an assumption that sequencing is paired-end, because a large minority of these runs are not.
+    /// Flag a sample whose read-file count disagrees with the run's own read structure, in either
+    /// direction. The expectation is derived from what the instrument actually did — reads times
+    /// lanes — never from an assumption that sequencing is paired-end, because a large minority of
+    /// these runs are not.
     /// </summary>
-    private void ReportMissingReads(
+    /// <remarks>
+    /// A surplus is reported as well as a shortfall, and is arguably the more interesting of the two:
+    /// files that should not be there had to come from somewhere. Reporting only shortfalls is what
+    /// let another sample's reads sit unnoticed in a folder for two iterations — every run affected by
+    /// that turned out to have a surplus here.
+    /// </remarks>
+    private void ReportUnexpectedReadCount(
         RunSample runSample,
         SequencingRunAggregate run,
         string samplePath,
@@ -302,13 +309,16 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
 
         // Zero is its own, well-understood state (a sample folder with no reads at all, which over a
         // hundred of them are) and is left to HasFastq rather than reported as a shortfall.
-        if (actual > 0 && actual < expected)
+        if (actual == 0 || actual == expected)
         {
-            errors.Add(new RecordReadError(
-                Name,
-                Relative(samplePath),
-                $"expected {expected} read files from the run's read structure, found {actual}"));
+            return;
         }
+
+        var direction = actual < expected ? "found" : "found more:";
+        errors.Add(new RecordReadError(
+            Name,
+            Relative(samplePath),
+            $"expected {expected} read files from the run's read structure, {direction} {actual}"));
     }
 
     /// <summary>

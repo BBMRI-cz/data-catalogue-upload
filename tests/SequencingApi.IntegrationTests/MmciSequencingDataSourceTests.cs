@@ -344,6 +344,42 @@ public sealed class MmciSequencingDataSourceTests
     }
 
     [Fact]
+    public void AReadCountThatDisagreesWithTheRunsReadStructureIsReportedEitherWay()
+    {
+        var result = Read();
+
+        // Too few: p0009 is missing one lane's R2, so seven files where four lanes x two reads imply
+        // eight.
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0009", StringComparison.Ordinal)
+                && error.Reason.Contains("expected 8 read files", StringComparison.Ordinal)
+                && error.Reason.Contains("found 7", StringComparison.Ordinal));
+
+        // Too many: p0050 carries an R2 in a single-read run. A surplus went unreported for two
+        // iterations, which is how another sample's reads sat unnoticed in a folder — the extra files
+        // had to have come from somewhere, so the count disagreeing upwards matters just as much.
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0050", StringComparison.Ordinal)
+                && error.Reason.Contains("expected 1 read files", StringComparison.Ordinal)
+                && error.Reason.Contains("found more: 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASampleWithNoReadsAtAllIsNotReportedAsAShortfall()
+    {
+        // Zero is its own well-understood state, and over a hundred real folders are like this.
+        // Reporting it as a shortfall would bury the counts that actually disagree.
+        var result = Read();
+
+        Assert.DoesNotContain(
+            result.Errors,
+            error => error.Reference.EndsWith("p0002", StringComparison.Ordinal)
+                && error.Reason.Contains("read files", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void APanelThatCannotBeResolvedLeavesTheSampleWithout()
     {
         // The mamma-print run's "MP_18_2024" has no MammaPrint row in this libraries table.
