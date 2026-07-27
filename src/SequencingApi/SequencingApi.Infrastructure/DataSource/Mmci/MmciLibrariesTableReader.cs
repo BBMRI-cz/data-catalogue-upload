@@ -213,8 +213,7 @@ internal static class MmciLibrariesTableReader
         return availableFrom is { } from ? $"{name}-{from:yyyyMMdd}" : name;
     }
 
-    private static string[] Cells(string line) =>
-        [.. line.Split(';').Select(cell => cell.Trim().Trim('"').Trim())];
+    private static string[] Cells(string line) => MmciSourceValues.DelimitedCells(line, ';');
 
     /// <summary>
     /// A cell by column name, matched on the canonical form of the header and by prefix — the real

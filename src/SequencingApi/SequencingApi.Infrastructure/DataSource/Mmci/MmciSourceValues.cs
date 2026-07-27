@@ -170,15 +170,72 @@ internal static class MmciSourceValues
     }
 
     /// <summary>
+    /// Split one delimited line, honouring quoted cells: a delimiter inside quotes is data, not a
+    /// separator.
+    /// </summary>
+    /// <remarks>
+    /// Both source files that need this are written by a spreadsheet, which quotes a cell only when
+    /// it has to — so the quotes are rare, and treating them as decoration to be trimmed after the
+    /// split silently shifts every column after the offending cell. Escaped quotes (<c>""</c> inside
+    /// a quoted cell) do not occur in these files and are not modelled.
+    /// </remarks>
+    public static string[] DelimitedCells(string line, char delimiter)
+    {
+        var cells = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+
+        foreach (var character in line)
+        {
+            if (character == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (character == delimiter && !quoted)
+            {
+                cells.Add(current.ToString().Trim());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(character);
+            }
+        }
+
+        cells.Add(current.ToString().Trim());
+        return [.. cells];
+    }
+
+    /// <summary>
     /// Split a delimited list of symbols (the panel's gene list), tolerating comma, semicolon,
     /// whitespace and newline separators mixed in one cell.
     /// </summary>
-    public static IReadOnlyList<string> SymbolList(string? raw) =>
+    /// <remarks>
+    /// One cell can carry several labelled lists — <c>"DNA panel: BRCA1, BRCA2; RNA panel: ALK"</c> —
+    /// and the label is prose, not a symbol. No gene symbol contains a colon, so within each
+    /// semicolon-separated segment everything up to one is a heading and is dropped.
+    /// </remarks>
+    public static IReadOnlyList<string> SymbolList(string? raw)
+    {
         // Deliberately not via Clean: that strips internal spaces, which are separators here.
-        string.IsNullOrWhiteSpace(raw)
-            ? []
-            : [.. raw.Split([',', ';', ' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries
-                | StringSplitOptions.TrimEntries)];
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        var symbols = new List<string>();
+        foreach (var segment in raw.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var colon = segment.LastIndexOf(':');
+            var listed = colon >= 0 ? segment[(colon + 1)..] : segment;
+
+            symbols.AddRange(listed.Split(
+                [',', ' ', '\t', '\n', '\r'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        return symbols;
+    }
 
     /// <summary>
     /// Trim, drop the decorations the reports add to numbers, and treat a blank or an explicit
