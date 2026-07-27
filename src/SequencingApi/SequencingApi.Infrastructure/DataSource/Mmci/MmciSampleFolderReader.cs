@@ -341,8 +341,14 @@ internal static partial class MmciSampleFolderReader
     /// <c>&lt;name&gt;_S&lt;n&gt;_L00&lt;lane&gt;_R&lt;read&gt;_001.fastq.gz</c> — the demultiplexer's
     /// naming, and the only record of which lane and which read of the pair a file holds.
     /// </summary>
+    /// <remarks>
+    /// The lane segment is optional because some files simply do not carry one
+    /// (<c>&lt;name&gt;_S13_R1_001.fastq.gz</c>). Requiring it failed the whole match on those, which
+    /// threw away the read number the filename states perfectly clearly alongside the lane it does
+    /// not. An absent lane now costs the lane only.
+    /// </remarks>
     [GeneratedRegex(
-        @"_S(?<sample>\d+)_L(?<lane>\d+)_R(?<read>\d+)_",
+        @"_S(?<sample>\d+)(_L(?<lane>\d+))?_R(?<read>\d+)_",
         RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture)]
     private static partial Regex FastqNamePattern();
 }

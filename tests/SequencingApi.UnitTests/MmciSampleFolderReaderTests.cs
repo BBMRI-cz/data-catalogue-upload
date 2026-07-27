@@ -99,6 +99,67 @@ public sealed class MmciSampleFolderReaderTests
         Assert.Null(analysis!.ReferenceGenome);
     }
 
+    /// <summary>
+    /// Lay out a <c>FASTQ/</c> folder holding the named files and return the run-sample built from it.
+    /// </summary>
+    private static RunSample ReadReads(string sampleId, params string[] fastqNames)
+    {
+        var root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var sample = Path.Join(root, sampleId);
+            Directory.CreateDirectory(Path.Join(sample, "FASTQ"));
+            foreach (var name in fastqNames)
+            {
+                File.WriteAllText(Path.Join(sample, "FASTQ", name), "not really gzipped reads");
+            }
+
+            var runSample = MmciSampleFolderReader.Read(sample, "240104_M02340_0399_LCBRW", null, root);
+            Assert.False(runSample.IsError);
+            return runSample.Value;
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AReadFileWithNoLaneInItsNameStillYieldsItsReadNumber()
+    {
+        // One NextSeq run writes two files per sample with no _L00N_ segment at all, beside the eight
+        // per-lane ones. Requiring the lane failed the whole match and discarded the read number too,
+        // even though the filename states _R1_ / _R2_ plainly.
+        var runSample = ReadReads(
+            "p0001",
+            "p0001_S13_R1_001.fastq.gz",
+            "p0001_S13_R2_001.fastq.gz");
+
+        Assert.Equal(2, runSample.Files.Count);
+        Assert.Equal([1, 2], runSample.Files.Select(file => file.Read));
+        Assert.All(runSample.Files, file => Assert.Null(file.Lane));
+
+        // The sample index is stamped in the same name and must survive as well.
+        Assert.Equal(13, runSample.SampleIndex);
+
+        // With no lane stated anywhere, the lane count is absent rather than invented as zero.
+        Assert.Null(runSample.LaneCount);
+    }
+
+    [Fact]
+    public void ALaneStampedReadFileStillYieldsLaneAndRead()
+    {
+        var runSample = ReadReads(
+            "p0001",
+            "p0001_S7_L001_R1_001.fastq.gz",
+            "p0001_S7_L002_R2_001.fastq.gz");
+
+        Assert.Equal([1, 2], runSample.Files.Select(file => file.Lane));
+        Assert.Equal([1, 2], runSample.Files.Select(file => file.Read));
+        Assert.Equal(7, runSample.SampleIndex);
+        Assert.Equal(2, runSample.LaneCount);
+    }
+
     [Theory]
     [InlineData("p0001_Mutation_Report1.txt", FileRole.VariantReport)]
     [InlineData("p0001_Coverage_Curve_Report1.txt", FileRole.CoverageReport)]
