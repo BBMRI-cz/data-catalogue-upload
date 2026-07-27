@@ -68,10 +68,7 @@ internal static class MmciRunMetadataReader
             startedAt: MmciSourceValues.Timestamp(Value(completedJob, "StartTime", "RunStartDate")),
             completedAt: MmciSourceValues.Timestamp(
                 Value(completedJob, "CompletionTime") ?? Value(completionStatus, "CompletionTime")),
-            // ponytail: %Q30 is not stated anywhere in this tree. GenerateFASTQRunStatistics.xml holds
-            // per-tile cluster counts, and deriving a run-level Q30 from them would be inventing a
-            // number the source never claimed. Left null until a source states one.
-            percentageQ30: null);
+            percentageQ30: PercentageQ30(runPath));
     }
 
     /// <summary>
@@ -102,6 +99,41 @@ internal static class MmciRunMetadataReader
         }
 
         return reads;
+    }
+
+    /// <summary>
+    /// The share of bases the run called with a Phred score of at least 30, as the control software's
+    /// own analysis log states it.
+    /// </summary>
+    /// <remarks>
+    /// <c>AnalysisLog.txt</c> is the only place in this tree that states a run-level Q30, and it does
+    /// so as a percentage on a line of its own (<c>Percent >= Q30: 95.9%</c>). The run statistics XML
+    /// beside it does carry <c>PercentQ30</c> elements, but every one of them reads zero in this
+    /// corpus: these are FASTQ-only workflows, so the instrument never ran the alignment that would
+    /// have filled them in. Roughly seven runs in ten have the log; the rest simply have no Q30.
+    /// </remarks>
+    private static double? PercentageQ30(string runPath)
+    {
+        if (MmciSourceValues.ReadLegacyText(Path.Join(runPath, "AnalysisLog.txt")) is not { } log)
+        {
+            return null;
+        }
+
+        foreach (var line in MmciSourceValues.Lines(log))
+        {
+            var marker = line.IndexOf("Q30", StringComparison.OrdinalIgnoreCase);
+            if (marker < 0 || MmciSourceValues.KeyValue(line[marker..]) is not { } pair)
+            {
+                continue;
+            }
+
+            if (MmciSourceValues.Number(pair.Value) is { } percentage and >= 0 and <= 100)
+            {
+                return percentage;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The leading <c>YYMMDD</c> of a run folder name, or null when it is not shaped that way.</summary>

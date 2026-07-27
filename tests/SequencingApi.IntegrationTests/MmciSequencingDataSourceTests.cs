@@ -73,6 +73,16 @@ public sealed class MmciSequencingDataSourceTests
         Assert.Equal("MiSeq v2", run.ReagentKit);                           // RunParameters
         Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), run.StartedAt);    // CompletedJobInfo
         Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), run.CompletedAt);
+        Assert.Equal(95.9, run.PercentageQ30);                              // AnalysisLog
+    }
+
+    [Fact]
+    public void ARunWithoutAnAnalysisLogSimplyHasNoQ30()
+    {
+        // Only the MiSeq control software writes one; three runs in ten do not have it at all.
+        var run = Assert.Single(Read().Runs, candidate => candidate.Id.Value == "240102_NB552710_0064_AHG7L");
+
+        Assert.Null(run.PercentageQ30);
     }
 
     [Fact]
