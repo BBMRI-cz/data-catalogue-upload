@@ -103,7 +103,8 @@ internal static class MmciLibrariesTableReader
                 BedFile = Cell(cells, columns, "bedfile"),
                 AvailableFrom = availableFrom,
                 AvailableTo = availableTo,
-                InputAmount = MmciSourceValues.Int32(Cell(cells, columns, "inputamount")),
+                // Written with its unit and sometimes as a range ("10-25ngr"), so not a plain integer.
+                InputAmount = MmciSourceValues.Quantity(Cell(cells, columns, "inputamount")),
                 LibraryPrepKit = Cell(cells, columns, "librarypreparationkit", "libraryprepkit"),
                 PcrFree = MmciSourceValues.Boolean(Cell(cells, columns, "pcrfree")),
                 TargetEnrichmentKit = Cell(cells, columns, "targetenrichmentkit"),

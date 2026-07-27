@@ -102,4 +102,36 @@ public sealed class MmciSourceValuesTests
         Assert.Equal(["BRCA1", "BRCA2"], MmciSourceValues.SymbolList("BRCA1 BRCA2"));
         Assert.Empty(MmciSourceValues.SymbolList("  "));
     }
+
+    [Theory]
+    [InlineData("100ngr", 100)]
+    [InlineData("200ng", 200)]
+    [InlineData("120ngr", 120)]
+    [InlineData("10-25ngr", 10)]        // a range yields its lower bound
+    [InlineData("20-100ngr", 20)]
+    [InlineData("100-500ngr", 100)]
+    [InlineData("  300ngr ", 300)]
+    public void QuantityReadsAnAmountWrittenWithItsUnit(string raw, int expected)
+    {
+        // Every value in the libraries table's input-amount column carries a unit, so a plain numeric
+        // parse returned null for all of them and the column was empty for all 4414 rows.
+        Assert.Equal(expected, MmciSourceValues.Quantity(raw));
+    }
+
+    [Theory]
+    [InlineData("TSO500")]    // the table has one cell holding a panel name where an amount belongs
+    [InlineData("ngr")]
+    [InlineData("-")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void QuantityIsAbsentRatherThanZeroWhenNoAmountIsStated(string? raw) =>
+        Assert.Null(MmciSourceValues.Quantity(raw));
+
+    [Fact]
+    public void QuantityDoesNotChangeHowPlainNumbersAreRead()
+    {
+        // Int32 still owns the ordinary case; Quantity exists only for the unit-bearing column.
+        Assert.Equal(250, MmciSourceValues.Quantity("250"));
+        Assert.Equal(250, MmciSourceValues.Int32("250"));
+    }
 }

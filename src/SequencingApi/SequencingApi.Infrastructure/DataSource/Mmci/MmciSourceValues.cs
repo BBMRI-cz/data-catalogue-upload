@@ -170,6 +170,36 @@ internal static class MmciSourceValues
     }
 
     /// <summary>
+    /// Parse a quantity the operators write with its unit, and sometimes as a range: <c>100ngr</c>,
+    /// <c>200ng</c>, <c>10-25ngr</c>. A range yields its lower bound.
+    /// </summary>
+    /// <remarks>
+    /// Not something <see cref="Int32"/> can do, and the difference matters: every value in the
+    /// libraries table's input-amount column carries a unit, so a plain numeric parse returned null
+    /// for all of them. Taking the lower bound of a range is what the previous uploader did, and it is
+    /// the honest reading — the amount was at least this much.
+    /// <para>
+    /// The digits have to <em>lead</em>, which is what separates an amount from a name that merely
+    /// contains a number: the table has one cell holding <c>TSO500</c>, a panel name, where an amount
+    /// belongs. Harvesting digits from anywhere in the cell would turn that into an input amount of
+    /// 500 — a fabricated measurement, and a plausible-looking one. The previous uploader stripped
+    /// non-digits blindly and did exactly that; a value that states no amount is absent instead.
+    /// </para>
+    /// </remarks>
+    public static int? Quantity(string? raw)
+    {
+        if (Clean(raw) is not { } value)
+        {
+            return null;
+        }
+
+        var lower = value.Split('-', StringSplitOptions.TrimEntries)[0];
+        var digits = new string([.. lower.TakeWhile(char.IsAsciiDigit)]);
+
+        return int.TryParse(digits, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
     /// Split one delimited line, honouring quoted cells: a delimiter inside quotes is data, not a
     /// separator.
     /// </summary>
