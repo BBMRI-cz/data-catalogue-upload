@@ -23,7 +23,7 @@ internal static class SequencingFixtures
         SampleAggregate.Create(
             externalId,
             idScheme: "mmci_predictive",
-            subjectRef: "patient-4711",
+            predictiveNumber: "patient-4711",
             runSamples: [AnalysedRunSample(), ReadsOnlyRunSample()]).Value;
 
     /// <summary>The complete case — library preparation, reads, and an analysis with quality metrics.</summary>

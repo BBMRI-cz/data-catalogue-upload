@@ -30,7 +30,7 @@ public sealed class DomainModelsTests
 
         Assert.Equal("mmci_predictive_1", sample.Id.Value);
         Assert.Equal("mmci_predictive", sample.IdScheme);
-        Assert.Null(sample.SubjectRef);
+        Assert.Null(sample.PredictiveNumber);
         Assert.Empty(sample.RunSamples);
         Assert.False(sample.HasAnalysis);
     }

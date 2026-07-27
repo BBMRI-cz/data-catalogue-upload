@@ -106,15 +106,15 @@ public sealed class MmciSequencingDataSourceTests
     }
 
     [Fact]
-    public void TheMappingTableSuppliesTheRealPredictiveNumberAsTheSubjectReference()
+    public void TheMappingTableSuppliesTheRealPredictiveNumber()
     {
         var result = Read();
 
         // The tree only ever knows the pseudonymized id; this is the join to the patient service.
-        Assert.Equal("4-21", Sample(result, "p0001").SubjectRef);
+        Assert.Equal("4-21", Sample(result, "p0001").PredictiveNumber);
 
         // p0002 is deliberately absent from the mapping - an uncovered sample is routine, not a fault.
-        Assert.Null(Sample(result, "p0002").SubjectRef);
+        Assert.Null(Sample(result, "p0002").PredictiveNumber);
     }
 
     [Fact]
@@ -368,14 +368,14 @@ public sealed class MmciSequencingDataSourceTests
     }
 
     [Fact]
-    public void AMissingMappingTableCostsTheSubjectReferencesAndNothingElse()
+    public void AMissingMappingTableCostsThePredictiveNumbersAndNothingElse()
     {
         var result = new MmciSequencingDataSource(RunsPath, LibrariesPath, "no-such-mapping-directory")
             .ReadRecords(default);
 
         Assert.False(result.IsError);
         Assert.NotEmpty(result.Value.Samples);
-        Assert.All(result.Value.Samples, sample => Assert.Null(sample.SubjectRef));
+        Assert.All(result.Value.Samples, sample => Assert.Null(sample.PredictiveNumber));
         Assert.Contains(result.Value.Errors, error => error.Reason.Contains("mapping", StringComparison.OrdinalIgnoreCase));
     }
 

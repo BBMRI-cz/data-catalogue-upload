@@ -28,7 +28,7 @@ public sealed class RepositoryTests : IDisposable
         Assert.NotNull(loaded);
         Assert.Equal("mmci_predictive_0001", loaded.Id.Value);
         Assert.Equal("mmci_predictive", loaded.IdScheme);
-        Assert.Equal("patient-4711", loaded.SubjectRef);
+        Assert.Equal("patient-4711", loaded.PredictiveNumber);
         Assert.Equal(2, loaded.RunSamples.Count);
         Assert.True(loaded.HasAnalysis);
 
@@ -156,7 +156,7 @@ public sealed class RepositoryTests : IDisposable
 
         var loaded = await repository.GetSampleAsync(shrunk.Id, CancellationToken.None);
         Assert.Equal(SequencingFixtures.SecondaryRunId, Assert.Single(loaded!.RunSamples).RunId.Value);
-        Assert.Null(loaded.SubjectRef);
+        Assert.Null(loaded.PredictiveNumber);
         Assert.False(loaded.HasAnalysis);
 
         await using var probe = _db.NewContext();

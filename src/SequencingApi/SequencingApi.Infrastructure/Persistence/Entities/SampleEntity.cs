@@ -11,7 +11,7 @@ public class SampleEntity
     public string ExternalId { get; set; } = default!;
 
     public string IdScheme { get; set; } = default!;
-    public string? SubjectRef { get; set; }
+    public string? PredictiveNumber { get; set; }
 
     public List<RunSampleEntity> RunSamples { get; set; } = [];
 }

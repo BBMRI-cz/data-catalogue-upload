@@ -22,7 +22,7 @@ public sealed class MapperTests
 
         Assert.Equal("mmci_predictive_0001", mapped.Id.Value);
         Assert.Equal("mmci_predictive", mapped.IdScheme);
-        Assert.Equal("patient-4711", mapped.SubjectRef);
+        Assert.Equal("patient-4711", mapped.PredictiveNumber);
         Assert.Equal(2, mapped.RunSamples.Count);
     }
 

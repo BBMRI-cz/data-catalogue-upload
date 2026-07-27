@@ -60,6 +60,10 @@ public sealed class SequencingDbContext : DbContext
             builder.HasKey(sample => sample.ExternalId);
             builder.HasIndex(sample => sample.IdScheme);
 
+            // The uploader's only entry point is by predictive number, so this lookup is the hot path.
+            // Not unique: two samples can carry the same one, and most carry none at all.
+            builder.HasIndex(sample => sample.PredictiveNumber);
+
             builder.HasMany(sample => sample.RunSamples)
                 .WithOne()
                 .HasForeignKey(runSample => runSample.SampleExternalId)

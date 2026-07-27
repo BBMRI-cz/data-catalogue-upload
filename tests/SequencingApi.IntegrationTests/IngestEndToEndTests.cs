@@ -73,7 +73,7 @@ public sealed class IngestEndToEndTests
 
         Assert.NotNull(sample);
         Assert.Equal("mmci_predictive", sample!.IdScheme);
-        Assert.Equal("4-21", sample.SubjectRef);
+        Assert.Equal("4-21", sample.PredictiveNumber);
         Assert.Equal(3, sample.RunSamples.Count);
 
         var analysed = Assert.Single(
