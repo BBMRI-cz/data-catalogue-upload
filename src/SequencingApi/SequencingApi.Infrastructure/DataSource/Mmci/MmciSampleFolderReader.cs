@@ -122,9 +122,6 @@ internal static partial class MmciSampleFolderReader
             pipelineName: PipelineName,
             pipelineVersion: null,
             referenceGenome: ReferenceGenome(analysisPath),
-            // ponytail: the reports state no production time, so this is the filesystem's mtime of the
-            // newest output — when the files appeared, not when the pipeline claims it ran.
-            producedAt: ProducedAt(analysisPath),
             files: [.. files.OrderBy(file => file.Path, StringComparer.Ordinal)],
             quality: quality);
 
@@ -195,37 +192,6 @@ internal static partial class MmciSampleFolderReader
         _ when build.Contains("hg38", StringComparison.OrdinalIgnoreCase) => "GRCh38",
         _ => null,
     };
-
-    /// <summary>
-    /// When the analysis output appeared, taken as the newest write time in the folder.
-    /// </summary>
-    /// <remarks>
-    /// Local wall-clock time with <see cref="DateTimeKind.Unspecified"/>, to match every other
-    /// timestamp in this model: the sources state times without a zone, and the columns are
-    /// <c>timestamp without time zone</c>. A <see cref="DateTimeKind.Utc"/> value would be rejected
-    /// outright by PostgreSQL on write.
-    /// </remarks>
-    private static DateTime? ProducedAt(string analysisPath)
-    {
-        DateTime? newest = null;
-        foreach (var path in EnumerateFiles(analysisPath, "*", recursive: true))
-        {
-            try
-            {
-                var written = File.GetLastWriteTime(path);
-                if (newest is null || written > newest)
-                {
-                    newest = written;
-                }
-            }
-            catch (IOException)
-            {
-                // A file that vanished mid-scan simply does not contribute a timestamp.
-            }
-        }
-
-        return newest is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Unspecified) : null;
-    }
 
     /// <summary>
     /// What an analysis output is, by filename. Anything unrecognised is skipped rather than stored as

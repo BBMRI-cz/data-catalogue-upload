@@ -220,7 +220,6 @@ public sealed class MmciSequencingDataSourceTests
         // taken from the line under the [Reference File(s)] marker rather than from a key match —
         // the path opens with a drive letter, and "Reference Length" is a measurement, not a build.
         Assert.Equal("GRCh37", analysis.ReferenceGenome);
-        Assert.NotNull(analysis.ProducedAt);
 
         Assert.Contains(analysis.Files, file => file.Role == FileRole.Bam);
         Assert.Contains(analysis.Files, file => file.Role == FileRole.BamIndex);
@@ -261,10 +260,6 @@ public sealed class MmciSequencingDataSourceTests
 
         var timestamps = result.Runs
             .SelectMany(run => new[] { run.StartedAt, run.CompletedAt })
-            .Concat(result.Samples
-                .SelectMany(sample => sample.RunSamples)
-                .SelectMany(runSample => runSample.Analyses)
-                .Select(analysis => analysis.ProducedAt))
             .OfType<DateTime>()
             .ToList();
 

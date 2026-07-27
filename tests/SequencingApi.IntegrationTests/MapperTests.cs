@@ -75,7 +75,6 @@ public sealed class MapperTests
         Assert.Equal("NextGENe", analysis.PipelineName);
         Assert.Equal("2.4.2.2", analysis.PipelineVersion);
         Assert.Equal("GRCh37", analysis.ReferenceGenome);
-        Assert.Equal(new DateTime(2024, 1, 8, 9, 30, 0), analysis.ProducedAt);
 
         // Analysis outputs stay attached to the analysis, not to the run sample they came from.
         Assert.Equal(2, analysis.Files.Count);

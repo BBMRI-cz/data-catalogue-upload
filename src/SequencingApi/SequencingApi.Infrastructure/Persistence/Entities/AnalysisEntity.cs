@@ -17,7 +17,6 @@ public class AnalysisEntity
     public string PipelineName { get; set; } = default!;
     public string? PipelineVersion { get; set; }
     public string? ReferenceGenome { get; set; }
-    public DateTime? ProducedAt { get; set; }
 
     /// <summary>How well the sequencing worked; null when the pipeline reported nothing.</summary>
     public QualityMetricsEntity? Quality { get; set; }

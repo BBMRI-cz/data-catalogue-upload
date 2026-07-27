@@ -104,7 +104,6 @@ internal static class SequencingResponseMapper
         analysis.PipelineName,
         analysis.PipelineVersion,
         analysis.ReferenceGenome,
-        analysis.ProducedAt,
         [.. analysis.Files.Select(ToResponse)],
         analysis.Quality is { } quality ? ToResponse(quality) : null);
 

@@ -88,7 +88,6 @@ internal static class SequencingFixtures
             pipelineName: "NextGENe",
             pipelineVersion: "2.4.2.2",
             referenceGenome: "GRCh37",
-            producedAt: new DateTime(2024, 1, 8, 9, 30, 0),
             files:
             [
                 SequencingFile.Create(

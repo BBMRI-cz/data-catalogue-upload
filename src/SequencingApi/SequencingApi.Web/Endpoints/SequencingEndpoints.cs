@@ -111,7 +111,6 @@ public sealed record AnalysisResponse(
     string PipelineName,
     string? PipelineVersion,
     string? ReferenceGenome,
-    DateTime? ProducedAt,
     IReadOnlyList<SequencingFileResponse> Files,
     QualityMetricsResponse? Quality);
 

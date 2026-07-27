@@ -40,8 +40,6 @@ public sealed record Analysis : ValueObject
     /// </summary>
     public string? ReferenceGenome { get; init; }
 
-    public DateTime? ProducedAt { get; init; }
-
     // ponytail: individual variant records are deliberately not modelled — the data catalogue
     // consumes none of them, and they would be by far the largest table in the service. Analyses
     // reference their variant calls as files (FileRole.Vcf / VariantReport) and summarise them in
@@ -62,7 +60,6 @@ public sealed record Analysis : ValueObject
         string pipelineName,
         string? pipelineVersion = null,
         string? referenceGenome = null,
-        DateTime? producedAt = null,
         IReadOnlyList<SequencingFile>? files = null,
         QualityMetrics? quality = null)
     {
@@ -77,7 +74,6 @@ public sealed record Analysis : ValueObject
             PipelineName = cleanPipelineName,
             PipelineVersion = Normalize.Text(pipelineVersion),
             ReferenceGenome = Normalize.Text(referenceGenome),
-            ProducedAt = producedAt,
             Files = files ?? [],
             Quality = quality,
         };
