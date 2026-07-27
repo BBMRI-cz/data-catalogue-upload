@@ -42,6 +42,105 @@ Encodings and separators, because they are what makes these files hard to read b
 Reading one by hand: `iconv -f WINDOWS-1250 -t UTF-8 <file>`, and add `| cat -A` when the separator
 is the question (`^I` is a tab).
 
+## How ingestion works
+
+One pass over the tree per ingest. `SequencingDataSource` orchestrates; every other class is a pure
+reader it calls. Runs are read one at a time, and the sample aggregates only exist at the very end —
+the tree is organised by run, the domain by sample, so the regrouping is the last step.
+
+```mermaid
+flowchart TD
+    Start(["ReadRecords"]) --> Walk["Walk the year tree<br>de-duplicate by run id"]
+    Walk --> Tables["Read LibrariesV*.csv and predictive.json<br>both optional, both degrade"]
+    Tables --> RunLoop{{"for each run folder"}}
+
+    RunLoop --> Sheet["SampleSheetReader<br>reads SampleSheet.csv"]
+    Sheet --> RunMeta["RunMetadataReader<br>builds SequencingRunAggregate"]
+    RunMeta --> SampleLoop{{"for each sample folder"}}
+
+    SampleLoop --> Folder["SampleFolderReader<br>reads, artifacts, Analysis<br>skips reads naming another sample"]
+    Folder --> Stats["NextGeneStatsReader<br>builds QualityMetrics"]
+    Stats --> Panel["PanelMatcher<br>attaches LibraryPreparation"]
+    Panel --> Checks["read-count check"]
+    Checks --> SampleLoop
+    SampleLoop --> RunLoop
+
+    RunLoop --> Group["Regroup run-samples by sample id<br>attach the real predictive number"]
+    Group --> Panels["Build the panels from the libraries rows"]
+    Panels --> Result(["RecordReadResult<br>samples, runs, panels, errors"])
+```
+
+Which reader turns which file into which part of the model:
+
+```mermaid
+flowchart LR
+    subgraph files ["Source files"]
+        direction TB
+        RunXml["RunInfo.xml<br>runParameters.xml<br>CompletedJobInfo.xml<br>RunCompletionStatus.xml"]
+        Log["AnalysisLog.txt"]
+        SheetCsv["SampleSheet.csv"]
+        Fastq["FASTQ/*.fastq.gz"]
+        Artifacts["Analysis/ artifacts<br>bam, vcf, reports"]
+        StatsTxt["_StatInfo.txt<br>_Coverage_..._Statistics.txt"]
+        ParamsTxt["_Parameters.txt"]
+        LibCsv["LibrariesV*.csv"]
+        PredJson["predictive.json"]
+    end
+
+    subgraph readers ["Readers"]
+        direction TB
+        RSheet["SampleSheetReader"]
+        RRun["RunMetadataReader"]
+        RFolder["SampleFolderReader"]
+        RStats["NextGeneStatsReader"]
+        RLib["LibrariesTableReader"]
+        RMatch["PanelMatcher"]
+        RMap["MappingTableReader"]
+    end
+
+    subgraph model ["Domain"]
+        direction TB
+        DRun["SequencingRunAggregate<br>+ ReadDefinition"]
+        DRunSample["RunSample"]
+        DFile["SequencingFile"]
+        DAnalysis["Analysis"]
+        DQuality["QualityMetrics"]
+        DLib["LibraryPreparation"]
+        DPanel["PanelAggregate"]
+        DSample["SampleAggregate"]
+    end
+
+    RunXml --> RRun
+    Log --> RRun
+    SheetCsv --> RSheet
+    RSheet -->|"header values"| RRun
+    RRun --> DRun
+
+    Fastq --> RFolder
+    Artifacts --> RFolder
+    StatsTxt --> RStats
+    RFolder --> DRunSample
+    RFolder --> DFile
+    RFolder --> DAnalysis
+    RStats --> DQuality
+
+    SheetCsv -->|"Sample_Type, row order"| RFolder
+    ParamsTxt --> RMatch
+    LibCsv --> RLib
+    RLib --> RMatch
+    RMatch --> DLib
+    RLib --> DPanel
+
+    PredJson --> RMap
+    RMap -->|"real predictive number"| DSample
+    DRunSample --> DSample
+```
+
+Two things the picture makes plain. `SampleSheet.csv` feeds *two* readers — run header values one way,
+per-sample type and row order the other — so a change to it has a wider blast radius than its size
+suggests. And `LibrariesV*.csv` is the only source that reaches the model by two routes: directly as
+panels, and through the matcher as a library preparation.
+
 ## The classes
 
 All in `src/SequencingApi/SequencingApi.Infrastructure/DataSource/Mmci/`, all prefixed `Mmci`.
