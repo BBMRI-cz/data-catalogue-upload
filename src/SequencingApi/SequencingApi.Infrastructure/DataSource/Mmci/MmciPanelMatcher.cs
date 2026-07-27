@@ -23,15 +23,26 @@ internal static class MmciPanelMatcher
     /// <summary>
     /// Short names the operators type in place of the panel's real name in the libraries table.
     /// </summary>
+    /// <remarks>
+    /// An alias is a last resort, tried only when the family names no panel literally — see
+    /// <see cref="Candidates"/>. <c>SeqCapH</c> is the pre-rename spelling of the HyperCap family, but
+    /// bare <c>SeqCap</c> is <em>not</em>: the table lists four real SeqCap panels, and aliasing them
+    /// to HyperCap sent every SeqCap run looking among panels that did not exist until 2020.
+    /// </remarks>
     private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
     {
         ["seqcaph"] = "hypercap",
-        ["seqcap"] = "hypercap",
         ["hypcap"] = "hypercap",
         ["eg"] = "eligene",
+        ["tso"] = "trusight",
         ["tso500"] = "trusight",
-        ["mp"] = "mammaprint",
     };
+
+    /// <summary>
+    /// The value the libraries table carries in <c>Text in parameters</c> for a family's catch-all
+    /// row — the one to fall back on when a family's name alone cannot say which panel was used.
+    /// </summary>
+    private const string ManualRow = "manual";
 
     /// <summary>
     /// Match a sample to a library row, or null when neither route resolves one.
@@ -125,7 +136,7 @@ internal static class MmciPanelMatcher
             return null;
         }
 
-        var candidates = rows.Where(row => Matches(row, family)).ToList();
+        var candidates = Candidates(rows, family);
         if (candidates.Count == 0)
         {
             return null;
@@ -146,9 +157,32 @@ internal static class MmciPanelMatcher
             }
         }
 
-        // Still ambiguous. Guessing here would silently attribute a sample's genes to the wrong panel,
-        // so it stays unresolved — which the model can express and a wrong answer cannot be undone.
-        return null;
+        // Still ambiguous, so fall back to the family's catch-all row — the one the table marks
+        // `manual`, meaning "this family, panel not otherwise determined". Deliberately not filtered
+        // by date: the catch-all is typically the row with no availability window at all, which is
+        // exactly why the window could not separate the candidates in the first place.
+        var catchAll = candidates
+            .Where(row => string.Equals(row.ParametersText, ManualRow, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // A family with two catch-alls is a table error, and picking one would be a guess.
+        return catchAll.Count == 1 ? catchAll[0] : null;
+    }
+
+    /// <summary>
+    /// The rows a family name can refer to. A family that names a panel literally never consults the
+    /// alias table: the aliases exist for the short forms operators type, and letting one override a
+    /// real panel name is how <c>SeqCap</c> runs ended up being matched against HyperCap panels.
+    /// </summary>
+    private static List<MmciLibraryRow> Candidates(IReadOnlyList<MmciLibraryRow> rows, string family)
+    {
+        var literal = rows.Where(row => Matches(row, family)).ToList();
+        if (literal.Count > 0 || !Aliases.TryGetValue(family, out var alias))
+        {
+            return literal;
+        }
+
+        return [.. rows.Where(row => Matches(row, alias))];
     }
 
     private static bool Matches(MmciLibraryRow row, string family) =>
@@ -158,6 +192,7 @@ internal static class MmciPanelMatcher
     /// <summary>
     /// Reduce an experiment name to its panel family. Handles every separator convention in the
     /// corpus by taking the leading token and then removing a <c>YYMMDD</c> date fused onto it.
+    /// Alias expansion is not done here — see <see cref="Candidates"/> for why it comes second.
     /// </summary>
     private static string? PanelFamily(string? experimentName)
     {
@@ -182,12 +217,7 @@ internal static class MmciPanelMatcher
         }
 
         var canonical = Canonical(token);
-        if (canonical.Length == 0)
-        {
-            return null;
-        }
-
-        return Aliases.TryGetValue(canonical, out var alias) ? alias : canonical;
+        return canonical.Length == 0 ? null : canonical;
     }
 
     private static string Canonical(string value) =>
