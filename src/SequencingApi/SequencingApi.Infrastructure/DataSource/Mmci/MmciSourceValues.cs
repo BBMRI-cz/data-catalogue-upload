@@ -146,12 +146,19 @@ internal static class MmciSourceValues
     };
 
     /// <summary>
-    /// Split a <c>Key: Value</c> line from a vendor statistics report. Returns null when the line
-    /// carries no separator (headers, blank rules, free text), so callers can skip it.
+    /// Split a <c>Key: Value</c> or <c>Key&lt;tab&gt;Value</c> line from a vendor statistics report.
+    /// Returns null when the line carries neither separator (headers, blank rules, free text), so
+    /// callers can skip it.
     /// </summary>
+    /// <remarks>
+    /// Both spellings occur, and which one a report uses is not a choice the reader gets to make:
+    /// NextGENe writes <c>_StatInfo.txt</c> colon-separated but the coverage and mutation statistics
+    /// beside it tab-separated. Whichever separator comes first wins, so a tabbed line whose value
+    /// happens to contain a colon still splits on the tab.
+    /// </remarks>
     public static (string Key, string Value)? KeyValue(string line)
     {
-        var separator = line.IndexOf(':', StringComparison.Ordinal);
+        var separator = line.IndexOfAny([':', '\t']);
         if (separator < 0)
         {
             return null;

@@ -1,4 +1,4 @@
-Total Mutations: 37
-Homozygous: 12
-Heterozygous: 25
-Ts/Tv Ratio: 2,1
+Total Mutations	37
+Number of Homozygous Mutations	12
+Number of Heterozygous Mutations	25
+Transition/Transversion Ratio	2,100

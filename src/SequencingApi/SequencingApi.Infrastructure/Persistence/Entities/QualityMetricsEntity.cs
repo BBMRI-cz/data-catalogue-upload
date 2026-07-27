@@ -1,5 +1,3 @@
-using SequencingApi.Domain;
-
 namespace SequencingApi.Infrastructure.Persistence.Entities;
 
 /// <summary>EF Core persistence row for the <c>quality_metrics</c> table.</summary>
@@ -13,16 +11,6 @@ public class QualityMetricsEntity
     /// <summary>Primary key *and* foreign key — an analysis has at most one set of metrics.</summary>
     public long AnalysisId { get; set; }
 
-    public double? AverageCoverage { get; set; }
-    public double? PctTargetOver100x { get; set; }
     public int? MedianReadDepth { get; set; }
     public int? ObservedReadLength { get; set; }
-    public long? TotalReads { get; set; }
-    public long? AlignedReads { get; set; }
-    public double? OnTargetRatePercent { get; set; }
-    public int? TotalVariants { get; set; }
-    public double? TsTvRatio { get; set; }
-    public int? HomozygousVariants { get; set; }
-    public int? HeterozygousVariants { get; set; }
-    public QualityVerdict? Verdict { get; set; }
 }

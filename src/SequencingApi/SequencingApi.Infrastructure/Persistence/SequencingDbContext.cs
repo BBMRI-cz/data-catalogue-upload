@@ -132,7 +132,6 @@ public sealed class SequencingDbContext : DbContext
             builder.ToTable("quality_metrics");
             builder.HasKey(quality => quality.AnalysisId);
             builder.Property(quality => quality.AnalysisId).ValueGeneratedNever();
-            builder.Property(quality => quality.Verdict).HasConversion<string>();
         });
 
         modelBuilder.Entity<SequencingFileEntity>(builder =>

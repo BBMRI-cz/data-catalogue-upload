@@ -267,20 +267,14 @@ public sealed class MmciSequencingDataSourceTests
 
         var quality = analysis.Quality;
         Assert.NotNull(quality);
-        Assert.Equal(812.5, quality!.AverageCoverage);
-        Assert.Equal(97.25, quality.PctTargetOver100x);
-        Assert.Equal(640, quality.MedianReadDepth);
-        Assert.Equal(151, quality.ObservedReadLength);
-        Assert.Equal(4_200_000L, quality.TotalReads);
-        Assert.Equal(4_100_000L, quality.AlignedReads);
-        Assert.Equal(92.5, quality.OnTargetRatePercent);
-        Assert.Equal(37, quality.TotalVariants);
-        Assert.Equal(2.1, quality.TsTvRatio);
-        Assert.Equal(12, quality.HomozygousVariants);
-        Assert.Equal(25, quality.HeterozygousVariants);
 
-        // No source states a verdict; the domain never computes one.
-        Assert.Null(quality.Verdict);
+        // Read off the tab-separated coverage report through its decimal comma (640,32).
+        Assert.Equal(640, quality!.MedianReadDepth);
+        Assert.Equal(151, quality.ObservedReadLength);
+
+        // The alignment summary states an "Average Coverage" of its own — a mean over the whole
+        // reference, not over the target. The target figure is the one that must survive.
+        Assert.NotEqual(9, quality.MedianReadDepth);
     }
 
     [Fact]

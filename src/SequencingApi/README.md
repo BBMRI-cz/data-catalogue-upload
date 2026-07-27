@@ -31,14 +31,20 @@ SampleAggregate (SampleId = opaque external_id, + IdScheme)   PanelAggregate (Pa
 
 **Individual variant records are deliberately not modelled.** Nothing in the catalogue path consumes
 them, and they would be by far the largest table in the service. An analysis references its variant
-calls as files (`FileRole.Vcf`, `FileRole.VcfFiltered`, `FileRole.VariantReport`) and summarises them
-in `QualityMetrics` (`TotalVariants`, `TsTvRatio`, homozygous/heterozygous split). Add a `Variant`
+calls as files (`FileRole.Vcf`, `FileRole.VcfFiltered`, `FileRole.VariantReport`). Add a `Variant`
 entity the day something actually queries variants.
 
-**`QualityMetrics` hangs off `Analysis` only.** Every metric in it — coverage, read counts, on-target
-rate, variant summaries — is computed by the analysis pipeline, not by the instrument. A run measures
-exactly one quality number, so it carries a plain `PercentageQ30` property instead of a
-mostly-null metrics object, and `RunSample` carries none at all.
+**`QualityMetrics` holds only what the catalogue consumes**, which is two numbers: `MedianReadDepth`
+and `ObservedReadLength`. FAIR Genomes' `Sequencing` sheet names six quality fields, and MMCI's
+sources can state only these two — there is no median depth, no insert size and no TR20 anywhere in
+the tree, and everything else the pipeline reports (read counts, on-target rate, variant summaries)
+has no field to land in. An earlier version stored eleven metrics; nine were null in every row of the
+production corpus and none of them reached the catalogue. They stay recoverable by re-reading the
+source reports if a consumer ever appears.
+
+**`QualityMetrics` hangs off `Analysis` only.** Both metrics are computed by the analysis pipeline,
+not by the instrument. A run measures exactly one quality number, so it carries a plain
+`PercentageQ30` property instead of a mostly-null metrics object, and `RunSample` carries none at all.
 
 A run is shared by roughly a dozen samples and a panel by hundreds, so both are their own root rather
 than being embedded. `RunSample` is identified by the run it belongs to — a sample is sequenced at most
@@ -85,10 +91,8 @@ that is what it is; the pseudonymized one stays qualified as such wherever both 
 ### What is deliberately never filled
 
 `SequencingFile.Checksum` (no source states one, and hashing every BAM would mean reading the whole
-tree), `QualityMetrics.Verdict` (the thresholds behind a pass/fail are configuration, and the domain
-stores a verdict rather than computing one), `SequencingRunAggregate.PercentageQ30` (the run
-statistics XML holds per-tile counts, not a stated Q30) and `PanelAggregate.Assay` (the libraries
-table has no such column; the run's assay comes from the sample sheet instead).
+tree) and `PanelAggregate.Assay` (the libraries table has no such column; the run's assay comes from
+the sample sheet instead).
 
 ## Projects
 

@@ -115,17 +115,7 @@ public sealed record AnalysisResponse(
     IReadOnlyList<SequencingFileResponse> Files,
     QualityMetricsResponse? Quality);
 
-/// <summary>Pipeline-computed quality metrics; every field is optional, absence means not reported.</summary>
+/// <summary>Pipeline-computed quality metrics; both fields are optional, absence means not reported.</summary>
 public sealed record QualityMetricsResponse(
-    double? AverageCoverage,
-    double? PctTargetOver100x,
     int? MedianReadDepth,
-    int? ObservedReadLength,
-    long? TotalReads,
-    long? AlignedReads,
-    double? OnTargetRatePercent,
-    int? TotalVariants,
-    double? TsTvRatio,
-    int? HomozygousVariants,
-    int? HeterozygousVariants,
-    string? Verdict);
+    int? ObservedReadLength);

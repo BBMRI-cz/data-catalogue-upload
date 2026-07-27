@@ -35,7 +35,7 @@ public sealed class RepositoryTests : IDisposable
         var analysed = loaded.RunSamples.Single(run => run.RunId.Value == SequencingFixtures.PrimaryRunId);
         Assert.Equal(2, analysed.Files.Count);
         Assert.Equal(SequencingFixtures.PanelId, analysed.LibraryPreparation!.PanelId!.Value.Value);
-        Assert.Equal(812.5, analysed.Analyses.Single().Quality!.AverageCoverage);
+        Assert.Equal(640, analysed.Analyses.Single().Quality!.MedianReadDepth);
         Assert.Equal(2, analysed.Analyses.Single().Files.Count);
 
         var readsOnly = loaded.RunSamples.Single(run => run.RunId.Value == SequencingFixtures.SecondaryRunId);
@@ -75,7 +75,7 @@ public sealed class RepositoryTests : IDisposable
 
         var analysis = Assert.Single(analysed.Analyses);
         Assert.Equal(2, analysis.Files.Count);
-        Assert.Equal(812.5, analysis.Quality!.AverageCoverage);
+        Assert.Equal(640, analysis.Quality!.MedianReadDepth);
     }
 
     [Fact]
@@ -166,7 +166,7 @@ public sealed class RepositoryTests : IDisposable
         Assert.Equal(SequencingFixtures.PanelId, library.PanelId);
 
         var quality = Assert.Single(await probe.QualityMetrics.AsNoTracking().ToListAsync());
-        Assert.Equal(812.5, quality.AverageCoverage);
+        Assert.Equal(640, quality.MedianReadDepth);
     }
 
     [Fact]

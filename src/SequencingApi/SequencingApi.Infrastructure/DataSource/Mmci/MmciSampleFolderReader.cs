@@ -135,10 +135,11 @@ internal static partial class MmciSampleFolderReader
     {
         var reportsPath = Path.Join(analysisPath, "Reports");
 
+        // The mutation statistics are not read: everything they state is a variant summary, and the
+        // catalogue has no field for one.
         return MmciNextGeneStatsReader.Read(
             ReadFirst(analysisPath, "*_StatInfo.txt"),
-            ReadFirst(reportsPath, "*_Coverage_Curve_Report*_Statistics.txt"),
-            ReadFirst(reportsPath, "*_Mutation_Report*_Statistics.txt"));
+            ReadFirst(reportsPath, "*_Coverage_Curve_Report*_Statistics.txt"));
     }
 
     /// <summary>

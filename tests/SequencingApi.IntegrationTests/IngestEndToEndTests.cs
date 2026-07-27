@@ -71,7 +71,7 @@ public sealed class IngestEndToEndTests
 
         var analysis = Assert.Single(analysed.Analyses);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal(812.5, analysis.Quality!.AverageCoverage);
+        Assert.Equal(640, analysis.Quality!.MedianReadDepth);
     }
 
     [Fact]

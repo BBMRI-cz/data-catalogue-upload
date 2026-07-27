@@ -109,18 +109,8 @@ internal static class SequencingResponseMapper
         analysis.Quality is { } quality ? ToResponse(quality) : null);
 
     private static QualityMetricsResponse ToResponse(QualityMetrics quality) => new(
-        quality.AverageCoverage,
-        quality.PctTargetOver100x,
         quality.MedianReadDepth,
-        quality.ObservedReadLength,
-        quality.TotalReads,
-        quality.AlignedReads,
-        quality.OnTargetRatePercent,
-        quality.TotalVariants,
-        quality.TsTvRatio,
-        quality.HomozygousVariants,
-        quality.HeterozygousVariants,
-        Wire(quality.Verdict));
+        quality.ObservedReadLength);
 
     // The same policy the property names use, so the wire vocabulary is consistent throughout.
     private static string? Wire<TEnum>(TEnum? value)

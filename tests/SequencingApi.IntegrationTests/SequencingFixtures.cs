@@ -105,18 +105,8 @@ internal static class SequencingFixtures
                     checksum: "ddeeff").Value,
             ],
             quality: QualityMetrics.Create(
-                averageCoverage: 812.5,
-                pctTargetOver100x: 97.25,
                 medianReadDepth: 640,
-                observedReadLength: 151,
-                totalReads: 4_200_000,
-                alignedReads: 4_100_000,
-                onTargetRatePercent: 92.5,
-                totalVariants: 37,
-                tsTvRatio: 2.1,
-                homozygousVariants: 12,
-                heterozygousVariants: 25,
-                verdict: QualityVerdict.Pass).Value).Value;
+                observedReadLength: 151).Value).Value;
 
     public static SequencingRunAggregate FullRun(string runId = PrimaryRunId) =>
         SequencingRunAggregate.Create(

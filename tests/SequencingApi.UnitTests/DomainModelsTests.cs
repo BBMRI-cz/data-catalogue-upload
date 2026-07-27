@@ -69,7 +69,7 @@ public sealed class DomainModelsTests
     }
 
     [Fact]
-    public void QualityMetricsAllowsEveryMetricAbsent() => Assert.Null(QualityMetrics.Create().Value.AverageCoverage);
+    public void QualityMetricsAllowsEveryMetricAbsent() => Assert.Null(QualityMetrics.Create().Value.MedianReadDepth);
 
     // --- the reads-only case must be expressible -------------------------------------
 
@@ -264,33 +264,20 @@ public sealed class DomainModelsTests
     // --- quality metrics -------------------------------------------------------------
 
     [Fact]
-    public void QualityRejectsOutOfRangePercentages()
-    {
-        AssertValidationError(QualityMetrics.Create(pctTargetOver100x: 101));
-        AssertValidationError(QualityMetrics.Create(onTargetRatePercent: 100.5));
-    }
-
-    [Fact]
     public void QualityRejectsNegativeCounts()
     {
-        AssertValidationError(QualityMetrics.Create(averageCoverage: -1));
         AssertValidationError(QualityMetrics.Create(medianReadDepth: -1));
         AssertValidationError(QualityMetrics.Create(observedReadLength: -1));
-        AssertValidationError(QualityMetrics.Create(totalReads: -1));
-        AssertValidationError(QualityMetrics.Create(alignedReads: -1));
-        AssertValidationError(QualityMetrics.Create(totalVariants: -1));
-        AssertValidationError(QualityMetrics.Create(tsTvRatio: -1));
-        AssertValidationError(QualityMetrics.Create(homozygousVariants: -1));
-        AssertValidationError(QualityMetrics.Create(heterozygousVariants: -1));
     }
 
     [Fact]
-    public void QualityRejectsAlignedReadsExceedingTotalReads() =>
-        AssertValidationError(QualityMetrics.Create(totalReads: 100, alignedReads: 101));
+    public void QualityKeepsBothMetricsItIsGiven()
+    {
+        var quality = QualityMetrics.Create(medianReadDepth: 525, observedReadLength: 75).Value;
 
-    [Fact]
-    public void QualityAcceptsAlignedReadsEqualToTotalReads() =>
-        Assert.Equal(100, QualityMetrics.Create(totalReads: 100, alignedReads: 100).Value.AlignedReads);
+        Assert.Equal(525, quality.MedianReadDepth);
+        Assert.Equal(75, quality.ObservedReadLength);
+    }
 
     // --- run and read structure ------------------------------------------------------
 

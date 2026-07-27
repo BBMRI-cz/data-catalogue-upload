@@ -86,18 +86,8 @@ public sealed class MapperTests
             file => file.Role == FileRole.Bam);
 
         var quality = analysis.Quality!;
-        Assert.Equal(812.5, quality.AverageCoverage);
-        Assert.Equal(97.25, quality.PctTargetOver100x);
         Assert.Equal(640, quality.MedianReadDepth);
         Assert.Equal(151, quality.ObservedReadLength);
-        Assert.Equal(4_200_000, quality.TotalReads);
-        Assert.Equal(4_100_000, quality.AlignedReads);
-        Assert.Equal(92.5, quality.OnTargetRatePercent);
-        Assert.Equal(37, quality.TotalVariants);
-        Assert.Equal(2.1, quality.TsTvRatio);
-        Assert.Equal(12, quality.HomozygousVariants);
-        Assert.Equal(25, quality.HeterozygousVariants);
-        Assert.Equal(QualityVerdict.Pass, quality.Verdict);
     }
 
     [Fact]
