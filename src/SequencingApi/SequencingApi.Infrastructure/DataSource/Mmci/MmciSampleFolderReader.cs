@@ -22,16 +22,25 @@ internal static partial class MmciSampleFolderReader
     /// <summary>The pipeline that produced every analysis in this tree, named in its own reports.</summary>
     private const string PipelineName = "NextGENe";
 
-    public static ErrorOr<RunSample> Read(
+    public static (ErrorOr<RunSample> Sample, IReadOnlyList<string> Problems) Read(
         string samplePath,
         string runId,
         MmciSampleSheetRow? sheetRow,
         string rootPath)
     {
-        var files = ReadFastqFiles(samplePath, rootPath);
+        var problems = new List<string>();
+        var files = ReadFastqFiles(samplePath, rootPath, problems);
         var analyses = ReadAnalyses(samplePath, rootPath);
 
-        return RunSample.Create(
+        return (Build(runId, sheetRow, files, analyses), problems);
+    }
+
+    private static ErrorOr<RunSample> Build(
+        string runId,
+        MmciSampleSheetRow? sheetRow,
+        IReadOnlyList<SequencingFile> files,
+        IReadOnlyList<Analysis> analyses) =>
+        RunSample.Create(
             runId,
             sampleIndex: SampleIndex(files) ?? sheetRow?.Position,
             sampleType: ParseSampleType(sheetRow?.SampleType),
@@ -42,20 +51,41 @@ internal static partial class MmciSampleFolderReader
             libraryPreparation: null,
             files: files,
             analyses: analyses);
-    }
 
     /// <summary>
     /// The reads. Lane and read number come from the filename the demultiplexer stamped them into,
     /// which is the only place they are recorded per file.
     /// </summary>
-    private static IReadOnlyList<SequencingFile> ReadFastqFiles(string samplePath, string rootPath)
+    /// <remarks>
+    /// A file is only this sample's if its own name says so. The pseudonymizer has spliced one
+    /// sample's id into another's filename in a handful of runs, leaving reads that belong to a
+    /// different sample sitting in this folder — and the folder alone cannot tell you that. Those are
+    /// reported and skipped rather than ingested under whoever's folder they happen to sit in, because
+    /// the alternative is serving one patient's reads under another's predictive number.
+    /// </remarks>
+    private static IReadOnlyList<SequencingFile> ReadFastqFiles(
+        string samplePath,
+        string rootPath,
+        List<string> problems)
     {
         var fastqPath = Path.Join(samplePath, FastqFolder);
+        var sampleId = Path.GetFileName(samplePath);
         var files = new List<SequencingFile>();
 
         foreach (var path in EnumerateFiles(fastqPath, "*.fastq.gz"))
         {
-            var match = FastqNamePattern().Match(Path.GetFileName(path));
+            var name = Path.GetFileName(path);
+            var match = FastqNamePattern().Match(name);
+
+            // Everything before the demultiplexer's `_S<n>_…` suffix is the id the file claims. Only
+            // checked when the suffix is actually present: without it there is nothing to compare.
+            if (match.Success
+                && !name[..match.Index].Equals(sampleId, StringComparison.OrdinalIgnoreCase))
+            {
+                problems.Add($"read file names a different sample and was skipped: {name}");
+                continue;
+            }
+
             var file = SequencingFile.Create(
                 FileRole.Fastq,
                 RelativePath(path, rootPath),

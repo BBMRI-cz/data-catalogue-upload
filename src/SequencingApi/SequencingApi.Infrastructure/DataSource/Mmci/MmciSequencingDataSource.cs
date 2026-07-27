@@ -198,7 +198,13 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
 
             var sheetRow = sheetRows.GetValueOrDefault(externalId);
 
-            var runSample = MmciSampleFolderReader.Read(samplePath, folder.RunId, sheetRow, _organisedRunsPath);
+            var (runSample, problems) = MmciSampleFolderReader.Read(
+                samplePath, folder.RunId, sheetRow, _organisedRunsPath);
+
+            // Reported whatever the outcome: a file that names another sample is the source's own
+            // inconsistency and has to stay visible even when the rest of the folder reads fine.
+            Report(errors, Relative(samplePath), problems);
+
             if (runSample.IsError)
             {
                 errors.Add(new RecordReadError(Name, Relative(samplePath), Describe(runSample.Errors)));

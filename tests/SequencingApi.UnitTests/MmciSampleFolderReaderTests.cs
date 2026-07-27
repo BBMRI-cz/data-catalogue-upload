@@ -35,7 +35,7 @@ public sealed class MmciSampleFolderReaderTests
                 File.WriteAllText(Path.Join(analysis, name), "settings or report body");
             }
 
-            var runSample = MmciSampleFolderReader.Read(sample, "240104_M02340_0399_LCBRW", null, root);
+            var (runSample, _) = MmciSampleFolderReader.Read(sample, "240104_M02340_0399_LCBRW", null, root);
             Assert.False(runSample.IsError);
             return runSample.Value.Analyses.SingleOrDefault();
         }
@@ -102,7 +102,7 @@ public sealed class MmciSampleFolderReaderTests
     /// <summary>
     /// Lay out a <c>FASTQ/</c> folder holding the named files and return the run-sample built from it.
     /// </summary>
-    private static RunSample ReadReads(string sampleId, params string[] fastqNames)
+    private static (RunSample Sample, IReadOnlyList<string> Problems) ReadReads(string sampleId, params string[] fastqNames)
     {
         var root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -114,9 +114,9 @@ public sealed class MmciSampleFolderReaderTests
                 File.WriteAllText(Path.Join(sample, "FASTQ", name), "not really gzipped reads");
             }
 
-            var runSample = MmciSampleFolderReader.Read(sample, "240104_M02340_0399_LCBRW", null, root);
+            var (runSample, problems) = MmciSampleFolderReader.Read(sample, "240104_M02340_0399_LCBRW", null, root);
             Assert.False(runSample.IsError);
-            return runSample.Value;
+            return (runSample.Value, problems);
         }
         finally
         {
@@ -130,7 +130,7 @@ public sealed class MmciSampleFolderReaderTests
         // One NextSeq run writes two files per sample with no _L00N_ segment at all, beside the eight
         // per-lane ones. Requiring the lane failed the whole match and discarded the read number too,
         // even though the filename states _R1_ / _R2_ plainly.
-        var runSample = ReadReads(
+        var (runSample, _) = ReadReads(
             "p0001",
             "p0001_S13_R1_001.fastq.gz",
             "p0001_S13_R2_001.fastq.gz");
@@ -149,7 +149,7 @@ public sealed class MmciSampleFolderReaderTests
     [Fact]
     public void ALaneStampedReadFileStillYieldsLaneAndRead()
     {
-        var runSample = ReadReads(
+        var (runSample, _) = ReadReads(
             "p0001",
             "p0001_S7_L001_R1_001.fastq.gz",
             "p0001_S7_L002_R2_001.fastq.gz");
@@ -158,6 +158,55 @@ public sealed class MmciSampleFolderReaderTests
         Assert.Equal([1, 2], runSample.Files.Select(file => file.Read));
         Assert.Equal(7, runSample.SampleIndex);
         Assert.Equal(2, runSample.LaneCount);
+    }
+
+    [Fact]
+    public void AReadFileNamingADifferentSampleIsReportedAndSkipped()
+    {
+        // The real shapes: the pseudonymizer spliced this folder's id into another sample's id, and
+        // in one case appended a stray character. The reads belong to whoever the filename names, not
+        // to whoever's folder they landed in — ingesting them would serve one patient's reads under
+        // another's predictive number.
+        var (runSample, problems) = ReadReads(
+            "p0001",
+            "p0001_S16_L001_R1_001.fastq.gz",              // this sample's own
+            "p0002p0001p0003_S19_L001_R1_001.fastq.gz",    // another id with p0001 spliced in
+            "p0001x_S20_L001_R1_001.fastq.gz");            // a stray character appended
+
+        // Only the file that names this sample survives.
+        Assert.Single(runSample.Files);
+        Assert.EndsWith("p0001_S16_L001_R1_001.fastq.gz", runSample.Files[0].Path, StringComparison.Ordinal);
+
+        // ...and the two that do not are reported rather than dropped in silence.
+        Assert.Equal(2, problems.Count);
+        Assert.All(problems, problem => Assert.Contains("names a different sample", problem, StringComparison.Ordinal));
+        Assert.Contains(problems, problem => problem.Contains("p0002p0001p0003_S19", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AReadFileWithNoDemultiplexerSuffixIsKeptRatherThanJudged()
+    {
+        // Without the _S<n>_ suffix there is no id to compare against the folder, so there is no
+        // evidence of a mismatch — and absence of evidence must not become a skip.
+        var (runSample, problems) = ReadReads("p0001", "undetermined.fastq.gz");
+
+        Assert.Single(runSample.Files);
+        Assert.Empty(problems);
+    }
+
+    [Fact]
+    public void AWholeFolderOfForeignReadsYieldsNoReadsAtAll()
+    {
+        // The severe case: every read in the folder names someone else. The sample must end up with
+        // no reads rather than with another sample's, and every file must be accounted for.
+        var (runSample, problems) = ReadReads(
+            "p0001",
+            "p0009_S1_L001_R1_001.fastq.gz",
+            "p0009_S1_L001_R2_001.fastq.gz");
+
+        Assert.Empty(runSample.Files);
+        Assert.False(runSample.HasFastq);
+        Assert.Equal(2, problems.Count);
     }
 
     [Theory]
