@@ -90,7 +90,7 @@ services:
     volumes:
       - /muni-sc/OrganisedRuns:/data/organised-runs:ro
       - /muni-sc/Libraries:/data/libraries:ro
-      - /muni-sc/mapping_table:/data/mapping-table:ro
+      - /home/export/pseudonymization_table:/data/mapping-table:ro
 
 volumes:
   uploader_db_data:
