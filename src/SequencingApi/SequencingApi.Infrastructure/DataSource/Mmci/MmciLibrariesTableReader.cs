@@ -33,7 +33,8 @@ internal static class MmciLibrariesTableReader
 
         var files = Directory
             .EnumerateFiles(librariesPath, FilePattern, new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive })
-            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .OrderByDescending(Version)
+            .ThenByDescending(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (files.Count == 0)
@@ -175,6 +176,25 @@ internal static class MmciLibrariesTableReader
             1 => (MmciSourceValues.Date(parts[0]), null),
             _ => (MmciSourceValues.Date(parts[0]), MmciSourceValues.Date(parts[1])),
         };
+    }
+
+    /// <summary>
+    /// The version a libraries file declares in its own name — the <c>YYMMDD</c> of
+    /// <c>LibrariesV260123.csv</c>. Files that do not follow the convention sort last.
+    /// </summary>
+    /// <remarks>
+    /// Ordering on this rather than on the modification time, which is what the name is for. An mtime
+    /// says when a file was last copied, not which revision of the table it holds: in the live
+    /// directory four versions share one timestamp to the second, and simply opening an old version
+    /// in a spreadsheet would promote it over the current one. Non-deterministic input ordering also
+    /// makes the back-fill below pick an arbitrary donor.
+    /// </remarks>
+    private static int Version(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var digits = new string([.. name.SkipWhile(character => !char.IsAsciiDigit(character)).TakeWhile(char.IsAsciiDigit)]);
+
+        return digits.Length >= 6 && int.TryParse(digits[..6], out var version) ? version : int.MinValue;
     }
 
     /// <summary>A stable, readable panel id, so re-ingesting the same table produces the same rows.</summary>

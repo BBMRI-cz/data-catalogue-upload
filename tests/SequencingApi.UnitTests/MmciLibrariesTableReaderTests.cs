@@ -141,13 +141,17 @@ public sealed class MmciLibrariesTableReaderTests
                 HyperCap MOP;MMCI_MOP_2024a;Roche;MMCI_MOP_2024a_capture_targets.bed
                 """, MmciSourceValues.LegacyEncoding);
 
-            File.SetLastWriteTimeUtc(older, new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            // Modification times deliberately contradict the version in the name: the 2024 table is
+            // touched last, as happens whenever someone opens an old version in a spreadsheet, or
+            // whenever a checkout writes every file at once. Which revision a file holds is what its
+            // name says, so the 2025 table must still win.
+            File.SetLastWriteTimeUtc(older, new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
             File.SetLastWriteTimeUtc(newer, new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
             var (rows, _) = MmciLibrariesTableReader.ReadDirectory(directory);
 
             var row = Assert.Single(rows);
-            Assert.Equal("MMCI_MOP_2024a", row.ParametersText);           // newest wins
+            Assert.Equal("MMCI_MOP_2024a", row.ParametersText);           // newest version wins
             Assert.Equal("MMCI_MOP_2024a_capture_targets.bed", row.BedFile);
             Assert.Equal(250, row.InputAmount);                            // back-filled
             Assert.Equal(350, row.IntendedInsertSize);
