@@ -15,7 +15,6 @@ public class AnalysisEntity
 
     public AnalysisType AnalysisType { get; set; }
     public string PipelineName { get; set; } = default!;
-    public string? PipelineVersion { get; set; }
     public string? ReferenceGenome { get; set; }
 
     /// <summary>How well the sequencing worked; null when the pipeline reported nothing.</summary>

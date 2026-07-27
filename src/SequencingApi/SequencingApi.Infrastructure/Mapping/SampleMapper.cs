@@ -65,7 +65,6 @@ internal static class SampleMapper
     {
         AnalysisType = analysis.AnalysisType,
         PipelineName = analysis.PipelineName,
-        PipelineVersion = analysis.PipelineVersion,
         ReferenceGenome = analysis.ReferenceGenome,
         Quality = analysis.Quality is { } quality ? ToEntity(quality) : null,
         Files = [.. analysis.Files.Select(ToEntity)],
@@ -131,7 +130,6 @@ internal static class SampleMapper
     {
         AnalysisType = row.AnalysisType,
         PipelineName = row.PipelineName,
-        PipelineVersion = row.PipelineVersion,
         ReferenceGenome = row.ReferenceGenome,
         Quality = row.Quality is { } quality ? ToDomain(quality) : null,
         Files = ToDomainFiles(row.Files),

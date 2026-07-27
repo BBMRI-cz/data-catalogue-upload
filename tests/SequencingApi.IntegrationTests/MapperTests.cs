@@ -73,7 +73,6 @@ public sealed class MapperTests
             .Single(run => run.RunId.Value == SequencingFixtures.PrimaryRunId).Analyses.Single();
         Assert.Equal(AnalysisType.VariantCalling, analysis.AnalysisType);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal("2.4.2.2", analysis.PipelineVersion);
         Assert.Equal("GRCh37", analysis.ReferenceGenome);
 
         // Analysis outputs stay attached to the analysis, not to the run sample they came from.

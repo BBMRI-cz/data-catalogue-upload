@@ -102,7 +102,6 @@ internal static class SequencingResponseMapper
     private static AnalysisResponse ToResponse(Analysis analysis) => new(
         Wire(analysis.AnalysisType),
         analysis.PipelineName,
-        analysis.PipelineVersion,
         analysis.ReferenceGenome,
         [.. analysis.Files.Select(ToResponse)],
         analysis.Quality is { } quality ? ToResponse(quality) : null);

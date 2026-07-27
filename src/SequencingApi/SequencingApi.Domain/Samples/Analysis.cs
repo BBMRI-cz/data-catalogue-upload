@@ -14,8 +14,7 @@ namespace SequencingApi.Domain.Samples;
 /// persistence layer can assign a surrogate key then.
 /// <para>
 /// Pipeline-agnostic: any variant caller fits, because the vendor-specific parts stay in the
-/// ingestion adapter and only <see cref="PipelineName"/> / <see cref="PipelineVersion"/> record
-/// which one it was.
+/// ingestion adapter and only <see cref="PipelineName"/> records which one it was.
 /// </para>
 /// </remarks>
 public sealed record Analysis : ValueObject
@@ -31,8 +30,6 @@ public sealed record Analysis : ValueObject
 
     /// <summary>The pipeline that produced this. Required — an analysis with no pipeline is not one.</summary>
     public required string PipelineName { get; init; }
-
-    public string? PipelineVersion { get; init; }
 
     /// <summary>
     /// Reference genome the reads were aligned against. Case preserved: reference-build names are
@@ -58,7 +55,6 @@ public sealed record Analysis : ValueObject
     public static ErrorOr<Analysis> Create(
         AnalysisType analysisType,
         string pipelineName,
-        string? pipelineVersion = null,
         string? referenceGenome = null,
         IReadOnlyList<SequencingFile>? files = null,
         QualityMetrics? quality = null)
@@ -72,7 +68,6 @@ public sealed record Analysis : ValueObject
         {
             AnalysisType = analysisType,
             PipelineName = cleanPipelineName,
-            PipelineVersion = Normalize.Text(pipelineVersion),
             ReferenceGenome = Normalize.Text(referenceGenome),
             Files = files ?? [],
             Quality = quality,

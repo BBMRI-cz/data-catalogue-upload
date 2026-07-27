@@ -150,7 +150,6 @@ internal static partial class MmciSampleFolderReader
         var analysis = Analysis.Create(
             AnalysisType.VariantCalling,
             pipelineName: PipelineName,
-            pipelineVersion: null,
             referenceGenome: ReferenceGenome(analysisPath),
             files: [.. files.OrderBy(file => file.Path, StringComparer.Ordinal)],
             quality: quality);

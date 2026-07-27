@@ -86,7 +86,6 @@ internal static class SequencingFixtures
         Analysis.Create(
             AnalysisType.VariantCalling,
             pipelineName: "NextGENe",
-            pipelineVersion: "2.4.2.2",
             referenceGenome: "GRCh37",
             files:
             [
