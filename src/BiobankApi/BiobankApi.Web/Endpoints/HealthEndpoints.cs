@@ -1,5 +1,3 @@
-using BiobankApi.Web.Contracts;
-
 namespace BiobankApi.Web.Endpoints;
 
 internal static class HealthEndpoints
@@ -12,3 +10,6 @@ internal static class HealthEndpoints
         return app;
     }
 }
+
+/// <summary>Response shape for <c>GET /health</c>.</summary>
+public sealed record HealthResponse(string Status);

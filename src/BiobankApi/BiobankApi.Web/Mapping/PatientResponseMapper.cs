@@ -1,5 +1,5 @@
 using BiobankApi.Domain.Patients;
-using BiobankApi.Web.Contracts;
+using BiobankApi.Web.Endpoints;
 
 namespace BiobankApi.Web.Mapping;
 
