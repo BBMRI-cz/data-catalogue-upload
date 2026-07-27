@@ -1,0 +1,3 @@
+[Reports]
+CoverageCurveReport
+C:\NextGENe\Templates\HyperCap2024a\Coverage100x.ini

@@ -238,6 +238,17 @@ public sealed class MmciSequencingDataSourceTests
         Assert.DoesNotContain(
             analysis.Files,
             file => file.Path.Contains("_Statistics", StringComparison.Ordinal));
+
+        // Nor the `_settings` dumps the pipeline writes beside every report, naming the .ini
+        // template it used. They are named after the report, so a role match on the report name
+        // alone swept them up: in the production corpus that was 9222 files, a fifth of the table.
+        Assert.DoesNotContain(
+            analysis.Files,
+            file => file.Path.Contains("_settings", StringComparison.OrdinalIgnoreCase));
+
+        // Exactly one of each report survives, not one report plus its settings file.
+        Assert.Single(analysis.Files, file => file.Role == FileRole.VariantReport);
+        Assert.Single(analysis.Files, file => file.Role == FileRole.CoverageReport);
     }
 
     [Fact]

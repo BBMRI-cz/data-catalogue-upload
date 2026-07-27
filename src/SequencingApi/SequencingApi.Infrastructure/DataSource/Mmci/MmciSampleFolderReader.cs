@@ -257,10 +257,14 @@ internal static partial class MmciSampleFolderReader
             return FileRole.SummaryReport;
         }
 
-        // The tabular reports, but never the `_Statistics` summaries beside them: those are metric
-        // sources, and their numbers are stored as quality metrics rather than as a file reference.
+        // The tabular reports, but never the `_Statistics` summaries beside them (those are metric
+        // sources, and their numbers are stored as quality metrics rather than as a file reference)
+        // and never the `_settings` dumps either — the pipeline writes one next to every report,
+        // naming the .ini template it used. Recording those as reports tripled the variant-report
+        // count and doubled the coverage-report count in the production corpus.
         if (fileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-            && !fileName.Contains("_Statistics", StringComparison.OrdinalIgnoreCase))
+            && !fileName.Contains("_Statistics", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Contains("_settings", StringComparison.OrdinalIgnoreCase))
         {
             if (fileName.Contains("Coverage_Curve", StringComparison.OrdinalIgnoreCase))
             {
