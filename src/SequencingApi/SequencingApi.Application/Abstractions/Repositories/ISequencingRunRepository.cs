@@ -19,4 +19,13 @@ public interface ISequencingRunRepository
 
     /// <summary>Load one run by id, or null when it is unknown.</summary>
     Task<SequencingRunAggregate?> GetRunAsync(SequencingRunId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Load the runs among <paramref name="ids"/> that are known, in one round-trip. Unknown ids are
+    /// simply absent from the result — samples reference runs by identity with no foreign key, so a
+    /// dangling reference is legal and must not be an error.
+    /// </summary>
+    Task<IReadOnlyList<SequencingRunAggregate>> GetRunsAsync(
+        IReadOnlyList<SequencingRunId> ids,
+        CancellationToken cancellationToken);
 }

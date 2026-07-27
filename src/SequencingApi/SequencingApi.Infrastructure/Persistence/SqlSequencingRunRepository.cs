@@ -33,6 +33,25 @@ internal sealed class SqlSequencingRunRepository : ISequencingRunRepository
         return entity is null ? null : SequencingRunMapper.ToDomain(entity);
     }
 
+    public async Task<IReadOnlyList<SequencingRunAggregate>> GetRunsAsync(
+        IReadOnlyList<SequencingRunId> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var values = ids.Select(id => id.Value).ToList();
+        var entities = await _context.SequencingRuns
+            .AsNoTracking()
+            .Include(run => run.Reads)
+            .Where(run => values.Contains(run.RunId))
+            .ToListAsync(cancellationToken);
+
+        return [.. entities.Select(SequencingRunMapper.ToDomain)];
+    }
+
     public async Task<IReadOnlyList<RecordReadError>> SaveRunsAsync(
         IReadOnlyList<SequencingRunAggregate> runs,
         CancellationToken cancellationToken)

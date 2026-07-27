@@ -29,6 +29,24 @@ internal sealed class SqlPanelRepository : IPanelRepository
         return entity is null ? null : PanelMapper.ToDomain(entity);
     }
 
+    public async Task<IReadOnlyList<PanelAggregate>> GetPanelsAsync(
+        IReadOnlyList<PanelId> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var values = ids.Select(id => id.Value).ToList();
+        var entities = await _context.Panels
+            .AsNoTracking()
+            .Where(panel => values.Contains(panel.PanelId))
+            .ToListAsync(cancellationToken);
+
+        return [.. entities.Select(PanelMapper.ToDomain)];
+    }
+
     public async Task<IReadOnlyList<RecordReadError>> SavePanelsAsync(
         IReadOnlyList<PanelAggregate> panels,
         CancellationToken cancellationToken)

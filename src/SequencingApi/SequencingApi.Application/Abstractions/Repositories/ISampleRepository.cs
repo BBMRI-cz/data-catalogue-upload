@@ -29,4 +29,17 @@ public interface ISampleRepository
     /// is to answer it without re-scanning the source tree.
     /// </summary>
     Task<SampleAggregate?> GetSampleAsync(SampleId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Load every sample carrying <paramref name="predictiveNumber"/>, each with the same full
+    /// subtree <see cref="GetSampleAsync"/> returns. Empty when none does.
+    /// </summary>
+    /// <remarks>
+    /// A list, not a single sample: <see cref="SampleAggregate.PredictiveNumber"/> is not unique —
+    /// the same subject can be sampled more than once, and nothing in the source guarantees one row.
+    /// Samples with no predictive number are never matched, including when the argument is blank.
+    /// </remarks>
+    Task<IReadOnlyList<SampleAggregate>> GetSamplesByPredictiveNumberAsync(
+        string predictiveNumber,
+        CancellationToken cancellationToken);
 }
