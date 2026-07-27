@@ -323,7 +323,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
                 idScheme: MmciIdScheme,
                 // The tree only ever knows the pseudonymized number; the real one, which is what the
                 // patient service stores, exists solely in the mapping table.
-                subjectRef: mappingTable.RealPredictiveNumber(externalId),
+                predictiveNumber: mappingTable.RealPredictiveNumber(externalId),
                 runSamples: runSamples);
 
             if (sample.IsError)

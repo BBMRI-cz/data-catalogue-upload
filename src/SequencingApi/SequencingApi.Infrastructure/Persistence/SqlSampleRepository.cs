@@ -4,6 +4,7 @@ using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Domain.Common;
 using SequencingApi.Domain.Samples;
 using SequencingApi.Infrastructure.Mapping;
+using SequencingApi.Infrastructure.Persistence.Entities;
 
 namespace SequencingApi.Infrastructure.Persistence;
 
@@ -22,18 +23,42 @@ internal sealed class SqlSampleRepository : ISampleRepository
 
     public async Task<SampleAggregate?> GetSampleAsync(SampleId id, CancellationToken cancellationToken)
     {
-        var entity = await _context.Samples
+        var entity = await WithSubtree()
+            .FirstOrDefaultAsync(sample => sample.ExternalId == id.Value, cancellationToken);
+
+        return entity is null ? null : SampleMapper.ToDomain(entity);
+    }
+
+    public async Task<IReadOnlyList<SampleAggregate>> GetSamplesByPredictiveNumberAsync(
+        string predictiveNumber,
+        CancellationToken cancellationToken)
+    {
+        // A null predictive number means "not covered by the mapping table", never "matches a blank
+        // query", so an empty argument must find nothing rather than every uncovered sample.
+        if (string.IsNullOrWhiteSpace(predictiveNumber))
+        {
+            return [];
+        }
+
+        var entities = await WithSubtree()
+            .Where(sample => sample.PredictiveNumber == predictiveNumber)
+            .OrderBy(sample => sample.ExternalId)
+            .ToListAsync(cancellationToken);
+
+        return [.. entities.Select(SampleMapper.ToDomain)];
+    }
+
+    // Both reads load the whole sample tree, and they must load exactly the same one: an Include
+    // missing from one of them would silently serve a sample with children dropped rather than fail.
+    private IQueryable<SampleEntity> WithSubtree() =>
+        _context.Samples
             .AsNoTracking()
             .Include(sample => sample.RunSamples).ThenInclude(runSample => runSample.Files)
             .Include(sample => sample.RunSamples).ThenInclude(runSample => runSample.LibraryPreparation)
             .Include(sample => sample.RunSamples).ThenInclude(runSample => runSample.Analyses)
                 .ThenInclude(analysis => analysis.Files)
             .Include(sample => sample.RunSamples).ThenInclude(runSample => runSample.Analyses)
-                .ThenInclude(analysis => analysis.Quality)
-            .FirstOrDefaultAsync(sample => sample.ExternalId == id.Value, cancellationToken);
-
-        return entity is null ? null : SampleMapper.ToDomain(entity);
-    }
+                .ThenInclude(analysis => analysis.Quality);
 
     public async Task<IReadOnlyList<RecordReadError>> SaveSamplesAsync(
         IReadOnlyList<SampleAggregate> samples,

@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SequencingApi.Application.Features.Ingest;
-using SequencingApi.Web.Contracts;
+using SequencingApi.Web.Endpoints;
 using Xunit;
 
 namespace SequencingApi.IntegrationTests;

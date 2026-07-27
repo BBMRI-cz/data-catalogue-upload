@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using BiobankApi.Application.Abstractions.Repositories;
 using BiobankApi.Domain.Patients;
-using BiobankApi.Web.Contracts;
+using BiobankApi.Web.Endpoints;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;

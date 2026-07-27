@@ -28,8 +28,10 @@ public sealed class NormalizationTests
             SampleAggregate.Create("mmci_predictive_1", " MMCI_Predictive ").Value.IdScheme);
 
     [Fact]
-    public void SampleTrimsBlankSubjectRefToNull() =>
-        Assert.Null(SampleAggregate.Create("mmci_predictive_1", "mmci_predictive", subjectRef: "   ").Value.SubjectRef);
+    public void SampleTrimsBlankPredictiveNumberToNull() =>
+        Assert.Null(SampleAggregate
+            .Create("mmci_predictive_1", "mmci_predictive", predictiveNumber: "   ")
+            .Value.PredictiveNumber);
 
     // --- run id is the de-duplication key, so both sides must canonicalise identically
 

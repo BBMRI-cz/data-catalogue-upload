@@ -27,7 +27,7 @@ internal static class SampleMapper
         {
             ExternalId = externalId,
             IdScheme = sample.IdScheme,
-            SubjectRef = sample.SubjectRef,
+            PredictiveNumber = sample.PredictiveNumber,
             RunSamples = [.. sample.RunSamples.Select(runSample => ToEntity(runSample, externalId))],
         };
     }
@@ -110,7 +110,7 @@ internal static class SampleMapper
         {
             Id = new SampleId(row.ExternalId),
             IdScheme = row.IdScheme,
-            SubjectRef = row.SubjectRef,
+            PredictiveNumber = row.PredictiveNumber,
             // Ordered so a sample reads back the same way twice; the database guarantees no order.
             RunSamples = [.. row.RunSamples.OrderBy(runSample => runSample.RunId, StringComparer.Ordinal).Select(ToDomain)],
         };

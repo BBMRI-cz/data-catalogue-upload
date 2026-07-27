@@ -12,7 +12,7 @@ tests/
 ├── BiobankApi.UnitTests             DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
 ├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
-├── SequencingApi.IntegrationTests   ApiTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
+├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
 ├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
 └── Uploader.IntegrationTests        SyncStateRepositoryTests
 ```
@@ -63,9 +63,11 @@ mapped `PatientAggregate` per schema category, plus whole-patient-atomic failure
 (copied to the test output) and asserts valid patients parse, invalid/malformed files are reported as
 `ExportParseError`s, and a missing directory yields an empty result.
 
-**FluentValidation validators.** When a command gains an `AbstractValidator<TCommand>`, unit-test it directly -
-`new TCommandValidator().Validate(command)` then assert `result.IsValid` / inspect `result.Errors` with plain
-`Assert` (no FluentValidation test helpers). None exist yet - the current commands are parameterless.
+**FluentValidation validators.** When a request gains an `AbstractValidator<TRequest>`, unit-test it directly -
+`new TRequestValidator().Validate(request)` then assert `result.IsValid` / inspect `result.Errors` with plain
+`Assert` (no FluentValidation test helpers). `GetSequencingQueryValidatorTests` is the pattern; the behaviour
+it guards (a malformed request must be a 400, not an empty 200) is also asserted end-to-end in
+`SequencingEndpointTests`.
 
 ## Faking the ports (uploader)
 
@@ -122,6 +124,14 @@ shortened because the real ones exceed Windows' 260-character path limit once co
 repositories on SQLite, and **ingests twice** to prove idempotency: these repositories delete-then-insert,
 so a broken cascade only shows up as duplicated children on the second save. It doubles as the coverage
 for the Quartz `IngestionJob`, which dispatches the identical command.
+
+`SqliteWebHost.Configure(root, connection)` is the shared wiring behind both that and
+`SequencingEndpointTests`: the real host over the `TestData` tree with the Postgres `DbContext` swapped for
+SQLite and the real repositories kept. The caller owns the root `WebApplicationFactory` and the open
+`SqliteConnection` - the `:memory:` database only lives as long as the connection stays open. The read-side
+tests ingest **once** via an `IngestedSequencingHost` class fixture, since ingestion is idempotent and they
+only read afterwards. Assert HTTP status codes there, not just bodies: `200` + empty vs `404` vs `400` is
+the actual contract with the uploader's gateway.
 
 `SequencingApi.IntegrationTests` shares one fixture file, `SequencingFixtures`, across its mapper, repository
 and stats tests. Its aggregates set **every** optional field to a distinct non-default value on purpose:

@@ -10,10 +10,11 @@ namespace SequencingApi.Infrastructure.DataSource.Mmci;
 /// one the biobank knows the sample by. Only the pseudonymized one is present in the tree, so this
 /// table is the sole route to the real number — which is exactly the value the patient API stores as
 /// a sample's <c>predictive_number</c>, and therefore the only thing that lets the two services be
-/// joined. It becomes <c>SampleAggregate.SubjectRef</c>.
+/// joined. It becomes <c>SampleAggregate.PredictiveNumber</c>.
 /// <para>
-/// MMCI vocabulary is deliberate here: this is adapter-side, and the adapter boundary is what keeps
-/// it out of the domain, where the same value is an opaque <c>subject_ref</c>.
+/// The <c>Real</c> prefix is what keeps the two apart on this side of the boundary: the pseudonymized
+/// one is already carried as the sample's id, so an unqualified "predictive number" would be
+/// ambiguous exactly where the mapping happens.
 /// </para>
 /// </remarks>
 internal sealed class MmciMappingTable

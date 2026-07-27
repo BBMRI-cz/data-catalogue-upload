@@ -12,7 +12,7 @@ namespace SequencingApi.Domain.Samples;
 /// Identified by an opaque <c>external_id</c> supplied by the source biobank, qualified by
 /// <see cref="IdScheme"/>. The domain never interprets the id: it is a join key, and the sequencing
 /// service deliberately holds no patient or clinical data — that is served by the patient API, and
-/// <see cref="SubjectRef"/> is only a pointer into it.
+/// <see cref="PredictiveNumber"/> is only a pointer into it.
 /// <para>
 /// Runs and panels are referenced by identity, never held: both are shared by many samples and are
 /// their own aggregate roots.
@@ -35,10 +35,16 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     public required string IdScheme { get; init; }
 
     /// <summary>
-    /// Opaque pointer to the subject this sample was taken from, resolved by the patient API. Null
-    /// when the source carries no such link.
+    /// The predictive number the patient API knows this sample by — the sole join key between the two
+    /// services. Null when the source carries no such link.
     /// </summary>
-    public string? SubjectRef { get; init; }
+    /// <remarks>
+    /// Not to be confused with <see cref="Entity{TId}.Id"/>: at MMCI both are called "predictive
+    /// number", but the id is the <em>pseudonymized</em> one naming the sample folder in the run tree
+    /// (<c>mmci_predictive_&lt;uuid&gt;</c>), while this is the <em>real</em> one the biobank records.
+    /// Only this one appears in the patient API, as a sample's <c>predictive_number</c>.
+    /// </remarks>
+    public string? PredictiveNumber { get; init; }
 
     /// <summary>
     /// Every run this sample was sequenced in, at most one entry per run. Empty is legal: a sample
@@ -52,7 +58,7 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     public static ErrorOr<SampleAggregate> Create(
         string externalId,
         string idScheme,
-        string? subjectRef = null,
+        string? predictiveNumber = null,
         IReadOnlyList<RunSample>? runSamples = null)
     {
         // Trimmed but not case-folded: the id is opaque, and another scheme's ids may be case-significant.
@@ -88,7 +94,7 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
         {
             Id = new SampleId(cleanExternalId),
             IdScheme = cleanIdScheme,
-            SubjectRef = Normalize.Text(subjectRef),
+            PredictiveNumber = Normalize.Text(predictiveNumber),
             RunSamples = resolvedRunSamples,
         };
     }

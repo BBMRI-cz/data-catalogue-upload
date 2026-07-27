@@ -19,4 +19,13 @@ public interface IPanelRepository
 
     /// <summary>Load one panel by id, or null when it is unknown.</summary>
     Task<PanelAggregate?> GetPanelAsync(PanelId id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Load the panels among <paramref name="ids"/> that are known, in one round-trip. Unknown ids
+    /// are simply absent: a library preparation references its panel by identity with no foreign
+    /// key, and a library-match failure leaving a dangling reference is routine.
+    /// </summary>
+    Task<IReadOnlyList<PanelAggregate>> GetPanelsAsync(
+        IReadOnlyList<PanelId> ids,
+        CancellationToken cancellationToken);
 }

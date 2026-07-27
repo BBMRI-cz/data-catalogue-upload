@@ -5,7 +5,7 @@ using BiobankApi.Application.Abstractions.Export;
 using BiobankApi.Domain;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence;
-using BiobankApi.Web.Contracts;
+using BiobankApi.Web.Endpoints;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;

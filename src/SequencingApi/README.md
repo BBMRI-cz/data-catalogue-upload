@@ -71,12 +71,16 @@ MMCI has two values that both go by that name, and they land in different places
 | Value | Where it comes from | Domain field |
 |---|---|---|
 | **Pseudonymized** (`mmci_predictive_<uuid>`) | the `Samples/<…>/` folder name in the run tree | `SampleAggregate.Id`, with `IdScheme = "mmci_predictive"` |
-| **Real** (e.g. `4-21`) | `predictive.json` in the mapping-table directory | `SampleAggregate.SubjectRef` |
+| **Real** (e.g. `4-21`) | `predictive.json` in the mapping-table directory | `SampleAggregate.PredictiveNumber` |
 
 The real one is what biobank_api stores as a sample's `predictive_number`, so it is the only thing
-that lets the two services be joined. The mapping directory's `patient.json` and `samples.json` are
-deliberately never opened — this service holds no patient data. A missing mapping table is not fatal:
-the sequencing still ingests, with every `SubjectRef` left null.
+that lets the two services be joined — and it is what `GET /sequencing?predictive_number=` takes. The
+mapping directory's `patient.json` and `samples.json` are deliberately never opened — this service
+holds no patient data. A missing mapping table is not fatal: the sequencing still ingests, with every
+`PredictiveNumber` left null.
+
+The data report calls this field `subject_ref` (§4.1). It is named `PredictiveNumber` here because
+that is what it is; the pseudonymized one stays qualified as such wherever both are in scope.
 
 ### What is deliberately never filled
 
@@ -91,9 +95,47 @@ table has no such column; the run's assay comes from the sample sheet instead).
 | Layer | Project | Notes |
 |-------|---------|-------|
 | Domain | `SequencingApi.Domain` | `Samples/`, `Runs/`, `Panels/` aggregates; `QualityMetrics` + `Enums.cs` at the root; `Common/` base types, typed ids and `Normalize`. |
-| Application | `SequencingApi.Application` | `IngestRecordsCommand` + handler, `ISequencingDataSource` port, Mediator/FluentValidation wiring. |
+| Application | `SequencingApi.Application` | `IngestRecordsCommand`, `GetSequencingQuery` (+ its validator), `GetSummaryQuery`, the `ISequencingDataSource` port, Mediator/FluentValidation wiring. |
 | Infrastructure | `SequencingApi.Infrastructure` | `SequencingDbContext` + repositories, hand-written mappers, `SequencingOptions`, design-time factory, and the MMCI source adapter in `DataSource/Mmci/`. |
-| Web | `SequencingApi.Web` | Minimal-API host: `GET /health`, `POST /admin/ingest`, Quartz `IngestionJob`. |
+| Web | `SequencingApi.Web` | Minimal-API host (endpoints below) and the Quartz `IngestionJob`. Each `Endpoints/*.cs` file holds its route **and** the response records it serves; the projection lives in `Mapping/`. |
+
+## HTTP API
+
+JSON is snake_case throughout, both property names and enum values (`FileRole.BamIndex` → `bam_index`).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness. |
+| `GET /sequencing?predictive_number=<x>` | Everything held for one predictive number. |
+| `GET /summary` | Corpus-wide totals (`GetSummaryQueryResult`). |
+| `POST /admin/ingest` | Runs the ingestion pipeline now; same command the weekly job dispatches. |
+
+### `GET /sequencing`
+
+Takes the **real** predictive number — the one biobank_api serves as a sample's `predictive_number`,
+not the pseudonymized id that names the sample folder. See "The two predictive numbers" above.
+
+Returns this service's own model, not the uploader's FAIR vocabulary; the uploader maps it on its
+side, the same division biobank_api uses. Shape:
+
+```
+{ predictive_number, samples: [ { sample_id, id_scheme, runs: [ {
+    run_id, run_date, platform, instrument_model, instrument_id, flowcell_id, assay, workflow,
+    percentage_q30,                       // joined in from the run aggregate
+    sample_index, sample_type, lane_count,
+    library_preparation: { …, panel: { panel_id, name, genes: [], … } },
+    files:    [ { role, path, format, lane, read, size_bytes, checksum } ],
+    analyses: [ { analysis_type, pipeline_name, …, files: [], quality: { … } } ]
+} ] } ] }
+```
+
+- **`samples` is a list.** A predictive number is not unique here.
+- **Unknown number → `200` with `samples: []`**, never `404`. "This patient has no sequencing" is the
+  normal answer, and the uploader's gateway calls `EnsureSuccessStatusCode`, so a 404 would throw there.
+- **Missing or blank `predictive_number` → `400`**, so a malformed request cannot be mistaken for an
+  empty one.
+- **Run and panel fields are null when the referenced aggregate is unknown.** Samples reference runs
+  and panels by identity with no foreign key, so a dangling reference is legal.
 
 ## Configuration (environment variables)
 
