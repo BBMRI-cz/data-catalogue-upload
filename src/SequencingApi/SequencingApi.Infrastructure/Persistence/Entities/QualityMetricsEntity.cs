@@ -11,6 +11,6 @@ public class QualityMetricsEntity
     /// <summary>Primary key *and* foreign key — an analysis has at most one set of metrics.</summary>
     public long AnalysisId { get; set; }
 
-    public int? MedianReadDepth { get; set; }
+    public double? MedianReadDepth { get; set; }
     public int? ObservedReadLength { get; set; }
 }

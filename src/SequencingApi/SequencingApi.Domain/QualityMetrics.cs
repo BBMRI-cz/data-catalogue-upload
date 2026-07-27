@@ -35,13 +35,22 @@ public sealed record QualityMetrics : ValueObject
     /// median — MMCI's pipeline states only a mean over the region of interest, and that is what
     /// lands here, exactly as the previous uploader did.
     /// </summary>
-    public int? MedianReadDepth { get; init; }
+    /// <remarks>
+    /// Fractional, though the catalogue's field is an integer. The sources state depths like
+    /// <c>524,81</c> and <c>0,38</c>, and rounding on the way in makes a sample that was sequenced
+    /// too shallowly to use indistinguishable from one that produced no coverage at all. A source
+    /// service should keep what the source said and leave rounding to whoever needs a whole number.
+    /// </remarks>
+    public double? MedianReadDepth { get; init; }
 
-    /// <summary>Read length the run actually achieved, as opposed to the length it was set up for.</summary>
+    /// <summary>
+    /// Read length the run actually achieved, as opposed to the length it was set up for. A whole
+    /// number of bases, unlike the depth above — a read is not sequenced two thirds of the way.
+    /// </summary>
     public int? ObservedReadLength { get; init; }
 
     public static ErrorOr<QualityMetrics> Create(
-        int? medianReadDepth = null,
+        double? medianReadDepth = null,
         int? observedReadLength = null)
     {
         if (medianReadDepth is < 0)

@@ -58,8 +58,8 @@ public sealed class MmciNextGeneStatsReaderTests
     {
         var quality = Parsed(MmciNextGeneStatsReader.Read(StatInfo, Coverage));
 
-        // 524,81 read through the decimal comma and rounded to the whole depth the column stores.
-        Assert.Equal(525, quality.MedianReadDepth);
+        // 524,81 read through the decimal comma, kept exactly as the report states it.
+        Assert.Equal(524.81, quality.MedianReadDepth);
         Assert.Equal(75, quality.ObservedReadLength);
     }
 
@@ -71,7 +71,7 @@ public sealed class MmciNextGeneStatsReaderTests
         // Reading them out of one merged lookup published the wrong one for every analysis.
         var quality = Parsed(MmciNextGeneStatsReader.Read(StatInfo, Coverage));
 
-        Assert.Equal(525, quality.MedianReadDepth);
+        Assert.Equal(524.81, quality.MedianReadDepth);
         Assert.NotEqual(9, quality.MedianReadDepth);
     }
 
@@ -85,8 +85,22 @@ public sealed class MmciNextGeneStatsReaderTests
         Assert.Null(withoutCoverage.MedianReadDepth);
 
         var withoutStatInfo = Parsed(MmciNextGeneStatsReader.Read(null, Coverage));
-        Assert.Equal(525, withoutStatInfo.MedianReadDepth);
+        Assert.Equal(524.81, withoutStatInfo.MedianReadDepth);
         Assert.Null(withoutStatInfo.ObservedReadLength);
+    }
+
+    [Fact]
+    public void ADepthBelowOneIsKeptRatherThanRoundedAwayToNothing()
+    {
+        // Three real analyses state a depth under 1x (0,38 and 0,00 — samples that aligned but got no
+        // usable coverage). Storing the depth as a whole number rounded 0,38 to 0 and made a sample
+        // sequenced too shallowly to use indistinguishable from one that produced nothing at all.
+        var shallow = Parsed(MmciNextGeneStatsReader.Read(null, "Average Coverage\t0,38"));
+        Assert.Equal(0.38, shallow.MedianReadDepth!.Value, precision: 2);
+
+        // ...and a genuine zero is still a zero, not an absent value.
+        var empty = Parsed(MmciNextGeneStatsReader.Read(null, "Average Coverage\t0,00"));
+        Assert.Equal(0d, empty.MedianReadDepth);
     }
 
     [Fact]

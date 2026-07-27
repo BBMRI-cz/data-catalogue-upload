@@ -273,9 +273,9 @@ public sealed class DomainModelsTests
     [Fact]
     public void QualityKeepsBothMetricsItIsGiven()
     {
-        var quality = QualityMetrics.Create(medianReadDepth: 525, observedReadLength: 75).Value;
+        var quality = QualityMetrics.Create(medianReadDepth: 524.81, observedReadLength: 75).Value;
 
-        Assert.Equal(525, quality.MedianReadDepth);
+        Assert.Equal(524.81, quality.MedianReadDepth);
         Assert.Equal(75, quality.ObservedReadLength);
     }
 

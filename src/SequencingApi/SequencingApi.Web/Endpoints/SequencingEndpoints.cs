@@ -116,5 +116,5 @@ public sealed record AnalysisResponse(
 
 /// <summary>Pipeline-computed quality metrics; both fields are optional, absence means not reported.</summary>
 public sealed record QualityMetricsResponse(
-    int? MedianReadDepth,
+    double? MedianReadDepth,
     int? ObservedReadLength);

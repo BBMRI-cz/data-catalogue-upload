@@ -33,7 +33,9 @@ internal static class MmciNextGeneStatsReader
     {
         // The catalogue asks for a median; the coverage report states only a mean over the region of
         // interest, and that is the number the previous uploader sent, so it is the number kept here.
-        var medianReadDepth = Int(coverage, "averagecoverage");
+        // Read as stated, decimal comma and all: the depth is fractional and a sample that managed
+        // 0,38x must not arrive looking like one that managed nothing.
+        var medianReadDepth = Double(coverage, "averagecoverage");
         var observedReadLength = Int(statInfo, "averagereadlength", "observedreadlength", "readlength");
 
         if (medianReadDepth is null && observedReadLength is null)
@@ -109,4 +111,7 @@ internal static class MmciNextGeneStatsReader
 
     private static int? Int(string? content, params string[] keys) =>
         MmciSourceValues.Int32(Find(Values(content), keys));
+
+    private static double? Double(string? content, params string[] keys) =>
+        MmciSourceValues.Number(Find(Values(content), keys));
 }

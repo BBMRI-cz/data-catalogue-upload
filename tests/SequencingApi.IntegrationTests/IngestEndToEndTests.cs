@@ -71,7 +71,9 @@ public sealed class IngestEndToEndTests
 
         var analysis = Assert.Single(analysed.Analyses);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal(640, analysis.Quality!.MedianReadDepth);
+        // 640,32 as the coverage report states it — the fractional depth survives the round trip
+        // through PostgreSQL and the wire, rather than being rounded on the way in.
+        Assert.Equal(640.32, analysis.Quality!.MedianReadDepth!.Value, precision: 2);
     }
 
     [Fact]

@@ -287,8 +287,8 @@ public sealed class MmciSequencingDataSourceTests
         var quality = analysis.Quality;
         Assert.NotNull(quality);
 
-        // Read off the tab-separated coverage report through its decimal comma (640,32).
-        Assert.Equal(640, quality!.MedianReadDepth);
+        // Read off the tab-separated coverage report through its decimal comma, undiminished.
+        Assert.Equal(640.32, quality!.MedianReadDepth);
         Assert.Equal(151, quality.ObservedReadLength);
 
         // The alignment summary states an "Average Coverage" of its own — a mean over the whole
