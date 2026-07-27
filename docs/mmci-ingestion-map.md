@@ -1,7 +1,7 @@
 # MMCI ingestion map
 
-Where every field of the sequencing domain model comes from, and the rules the MMCI adapter follows.
-Use it when a field is empty or wrong and you need to know which file on disk was supposed to fill it.
+Where every field of the sequencing domain model comes from. Use it when a field is empty or wrong
+and you need to know which file on disk was supposed to fill it, and which class reads it.
 
 For the shape of the model see [`src/SequencingApi/README.md`](../src/SequencingApi/README.md); for
 what the data catalogue accepts see [`fair-genomes.yml`](fair-genomes.yml). Everything below lives in
@@ -220,7 +220,8 @@ into a `LibraryRow`; `PanelMatcher` picks the row and turns it into the value ob
 | `IntendedInsertSize` | `Intended Insert Size` | | [`LibrariesTableReader`] |
 | `IntendedReadLength` | `Intended Read Length` | | [`LibrariesTableReader`] |
 
-The last three exist only in older table versions and are back-filled — see the rules below.
+The last three exist only in older table versions; [`LibrariesTableReader`] back-fills them from the
+newest version that still carries them, matching on panel name.
 
 ### `PanelAggregate`
 
@@ -273,61 +274,6 @@ The reverse lookup: what breaks if a file changes shape.
 | `<id>_Parameters.txt` | the reliable half of panel resolution | [`SequencingDataSource`], [`PanelMatcher`] |
 | `LibrariesV*.csv` | every `PanelAggregate` and `LibraryPreparation` field | [`LibrariesTableReader`], [`PanelMatcher`] |
 | `predictive.json` | `PredictiveNumber` | [`MappingTableReader`] |
-
-## Rules the adapter follows
-
-**Store only what the catalogue consumes.** [`fair-genomes.yml`](fair-genomes.yml) is the contract and
-the previous uploader at `/home/export/data-catalogue-uploader` is the evidence of what actually
-reaches it. That is why there are no variant records, no quality metrics beyond the two above, no
-analysis timestamp and no pipeline version: the source states some of them, and nothing consumes them.
-
-**Report, never throw.** A record that cannot be read costs its own fields, not the ingest, and
-`errors[]` is the primary output of a run. Boundaries:
-
-- *Fails the ingest* — only two: the runs root is missing, or the walk finds no run at all.
-- *Reported, and the rest is kept* — a run whose metadata will not build (its samples go with it); a
-  sample folder that will not build; a missing or unreadable libraries table (costs panels) or
-  mapping table (costs predictive numbers); an orphan folder holding nothing; a sheet row with no
-  folder; a read count that disagrees with the run's read structure; a read file naming another
-  sample.
-- *Absorbed silently* — broken or missing XML, unreadable files, and individual value-object
-  validation failures, each costing only the field or item concerned.
-- *The one unguarded path* — a sample sheet listing the same `Sample_ID` twice throws out of
-  `ReadRecords` (`MmciSequencingDataSource.cs`, the `[Data]` row lookup).
-
-**Absent beats invented.** An unresolved panel, an unrecognised genome build, an out-of-range
-percentage and an amount with no leading digits are all left null. A missing value is countable in
-`/summary`; a wrong one looks exactly like a right one.
-
-**The folder tree says what exists; the filename says whose it is.** The folder decides what data a
-sample has — the sample sheet is not authoritative, and a folder with no reads is a fact, not an
-error. But a read file whose own name claims a different sample is reported and skipped rather than
-attributed to the folder it sits in.
-
-**Panel resolution, in order.** The sample's `<id>_Parameters.txt` first, matching the table's
-`Text in parameters` — machine-written, so trusted. Failing that, the sheet's experiment name: reduce
-to the leading token, strip a fused `YYMMDD` even when a suffix follows it, then match panels by name
-prefix or abbreviation. Aliases (`seqcaph`/`hypcap`→hypercap, `eg`→eligene, `tso`/`tso500`→trusight)
-apply **only** when the family names no panel literally. Several candidates are narrowed by the run
-date against the availability window, and if still ambiguous the family's `manual` catch-all row wins
-— deliberately not date-filtered, since the catch-all is usually the row with no window. Otherwise it
-stays unresolved, which is an ordinary outcome.
-
-**Libraries versions order by the version in the filename**, not by mtime: several live files share a
-timestamp, and opening an old one in a spreadsheet would otherwise promote it. The newest is
-authoritative and older versions back-fill the three columns newer ones dropped, matched on panel
-name.
-
-**Keep the source's precision and round at the catalogue boundary.** Read depth is stored fractional
-even though the catalogue field is an integer, so a sample that managed 0.38× stays distinguishable
-from one that managed nothing.
-
-**Saves are idempotent** — delete-then-insert on the natural id, so re-running an ingest is always
-safe.
-
-**`DOTNET_SYSTEM_IO_DISABLEFILELOCKING=1` is required in production.** The source trees are NFSv3
-mounts whose lock manager never answers, and .NET takes an advisory `flock` on every file open, so
-without it the ingest blocks on its first read and never returns. It is set in `compose.prod.yml`.
 
 <!-- Link targets for the class names above. -->
 

@@ -57,7 +57,7 @@ source text into numbers or dates is decoding, not domain logic, and stays in In
 
 ## Ingestion pipeline
 
-> Which source file fills which field — and the rules the MMCI adapter follows — is documented in
+> Which source file fills which field, and which class reads it, is documented in
 > [`docs/mmci-ingestion-map.md`](../../docs/mmci-ingestion-map.md). Start there when a field is empty
 > or wrong.
 
