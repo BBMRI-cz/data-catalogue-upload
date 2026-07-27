@@ -1,17 +1,13 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Application.Features.Ingest;
 using SequencingApi.Domain;
 using SequencingApi.Domain.Common;
-using SequencingApi.Infrastructure.Persistence;
 using SequencingApi.Web.Endpoints;
 using Xunit;
 
@@ -33,8 +29,6 @@ public sealed class IngestEndToEndTests
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    private static readonly string TestDataPath = Path.Join(AppContext.BaseDirectory, "TestData");
-
     [Fact]
     public async Task IngestStoresTheWholeTreeAndServesASampleBackFromTheDatabase()
     {
@@ -43,16 +37,8 @@ public sealed class IngestEndToEndTests
         using var connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
 
-        // WithWebHostBuilder derives a second factory from this root rather than configuring it in
-        // place, and disposing the derived one does not dispose the root. Owning the root here and
-        // letting it dispose its derived factories keeps both accounted for.
         using var rootFactory = new WebApplicationFactory<Program>();
-        var factory = ConfigureFactory(rootFactory, connection);
-        using (var scope = factory.Services.CreateScope())
-        {
-            scope.ServiceProvider.GetRequiredService<SequencingDbContext>().Database.EnsureCreated();
-        }
-
+        var factory = SqliteWebHost.Configure(rootFactory, connection);
         using var client = factory.CreateClient();
 
         var summary = await Ingest(client);
@@ -94,16 +80,8 @@ public sealed class IngestEndToEndTests
         using var connection = new SqliteConnection("Filename=:memory:");
         connection.Open();
 
-        // WithWebHostBuilder derives a second factory from this root rather than configuring it in
-        // place, and disposing the derived one does not dispose the root. Owning the root here and
-        // letting it dispose its derived factories keeps both accounted for.
         using var rootFactory = new WebApplicationFactory<Program>();
-        var factory = ConfigureFactory(rootFactory, connection);
-        using (var scope = factory.Services.CreateScope())
-        {
-            scope.ServiceProvider.GetRequiredService<SequencingDbContext>().Database.EnsureCreated();
-        }
-
+        var factory = SqliteWebHost.Configure(rootFactory, connection);
         using var client = factory.CreateClient();
 
         var first = await Ingest(client);
@@ -148,30 +126,4 @@ public sealed class IngestEndToEndTests
             JsonOptions,
             default))!;
     }
-
-    /// <summary>
-    /// Derive a configured factory from <paramref name="root"/>. The caller owns and disposes the
-    /// root; the factory returned here is disposed with it.
-    /// </summary>
-    private static WebApplicationFactory<Program> ConfigureFactory(
-        WebApplicationFactory<Program> root,
-        SqliteConnection connection) =>
-        root.WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("DisableScheduler", "true");
-            builder.UseSetting("SEQUENCING_DATA_PATH", Path.Join(TestDataPath, "Runs"));
-            builder.UseSetting("SEQUENCING_LIBRARIES_PATH", Path.Join(TestDataPath, "Libraries"));
-            builder.UseSetting("SEQUENCING_MAPPING_TABLE_PATH", Path.Join(TestDataPath, "MappingTable"));
-
-            builder.ConfigureServices(services =>
-            {
-                // Swap the Postgres DbContext for SQLite; keep the real repositories. EF Core 10
-                // applies the provider through IDbContextOptionsConfiguration<T>, so the Npgsql one
-                // must also be removed or both providers get registered and EF rejects the mix.
-                services.RemoveAll<DbContextOptions<SequencingDbContext>>();
-                services.RemoveAll<DbContextOptions>();
-                services.RemoveAll<IDbContextOptionsConfiguration<SequencingDbContext>>();
-                services.AddDbContext<SequencingDbContext>(db => db.UseSqlite(connection));
-            });
-        });
 }

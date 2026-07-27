@@ -53,6 +53,80 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSamplesByPredictiveNumberReturnsTheWholeSubtree()
+    {
+        // The lookup the uploader arrives with. It must load exactly what GetSampleAsync loads - an
+        // Include missing here would serve a sample with its analyses or files silently dropped.
+        await using var context = _db.NewContext();
+        var repository = new SqlSampleRepository(context);
+        await repository.SaveSamplesAsync([SequencingFixtures.FullSample()], CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        var loaded = await new SqlSampleRepository(readContext)
+            .GetSamplesByPredictiveNumberAsync("patient-4711", CancellationToken.None);
+
+        var sample = Assert.Single(loaded);
+        Assert.Equal("mmci_predictive_0001", sample.Id.Value);
+        Assert.Equal(2, sample.RunSamples.Count);
+
+        var analysed = sample.RunSamples.Single(run => run.RunId.Value == SequencingFixtures.PrimaryRunId);
+        Assert.Equal(2, analysed.Files.Count);
+        Assert.Equal(SequencingFixtures.PanelId, analysed.LibraryPreparation!.PanelId!.Value.Value);
+
+        var analysis = Assert.Single(analysed.Analyses);
+        Assert.Equal(2, analysis.Files.Count);
+        Assert.Equal(812.5, analysis.Quality!.AverageCoverage);
+    }
+
+    [Fact]
+    public async Task GetSamplesByPredictiveNumberReturnsEveryMatchingSample()
+    {
+        // The predictive number is not unique: the same subject can be sampled more than once, and
+        // returning only the first would silently hide sequencing the uploader is entitled to.
+        await using var context = _db.NewContext();
+        var repository = new SqlSampleRepository(context);
+        await repository.SaveSamplesAsync(
+            [
+                SequencingFixtures.FullSample("mmci_predictive_0001"),
+                SequencingFixtures.FullSample("mmci_predictive_0002"),
+                SampleAggregate.Create(
+                    "mmci_predictive_0003",
+                    idScheme: "mmci_predictive",
+                    predictiveNumber: "patient-9999").Value,
+            ],
+            CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        var loaded = await new SqlSampleRepository(readContext)
+            .GetSamplesByPredictiveNumberAsync("patient-4711", CancellationToken.None);
+
+        Assert.Equal(
+            ["mmci_predictive_0001", "mmci_predictive_0002"],
+            loaded.Select(sample => sample.Id.Value));
+    }
+
+    [Theory]
+    [InlineData("patient-0000")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task GetSamplesByPredictiveNumberFindsNothingForAnUnknownOrBlankNumber(string predictiveNumber)
+    {
+        // A sample with no predictive number is one the mapping table did not cover. A blank query
+        // must not match those - it would hand the uploader another patient's sequencing.
+        await using var context = _db.NewContext();
+        await new SqlSampleRepository(context).SaveSamplesAsync(
+            [
+                SequencingFixtures.FullSample(),
+                SampleAggregate.Create("mmci_predictive_0009", idScheme: "mmci_predictive").Value,
+            ],
+            CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        Assert.Empty(await new SqlSampleRepository(readContext)
+            .GetSamplesByPredictiveNumberAsync(predictiveNumber, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ResavingASampleReplacesItsChildrenRatherThanDuplicatingThem()
     {
         await using var context = _db.NewContext();
@@ -241,6 +315,39 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRunsReturnsOnlyTheRequestedRunsThatExist()
+    {
+        // Samples name their runs by identity with no foreign key, so a dangling reference is legal:
+        // an unknown id has to come back absent rather than as an error or a null in the list.
+        await using var context = _db.NewContext();
+        var repository = new SqlSequencingRunRepository(context);
+        await repository.SaveRunsAsync(
+            [SequencingFixtures.FullRun(), SequencingFixtures.FullRun(SequencingFixtures.SecondaryRunId)],
+            CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        var loaded = await new SqlSequencingRunRepository(readContext).GetRunsAsync(
+            [new SequencingRunId(SequencingFixtures.PrimaryRunId), new SequencingRunId("NOPE")],
+            CancellationToken.None);
+
+        var run = Assert.Single(loaded);
+        Assert.Equal(SequencingFixtures.PrimaryRunId, run.Id.Value);
+
+        // The reads are what make this worth a batch read rather than a projection.
+        Assert.Equal([false, true, false], run.Reads.Select(read => read.IsIndexedRead));
+    }
+
+    [Fact]
+    public async Task GetRunsReturnsNothingForNoIds()
+    {
+        await using var context = _db.NewContext();
+        var repository = new SqlSequencingRunRepository(context);
+        await repository.SaveRunsAsync([SequencingFixtures.FullRun()], CancellationToken.None);
+
+        Assert.Empty(await repository.GetRunsAsync([], CancellationToken.None));
+    }
+
+    [Fact]
     public async Task SaveAndGetRoundTripsPanel()
     {
         await using var context = _db.NewContext();
@@ -267,6 +374,37 @@ public sealed class RepositoryTests : IDisposable
 
         await using var probe = _db.NewContext();
         Assert.Equal(1, await probe.Panels.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetPanelsReturnsOnlyTheRequestedPanelsThatExist()
+    {
+        // Same contract as the runs: a library preparation that failed to match a panel leaves a
+        // dangling id, which is routine and must not turn a lookup into a failure.
+        await using var context = _db.NewContext();
+        var repository = new SqlPanelRepository(context);
+        await repository.SavePanelsAsync(
+            [SequencingFixtures.FullPanel(), SequencingFixtures.FullPanel("hypercap-v2")],
+            CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        var loaded = await new SqlPanelRepository(readContext).GetPanelsAsync(
+            [new PanelId(SequencingFixtures.PanelId), new PanelId("nope")],
+            CancellationToken.None);
+
+        var panel = Assert.Single(loaded);
+        Assert.Equal(SequencingFixtures.PanelId, panel.Id.Value);
+        Assert.Equal(["BRCA1", "BRCA2", "TP53"], panel.Genes);
+    }
+
+    [Fact]
+    public async Task GetPanelsReturnsNothingForNoIds()
+    {
+        await using var context = _db.NewContext();
+        var repository = new SqlPanelRepository(context);
+        await repository.SavePanelsAsync([SequencingFixtures.FullPanel()], CancellationToken.None);
+
+        Assert.Empty(await repository.GetPanelsAsync([], CancellationToken.None));
     }
 
     [Fact]
