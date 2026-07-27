@@ -209,11 +209,20 @@ internal static class MmciPanelMatcher
 
         var token = leading[0];
 
-        // Strip a fused date, but only a six-digit one. Trimming digits unconditionally would turn
-        // "TSO500" into "TSO" and lose the very thing that identifies the panel.
-        if (token.Length > 6 && token[^6..].All(char.IsAsciiDigit))
+        // Strip a fused date, but only a six-digit one: trimming digits unconditionally would turn
+        // "TSO500" into "TSO" and lose the very thing that identifies the panel. The date is not
+        // always last — "SeqCap200528b" carries a one-letter suffix after it — so look past any
+        // trailing letters first, and only accept the result when six digits sit behind them.
+        // A token that is all letters ("Accel") trims to nothing and is therefore left alone.
+        var end = token.Length;
+        while (end > 0 && char.IsAsciiLetter(token[end - 1]))
         {
-            token = token[..^6];
+            end--;
+        }
+
+        if (end > 6 && token[(end - 6)..end].All(char.IsAsciiDigit))
+        {
+            token = token[..(end - 6)];
         }
 
         var canonical = Canonical(token);

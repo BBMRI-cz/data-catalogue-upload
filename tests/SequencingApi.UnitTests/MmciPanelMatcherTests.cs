@@ -45,6 +45,7 @@ public sealed class MmciPanelMatcherTests
     [InlineData("HyperCap-EP-240103")]     // hyphens, three parts
     [InlineData("HypCap_240301")]          // family spelled short
     [InlineData("SeqCapH240101")]          // the old name of this family, fused date
+    [InlineData("HyperCap240301x")]        // a suffix after the fused date
     public void EveryExperimentNameSpellingResolvesTheSameFamily(string experimentName)
     {
         var match = MmciPanelMatcher.Match(Rows, parametersText: null, experimentName, new DateOnly(2024, 6, 1));
@@ -136,6 +137,42 @@ public sealed class MmciPanelMatcherTests
         var match = MmciPanelMatcher.Match(Rows, null, "TSO500", new DateOnly(2024, 6, 1));
 
         Assert.Equal("TruSight Oncology 500", match!.PanelName);
+    }
+
+    [Fact]
+    public void ASuffixAfterTheFusedDateStillResolves()
+    {
+        // "SeqCap200528b" — the date is there, it is just not last. Looking only at the final six
+        // characters left the family as "seqcap200528b", which names no panel, and the whole run went
+        // unresolved.
+        var match = MmciPanelMatcher.Match(Rows, null, "SeqCap200528b", new DateOnly(2020, 6, 2));
+
+        Assert.Equal("SeqCap_2019", match!.PanelName);
+    }
+
+    [Fact]
+    public void AFamilyOfOnlyLettersSurvivesTheSuffixStrip()
+    {
+        // Looking past trailing letters must not consume the whole token: "Accel" has no fused date
+        // and trims to nothing, so it has to be left exactly as it is.
+        var match = MmciPanelMatcher.Match(Rows, null, "Accel", new DateOnly(2022, 5, 4));
+
+        Assert.Equal("Accel_ALLinONE", match!.PanelName);
+    }
+
+    [Fact]
+    public void AFamilyEndingInARealSuffixIsNotMistakenForADate()
+    {
+        // "DNApanel2024vR" ends in letters preceded by digits, but the digits are not a YYMMDD — the
+        // suffix is part of the panel's name and the family must keep it.
+        var rows = MmciLibrariesTableReader.Parse("""
+            Panel;Text in parameters;code in the molgenis catalogue;Availability Date Range;Genes;Vendor;Abbreviation;Library Preparation Kit;PCR Free;Target Enrichment Kit;UMIs Present;BED file
+            DNApanel2024vR;HyperCap2024DNA;DNA2024VR;15.4.2024 - 24.6.2024;BRCA1;Roche;HC;KAPA;NEPRAVDA;KAPA;PRAVDA;DNApanel2024vR_capture_targets.bed
+            """);
+
+        var match = MmciPanelMatcher.Match(rows, null, "DNApanel2024vR_240501", new DateOnly(2024, 5, 1));
+
+        Assert.Equal("DNApanel2024vR", match!.PanelName);
     }
 
     [Fact]
