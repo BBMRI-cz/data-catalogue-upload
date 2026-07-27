@@ -57,6 +57,10 @@ source text into numbers or dates is decoding, not domain logic, and stays in In
 
 ## Ingestion pipeline
 
+> Which source file fills which field — and the rules the MMCI adapter follows — is documented in
+> [`docs/mmci-ingestion-map.md`](../../docs/mmci-ingestion-map.md). Start there when a field is empty
+> or wrong.
+
 `IngestRecordsCommand` reads the `ISequencingDataSource` port and persists what validates through the
 three repositories, reporting per-record failures instead of aborting the run. It is dispatched by the
 weekly Quartz `IngestionJob` and by `POST /admin/ingest`, and is idempotent — the repositories
