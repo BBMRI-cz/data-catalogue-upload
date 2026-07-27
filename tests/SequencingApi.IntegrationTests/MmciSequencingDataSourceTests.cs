@@ -216,7 +216,10 @@ public sealed class MmciSequencingDataSourceTests
         var analysis = Assert.Single(runSample.Analyses);
         Assert.Equal(AnalysisType.VariantCalling, analysis.AnalysisType);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal("Human_v37p10_dbsnp135", analysis.ReferenceGenome);
+        // Translated from the loaded reference file to the accession the catalogue accepts, and
+        // taken from the line under the [Reference File(s)] marker rather than from a key match —
+        // the path opens with a drive letter, and "Reference Length" is a measurement, not a build.
+        Assert.Equal("GRCh37", analysis.ReferenceGenome);
         Assert.NotNull(analysis.ProducedAt);
 
         Assert.Contains(analysis.Files, file => file.Role == FileRole.Bam);

@@ -143,9 +143,21 @@ internal static partial class MmciSampleFolderReader
     }
 
     /// <summary>
-    /// The reference build the alignment used, named in the pipeline's own statistics header (it
-    /// records the reference file it loaded, e.g. <c>Human_v37p10_dbsnp135</c>).
+    /// The reference build the alignment used, as the genome accession the data catalogue accepts.
     /// </summary>
+    /// <remarks>
+    /// The pipeline names the reference by the file it loaded, e.g.
+    /// <c>E:\SoftGenetics\NextGene\References\Human_v37p10_dbsnp135</c>. That is a local path, not an
+    /// accession, and the catalogue's field is a controlled vocabulary, so the build is translated
+    /// rather than passed through — an unrecognised build is left unset instead of published as a
+    /// value that would be rejected on arrival.
+    /// <para>
+    /// Matching on the key alone does not work here: every path in this file opens with a Windows
+    /// drive letter, so a key/value split lands on the drive's colon and yields the key <c>E</c>. The
+    /// reference is found by its section marker and read from the line beneath it, which is also what
+    /// keeps <c>Reference Length</c> — a measurement, in base pairs — from being mistaken for it.
+    /// </para>
+    /// </remarks>
     private static string? ReferenceGenome(string analysisPath)
     {
         if (ReadFirst(analysisPath, "*_StatInfo.txt") is not { } statInfo)
@@ -153,22 +165,36 @@ internal static partial class MmciSampleFolderReader
             return null;
         }
 
-        foreach (var line in MmciSourceValues.Lines(statInfo))
+        var lines = MmciSourceValues.Lines(statInfo);
+        for (var index = 0; index < lines.Length - 1; index++)
         {
-            if (MmciSourceValues.KeyValue(line) is not { } pair)
+            if (!lines[index].Contains("Reference File", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            if (pair.Key.Contains("Reference", StringComparison.OrdinalIgnoreCase) && pair.Value.Length > 0)
+            var build = Path.GetFileNameWithoutExtension(lines[index + 1].Trim().Replace('\\', '/'));
+            if (GenomeAccession(build) is { } accession)
             {
-                // The value is a path to the loaded reference; its filename is the build name.
-                return Path.GetFileNameWithoutExtension(pair.Value.Replace('\\', '/'));
+                return accession;
             }
         }
 
         return null;
     }
+
+    /// <summary>
+    /// The catalogue's genome accession for a reference build named the way NextGENe names it, or
+    /// null when the build is not one this adapter knows.
+    /// </summary>
+    private static string? GenomeAccession(string build) => build switch
+    {
+        _ when build.Contains("v37", StringComparison.OrdinalIgnoreCase) => "GRCh37",
+        _ when build.Contains("hg19", StringComparison.OrdinalIgnoreCase) => "GRCh37",
+        _ when build.Contains("v38", StringComparison.OrdinalIgnoreCase) => "GRCh38",
+        _ when build.Contains("hg38", StringComparison.OrdinalIgnoreCase) => "GRCh38",
+        _ => null,
+    };
 
     /// <summary>
     /// When the analysis output appeared, taken as the newest write time in the folder.

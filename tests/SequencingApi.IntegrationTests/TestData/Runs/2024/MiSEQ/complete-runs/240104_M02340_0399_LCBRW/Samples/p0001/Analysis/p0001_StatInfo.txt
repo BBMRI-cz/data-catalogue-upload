@@ -1,6 +1,9 @@
 NextGENe V2.4.2.2
 Datum: pátek 5. leden 2024
-Reference: C:\NextGENe\Human_v37p10_dbsnp135.fasta
+[Sample File(s)]:
+E:\HyperCap\2024\p0001_S1_L001_R1_001_Unique_converted.fasta
+[Reference File(s)]:
+E:\SoftGenetics\NextGene\References\Human_v37p10_dbsnp135
 [Alignment Statistics]
 Total Reads: 4200000
 Matched Reads: 4100000
