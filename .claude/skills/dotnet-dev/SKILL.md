@@ -70,8 +70,12 @@ expected failures. When a use case returns a structured payload, name the result
 `AbstractValidator<TCommand>` in the Application layer; `AddValidatorsFromAssembly` auto-registers it and the
 `ValidationBehavior<,>` pipeline stage runs it, short-circuiting to an `ErrorOr` validation error before the
 handler. This **complements** the domain `Create(...)` invariants, it does not replace them: validate request
-shape/options here, aggregate invariants in the factory. (Both services' current commands are parameterless,
-so no validators exist yet - the behavior is wired and dormant until a command carries input.)
+shape/options here, aggregate invariants in the factory. `GetSequencingQueryValidator` is the worked example;
+unit-test a validator directly (see the `testing` skill).
+
+`ValidationBehavior<,>` is registered **scoped**, not singleton: `AddValidatorsFromAssembly` registers
+validators scoped, and a singleton behavior cannot resolve them - the container throws on the first request
+that has one. Keep it scoped in all three services.
 
 **One directory per source adapter.** A service that reads an external facility's data puts each
 implementation in its own folder under `Infrastructure/DataSource/<Facility>/`, with types prefixed by the
@@ -135,7 +139,31 @@ re-run `Create` validation on data already persisted.
 
 **API endpoints are Minimal API.** An endpoint only builds a Command/Query, calls `ISender`, and maps the
 `ErrorOr` to HTTP via `ErrorResults`. No business logic in endpoints; JSON is snake_case (matches the
-consumers).
+consumers), enum values included - write them with
+`JsonNamingPolicy.SnakeCaseLower.ConvertName(value.ToString())` so `BamIndex` reads as `bam_index`.
+
+**Every endpoint owns a response record and a mapper. No exceptions.** The rule is three parts:
+
+1. **The response record lives in the endpoint file that serves it** - `Endpoints/PatientEndpoints.cs` holds
+   `PatientEndpoints` *and* `PatientResponse`/`SampleResponse`/`SpecimenResponse`; `SummaryEndpoints.cs`
+   holds `SummaryResponse`. There is no `Contracts/` folder. This is the one place the one-type-per-file
+   rule is deliberately relaxed, so a route and its wire shape change together.
+2. **A hand-written `internal static class <Thing>ResponseMapper` in `Web/Mapping/`** projects the
+   domain/application type onto it - `PatientResponseMapper`, `SequencingResponseMapper`,
+   `SummaryResponseMapper`, `IngestResponseMapper`. Plain static `ToResponse` overloads, public entry
+   point plus private ones per child type.
+3. **Never serialize a Domain or Application type onto the wire.** Not an aggregate, not a `*CommandResult`,
+   not a port DTO - even when the response would be a field-for-field copy. `/summary` and `/admin/ingest`
+   both did this once and both were fixed: the duplication is the price of being able to change an internal
+   type without changing the public API, and of seeing the wire contract in one place when reading the route.
+
+Because the copies are hand-written, **every mapper needs a test that pins each field** with distinct
+values, so a dropped or transposed field fails (see `SummaryResponseMapperTests` - eight consecutive `int`s
+would otherwise transpose silently).
+
+**A source API serves its own domain, not its consumer's vocabulary.** biobank_api and sequencing_api both
+return their own model in snake_case and the uploader maps to the FAIR shape on its side. Do not shape a
+source endpoint after `Uploader.Application/Dtos`.
 
 **Uploader change detection is aggregate behaviour.** Each aggregate exposes `ComputeFingerprint()` (SHA-256
 over canonical JSON via `Fingerprint.Of(...)`); `FingerprintSyncPlanner` only compares fingerprints to decide
