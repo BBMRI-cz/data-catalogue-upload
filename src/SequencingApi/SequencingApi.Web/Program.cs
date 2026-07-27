@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Quartz;
 using SequencingApi.Application;
@@ -44,6 +44,7 @@ if (string.Equals(Environment.GetEnvironmentVariable("RUN_MIGRATIONS"), "true", 
 app.MapOpenApi();
 app.MapHealthEndpoints();
 app.MapSequencingEndpoints();
+app.MapSummaryEndpoints();
 app.MapAdminEndpoints();
 
 await app.RunAsync();
