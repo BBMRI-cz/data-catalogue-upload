@@ -18,6 +18,12 @@ public interface IPanelRepository
         CancellationToken cancellationToken);
 
     /// <summary>Load one panel by id, or null when it is unknown.</summary>
+    /// <summary>
+    /// Remove every stored panel. The panel-side counterpart to
+    /// <c>ISampleRepository.DeleteAllSamplesAsync</c>; see there for why it exists.
+    /// </summary>
+    Task DeleteAllPanelsAsync(CancellationToken cancellationToken);
+
     Task<PanelAggregate?> GetPanelAsync(PanelId id, CancellationToken cancellationToken);
 
     /// <summary>

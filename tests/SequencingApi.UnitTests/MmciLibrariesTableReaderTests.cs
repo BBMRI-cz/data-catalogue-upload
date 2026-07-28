@@ -33,6 +33,30 @@ public sealed class MmciLibrariesTableReaderTests
     }
 
     [Fact]
+    public void AQuotedCellContainingTheDelimiterDoesNotShiftTheColumnsAfterIt()
+    {
+        // The shape of the two TruSight rows in the live table: the gene cell packs a DNA and an RNA
+        // list separated by a semicolon, so the spreadsheet quoted it. Splitting on every semicolon
+        // gave the row one field too many and slid Vendor, Abbreviation and the BED file along by
+        // one — publishing a 400-character gene list as the vendor and "TRUE" as the BED file.
+        var row = Assert.Single(MmciLibrariesTableReader.Parse("""
+            Panel;Text in parameters;code in the molgenis catalogue;Availability Date Range;Genes (*all coding regions covered);Vendor;Abbreviation;Library Preparation Kit;PCR Free;Target Enrichment Kit;UMIs Present;BED file
+            TruSight Oncology 500 v2;no_parameters;FG_0000782;15.10.2025-now;"DNA panel: ABL1*, ABL2*; RNA panel: ALK*, BCR*";Illumina;TSO500v2;TruSight Oncology 500 Assay;NEPRAVDA;TruSight Oncology Enrichment;PRAVDA;TSO500bedTargetVisible.bed
+            """));
+
+        Assert.Equal("Illumina", row.Vendor);
+        Assert.Equal("TSO500v2", row.Abbreviation);
+        Assert.Equal("TruSight Oncology 500 Assay", row.LibraryPrepKit);
+        Assert.Equal("TruSight Oncology Enrichment", row.TargetEnrichmentKit);
+        Assert.Equal("TSO500bedTargetVisible.bed", row.BedFile);
+        Assert.False(row.PcrFree);
+        Assert.True(row.UmiPresent);
+
+        // Both lists are kept, and the "DNA panel:" / "RNA panel:" headings are not genes.
+        Assert.Equal(["ABL1*", "ABL2*", "ALK*", "BCR*"], row.Genes);
+    }
+
+    [Fact]
     public void SplitsTheAvailabilityRangeIntoItsTwoEnds()
     {
         var row = Assert.Single(MmciLibrariesTableReader.Parse(Csv));
@@ -141,13 +165,17 @@ public sealed class MmciLibrariesTableReaderTests
                 HyperCap MOP;MMCI_MOP_2024a;Roche;MMCI_MOP_2024a_capture_targets.bed
                 """, MmciSourceValues.LegacyEncoding);
 
-            File.SetLastWriteTimeUtc(older, new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            // Modification times deliberately contradict the version in the name: the 2024 table is
+            // touched last, as happens whenever someone opens an old version in a spreadsheet, or
+            // whenever a checkout writes every file at once. Which revision a file holds is what its
+            // name says, so the 2025 table must still win.
+            File.SetLastWriteTimeUtc(older, new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc));
             File.SetLastWriteTimeUtc(newer, new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
             var (rows, _) = MmciLibrariesTableReader.ReadDirectory(directory);
 
             var row = Assert.Single(rows);
-            Assert.Equal("MMCI_MOP_2024a", row.ParametersText);           // newest wins
+            Assert.Equal("MMCI_MOP_2024a", row.ParametersText);           // newest version wins
             Assert.Equal("MMCI_MOP_2024a_capture_targets.bed", row.BedFile);
             Assert.Equal(250, row.InputAmount);                            // back-filled
             Assert.Equal(350, row.IntendedInsertSize);

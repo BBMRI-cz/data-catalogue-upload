@@ -87,7 +87,7 @@ curl -X POST http://localhost:8001/admin/ingest
 
 # sequencing API server (scaffold; http://localhost:8002)
 RUN_MIGRATIONS=true POSTGRES_PORT=5434 dotnet run --project src/SequencingApi/SequencingApi.Web
-curl -X POST http://localhost:8002/admin/ingest    # {"ingested":0,"failed":0,"errors":[]}
+curl -X POST http://localhost:8002/admin/ingest    # {"ingested_samples":0,"error_count":0,"errors":[]}
 
 # uploader sync job (prints a JSON summary; exit 0 = no failures, 1 = failures)
 dotnet run --project src/Uploader/Uploader.Host

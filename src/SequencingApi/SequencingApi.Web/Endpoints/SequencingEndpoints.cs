@@ -67,6 +67,12 @@ public sealed record SequencingRunResponse(
     string? Assay,
     string? Workflow,
     double? PercentageQ30,
+    long? ClusterCountPassingFilter,
+    double? PercentageClustersPassingFilter,
+    double? ClusterDensity,
+    double? EstimatedYield,
+    string? CompletionStatus,
+    string? ErrorDescription,
     int? SampleIndex,
     string? SampleType,
     int? LaneCount,
@@ -109,23 +115,11 @@ public sealed record SequencingFileResponse(
 public sealed record AnalysisResponse(
     string AnalysisType,
     string PipelineName,
-    string? PipelineVersion,
     string? ReferenceGenome,
-    DateTime? ProducedAt,
     IReadOnlyList<SequencingFileResponse> Files,
     QualityMetricsResponse? Quality);
 
-/// <summary>Pipeline-computed quality metrics; every field is optional, absence means not reported.</summary>
+/// <summary>Pipeline-computed quality metrics; both fields are optional, absence means not reported.</summary>
 public sealed record QualityMetricsResponse(
-    double? AverageCoverage,
-    double? PctTargetOver100x,
-    int? MedianReadDepth,
-    int? ObservedReadLength,
-    long? TotalReads,
-    long? AlignedReads,
-    double? OnTargetRatePercent,
-    int? TotalVariants,
-    double? TsTvRatio,
-    int? HomozygousVariants,
-    int? HeterozygousVariants,
-    string? Verdict);
+    double? MedianReadDepth,
+    int? ObservedReadLength);

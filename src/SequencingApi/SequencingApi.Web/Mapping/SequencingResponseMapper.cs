@@ -60,6 +60,12 @@ internal static class SequencingResponseMapper
             run?.Assay,
             run?.Workflow,
             run?.PercentageQ30,
+            run?.ClusterCountPassingFilter,
+            run?.PercentageClustersPassingFilter,
+            run?.ClusterDensity,
+            run?.EstimatedYield,
+            run?.CompletionStatus,
+            run?.ErrorDescription,
             runSample.SampleIndex,
             Wire(runSample.SampleType),
             runSample.LaneCount,
@@ -102,25 +108,13 @@ internal static class SequencingResponseMapper
     private static AnalysisResponse ToResponse(Analysis analysis) => new(
         Wire(analysis.AnalysisType),
         analysis.PipelineName,
-        analysis.PipelineVersion,
         analysis.ReferenceGenome,
-        analysis.ProducedAt,
         [.. analysis.Files.Select(ToResponse)],
         analysis.Quality is { } quality ? ToResponse(quality) : null);
 
     private static QualityMetricsResponse ToResponse(QualityMetrics quality) => new(
-        quality.AverageCoverage,
-        quality.PctTargetOver100x,
         quality.MedianReadDepth,
-        quality.ObservedReadLength,
-        quality.TotalReads,
-        quality.AlignedReads,
-        quality.OnTargetRatePercent,
-        quality.TotalVariants,
-        quality.TsTvRatio,
-        quality.HomozygousVariants,
-        quality.HeterozygousVariants,
-        Wire(quality.Verdict));
+        quality.ObservedReadLength);
 
     // The same policy the property names use, so the wire vocabulary is consistent throughout.
     private static string? Wire<TEnum>(TEnum? value)

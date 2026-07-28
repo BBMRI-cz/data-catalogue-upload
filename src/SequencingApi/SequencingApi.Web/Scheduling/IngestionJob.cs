@@ -26,11 +26,11 @@ internal sealed class IngestionJob : IJob
         var result = await _sender.Send(new IngestRecordsCommand(), context.CancellationToken);
         result.Switch(
             success => _logger.LogInformation(
-                "Scheduled ingestion complete: {Ingested} samples, {Runs} runs, {Panels} panels ingested, {Failed} failed.",
-                success.Ingested,
+                "Scheduled ingestion complete: {IngestedSamples} samples, {Runs} runs, {Panels} panels ingested, {ErrorCount} problems reported.",
+                success.IngestedSamples,
                 success.IngestedRuns,
                 success.IngestedPanels,
-                success.Failed),
+                success.ErrorCount),
             errors => _logger.LogError(
                 "Scheduled ingestion failed: {Errors}",
                 string.Join("; ", errors.Select(error => error.Description))));

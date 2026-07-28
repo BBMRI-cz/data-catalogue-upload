@@ -1,0 +1,3 @@
+[Reports]
+MutationReport
+C:\NextGENe\Templates\HyperCap2024a\MutationReport.ini

@@ -65,27 +65,15 @@ internal static class SampleMapper
     {
         AnalysisType = analysis.AnalysisType,
         PipelineName = analysis.PipelineName,
-        PipelineVersion = analysis.PipelineVersion,
         ReferenceGenome = analysis.ReferenceGenome,
-        ProducedAt = analysis.ProducedAt,
         Quality = analysis.Quality is { } quality ? ToEntity(quality) : null,
         Files = [.. analysis.Files.Select(ToEntity)],
     };
 
     private static QualityMetricsEntity ToEntity(QualityMetrics quality) => new()
     {
-        AverageCoverage = quality.AverageCoverage,
-        PctTargetOver100x = quality.PctTargetOver100x,
         MedianReadDepth = quality.MedianReadDepth,
         ObservedReadLength = quality.ObservedReadLength,
-        TotalReads = quality.TotalReads,
-        AlignedReads = quality.AlignedReads,
-        OnTargetRatePercent = quality.OnTargetRatePercent,
-        TotalVariants = quality.TotalVariants,
-        TsTvRatio = quality.TsTvRatio,
-        HomozygousVariants = quality.HomozygousVariants,
-        HeterozygousVariants = quality.HeterozygousVariants,
-        Verdict = quality.Verdict,
     };
 
     // The owner foreign keys are left unset: EF fills whichever one applies from the navigation the
@@ -142,27 +130,15 @@ internal static class SampleMapper
     {
         AnalysisType = row.AnalysisType,
         PipelineName = row.PipelineName,
-        PipelineVersion = row.PipelineVersion,
         ReferenceGenome = row.ReferenceGenome,
-        ProducedAt = row.ProducedAt,
         Quality = row.Quality is { } quality ? ToDomain(quality) : null,
         Files = ToDomainFiles(row.Files),
     };
 
     private static QualityMetrics ToDomain(QualityMetricsEntity row) => new()
     {
-        AverageCoverage = row.AverageCoverage,
-        PctTargetOver100x = row.PctTargetOver100x,
         MedianReadDepth = row.MedianReadDepth,
         ObservedReadLength = row.ObservedReadLength,
-        TotalReads = row.TotalReads,
-        AlignedReads = row.AlignedReads,
-        OnTargetRatePercent = row.OnTargetRatePercent,
-        TotalVariants = row.TotalVariants,
-        TsTvRatio = row.TsTvRatio,
-        HomozygousVariants = row.HomozygousVariants,
-        HeterozygousVariants = row.HeterozygousVariants,
-        Verdict = row.Verdict,
     };
 
     private static IReadOnlyList<SequencingFile> ToDomainFiles(List<SequencingFileEntity> rows) =>

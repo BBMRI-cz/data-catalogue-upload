@@ -17,6 +17,10 @@ public sealed class MmciPanelMatcherTests
         TruSight Oncology 500;TSO500_v2;TSO500;1.1.2021 - ;ALK, EGFR;Illumina;TSO;TSO500 DNA;NEPRAVDA;TSO500;NEPRAVDA;TSO500bedTargetVisible.bed
         EliGene Prostate;ELIGENE_PROST;EGPROST;1.1.2020 - 31.12.2025;AR;Elisabeth Pharmacon;EG;EliGene;PRAVDA;EliGene;NEPRAVDA;eligene.bed
         MammaPrint;;MP;1.1.2019 - ;MMP1;Agendia;MP;MammaPrint;NEPRAVDA;MammaPrint;NEPRAVDA;mp.bed
+        SeqCap_2019;SeqCapPanelSummer19;SC2019;26.8.2019 - 23.7.2020;BRCA1;Roche;CAP2019;SeqCap EZ;NEPRAVDA;SeqCap EZ;NEPRAVDA;MMCI_2019_capture_targets.bed
+        Accel BRCA;AccelBRCA;ACBRCA;13.9.2019 - 21.9.2022;BRCA1;Swift;AC-BRCA;Accel;NEPRAVDA;Accel;NEPRAVDA;AccelBRCA.bed
+        Accel Custom;Accel_Custom;ACCUST;20.5.2020 - 3.11.2022;KRAS;Swift;AC-CUSTOM;Accel;NEPRAVDA;Accel;NEPRAVDA;Accel_custom_merged.bed
+        Accel_ALLinONE;manual;ACALL;;BRCA1, KRAS;Swift;AC;Accel;NEPRAVDA;Accel;NEPRAVDA;accel_all.bed
         """;
 
     private static readonly IReadOnlyList<MmciLibraryRow> Rows = MmciLibrariesTableReader.Parse(LibrariesCsv);
@@ -40,14 +44,59 @@ public sealed class MmciPanelMatcherTests
     [InlineData("HyperCap241217")]         // date fused onto the name
     [InlineData("HyperCap-EP-240103")]     // hyphens, three parts
     [InlineData("HypCap_240301")]          // family spelled short
-    [InlineData("SeqCapH240101")]          // the old name, fused date
-    [InlineData("SeqCap_240101")]
+    [InlineData("SeqCapH240101")]          // the old name of this family, fused date
+    [InlineData("HyperCap240301x")]        // a suffix after the fused date
     public void EveryExperimentNameSpellingResolvesTheSameFamily(string experimentName)
     {
         var match = MmciPanelMatcher.Match(Rows, parametersText: null, experimentName, new DateOnly(2024, 6, 1));
 
         Assert.NotNull(match);
         Assert.Equal("HyperCap MOP", match!.PanelName);
+    }
+
+    [Fact]
+    public void ASeqCapRunResolvesToASeqCapPanelRatherThanToHyperCap()
+    {
+        // "SeqCapH" is the pre-rename spelling of HyperCap, but bare "SeqCap" is its own family with
+        // its own panels. Aliasing the two together sent SeqCap runs looking among HyperCap panels,
+        // none of which existed when they were sequenced, and they resolved to nothing at all.
+        var match = MmciPanelMatcher.Match(Rows, null, "SeqCap190328", new DateOnly(2019, 9, 30));
+
+        Assert.Equal("SeqCap_2019", match!.PanelName);
+    }
+
+    [Fact]
+    public void AFamilyThatNamesAPanelLiterallyIgnoresTheAliasTable()
+    {
+        // The aliases are for the short forms operators type; a family that matches a real panel name
+        // must never be redirected by one, whatever the run date. This name is years outside the
+        // SeqCap window, and it still must not be attributed to HyperCap.
+        var match = MmciPanelMatcher.Match(Rows, null, "SeqCap_240101", new DateOnly(2024, 6, 1));
+
+        Assert.Equal("SeqCap_2019", match!.PanelName);
+    }
+
+    [Fact]
+    public void AnAmbiguousFamilyFallsBackToItsManualCatchAllRow()
+    {
+        // Three Accel panels cover 2022-05-04, so the availability window cannot separate them. The
+        // table marks one row `manual` — "this family, panel not otherwise determined" — and that is
+        // the answer, rather than leaving a resolvable sample panel-less.
+        var match = MmciPanelMatcher.Match(Rows, null, "Accel_220504", new DateOnly(2022, 5, 4));
+
+        Assert.Equal("Accel_ALLinONE", match!.PanelName);
+    }
+
+    [Fact]
+    public void TheCatchAllIsNotFilteredByTheRunDate()
+    {
+        // The catch-all is typically the row with no availability window at all, which is exactly why
+        // the window could not separate the candidates. Filtering it by date would discard it.
+        Assert.Null(Rows.Single(row => row.PanelName == "Accel_ALLinONE").AvailableFrom);
+
+        var match = MmciPanelMatcher.Match(Rows, null, "Accel_210101", new DateOnly(2021, 1, 1));
+
+        Assert.Equal("Accel_ALLinONE", match!.PanelName);
     }
 
     [Fact]
@@ -71,6 +120,7 @@ public sealed class MmciPanelMatcherTests
 
     [Theory]
     [InlineData("TSO500_Run2024_9", "TruSight Oncology 500")]
+    [InlineData("TSO_2025_01", "TruSight Oncology 500")]   // the underscore-separated spelling
     [InlineData("EG_240101", "EliGene Prostate")]
     [InlineData("MP_18_2024", "MammaPrint")]
     public void ShortNamesAreExpandedThroughTheAliasTable(string experimentName, string expectedPanel)
@@ -87,6 +137,42 @@ public sealed class MmciPanelMatcherTests
         var match = MmciPanelMatcher.Match(Rows, null, "TSO500", new DateOnly(2024, 6, 1));
 
         Assert.Equal("TruSight Oncology 500", match!.PanelName);
+    }
+
+    [Fact]
+    public void ASuffixAfterTheFusedDateStillResolves()
+    {
+        // "SeqCap200528b" — the date is there, it is just not last. Looking only at the final six
+        // characters left the family as "seqcap200528b", which names no panel, and the whole run went
+        // unresolved.
+        var match = MmciPanelMatcher.Match(Rows, null, "SeqCap200528b", new DateOnly(2020, 6, 2));
+
+        Assert.Equal("SeqCap_2019", match!.PanelName);
+    }
+
+    [Fact]
+    public void AFamilyOfOnlyLettersSurvivesTheSuffixStrip()
+    {
+        // Looking past trailing letters must not consume the whole token: "Accel" has no fused date
+        // and trims to nothing, so it has to be left exactly as it is.
+        var match = MmciPanelMatcher.Match(Rows, null, "Accel", new DateOnly(2022, 5, 4));
+
+        Assert.Equal("Accel_ALLinONE", match!.PanelName);
+    }
+
+    [Fact]
+    public void AFamilyEndingInARealSuffixIsNotMistakenForADate()
+    {
+        // "DNApanel2024vR" ends in letters preceded by digits, but the digits are not a YYMMDD — the
+        // suffix is part of the panel's name and the family must keep it.
+        var rows = MmciLibrariesTableReader.Parse("""
+            Panel;Text in parameters;code in the molgenis catalogue;Availability Date Range;Genes;Vendor;Abbreviation;Library Preparation Kit;PCR Free;Target Enrichment Kit;UMIs Present;BED file
+            DNApanel2024vR;HyperCap2024DNA;DNA2024VR;15.4.2024 - 24.6.2024;BRCA1;Roche;HC;KAPA;NEPRAVDA;KAPA;PRAVDA;DNApanel2024vR_capture_targets.bed
+            """);
+
+        var match = MmciPanelMatcher.Match(rows, null, "DNApanel2024vR_240501", new DateOnly(2024, 5, 1));
+
+        Assert.Equal("DNApanel2024vR", match!.PanelName);
     }
 
     [Fact]

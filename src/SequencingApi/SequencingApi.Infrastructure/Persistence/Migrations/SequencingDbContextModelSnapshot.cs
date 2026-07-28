@@ -38,12 +38,6 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("PipelineVersion")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ProducedAt")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<string>("ReferenceGenome")
                         .HasColumnType("text");
 
@@ -137,41 +131,11 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
                     b.Property<long>("AnalysisId")
                         .HasColumnType("bigint");
 
-                    b.Property<long?>("AlignedReads")
-                        .HasColumnType("bigint");
-
-                    b.Property<double?>("AverageCoverage")
+                    b.Property<double?>("MedianReadDepth")
                         .HasColumnType("double precision");
-
-                    b.Property<int?>("HeterozygousVariants")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("HomozygousVariants")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MedianReadDepth")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("ObservedReadLength")
                         .HasColumnType("integer");
-
-                    b.Property<double?>("OnTargetRatePercent")
-                        .HasColumnType("double precision");
-
-                    b.Property<double?>("PctTargetOver100x")
-                        .HasColumnType("double precision");
-
-                    b.Property<long?>("TotalReads")
-                        .HasColumnType("bigint");
-
-                    b.Property<int?>("TotalVariants")
-                        .HasColumnType("integer");
-
-                    b.Property<double?>("TsTvRatio")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("Verdict")
-                        .HasColumnType("text");
 
                     b.HasKey("AnalysisId");
 
@@ -325,8 +289,20 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
                     b.Property<string>("Chemistry")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp without time zone");
+                    b.Property<long?>("ClusterCountPassingFilter")
+                        .HasColumnType("bigint");
+
+                    b.Property<double?>("ClusterDensity")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("CompletionStatus")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ErrorDescription")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("EstimatedYield")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("ExperimentName")
                         .HasColumnType("text");
@@ -342,6 +318,9 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("LaneCount")
                         .HasColumnType("integer");
+
+                    b.Property<double?>("PercentageClustersPassingFilter")
+                        .HasColumnType("double precision");
 
                     b.Property<double?>("PercentageQ30")
                         .HasColumnType("double precision");
@@ -360,9 +339,6 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("SourceClass")
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Workflow")
                         .HasColumnType("text");

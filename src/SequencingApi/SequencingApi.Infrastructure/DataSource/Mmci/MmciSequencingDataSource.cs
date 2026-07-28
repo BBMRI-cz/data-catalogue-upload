@@ -65,13 +65,18 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             return Error.Failure("Sequencing.NoRuns", $"no sequencing runs found in: {_organisedRunsPath}");
         }
 
-        // Both auxiliary tables are optional. Without them panels go unresolved and samples carry no
-        // subject reference, which the model can express — unlike a failed ingest, which loses the
-        // sequencing data too.
+        // The libraries table is optional: without it panels go unresolved, which the model can
+        // express — unlike a failed ingest, which loses the sequencing data too.
         var (libraryRows, libraryProblems) = MmciLibrariesTableReader.ReadDirectory(_librariesPath);
         Report(errors, _librariesPath, libraryProblems);
 
+        // The mapping table is not optional; see ReadMappingTable. Read before the tree walk so the
+        // refusal costs seconds rather than the minutes the walk takes.
         var mappingTable = ReadMappingTable(errors);
+        if (mappingTable.IsError)
+        {
+            return mappingTable.Errors;
+        }
 
         var runs = new List<SequencingRunAggregate>();
         var runSamplesByExternalId = new Dictionary<string, List<RunSample>>(StringComparer.Ordinal);
@@ -82,7 +87,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             ReadRun(folder, libraryRows, runs, runSamplesByExternalId, errors);
         }
 
-        var samples = BuildSamples(runSamplesByExternalId, mappingTable, errors);
+        var samples = BuildSamples(runSamplesByExternalId, mappingTable.Value, errors);
         var panels = BuildPanels(libraryRows, errors);
 
         return new RecordReadResult(samples, runs, panels, errors);
@@ -188,7 +193,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         runs.Add(run.Value);
 
         var samplesPath = Path.Join(folder.Path, SamplesFolder);
-        var sheetRows = sheet.Rows.ToDictionary(row => row.SampleId, StringComparer.OrdinalIgnoreCase);
+        var sheetRows = IndexSheetRows(sheet, samplesPath, errors);
         var seenInTree = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var samplePath in Subdirectories(samplesPath))
@@ -198,7 +203,13 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
 
             var sheetRow = sheetRows.GetValueOrDefault(externalId);
 
-            var runSample = MmciSampleFolderReader.Read(samplePath, folder.RunId, sheetRow, _organisedRunsPath);
+            var (runSample, problems) = MmciSampleFolderReader.Read(
+                samplePath, folder.RunId, sheetRow, _organisedRunsPath);
+
+            // Reported whatever the outcome: a file that names another sample is the source's own
+            // inconsistency and has to stay visible even when the rest of the folder reads fine.
+            Report(errors, Relative(samplePath), problems);
+
             if (runSample.IsError)
             {
                 errors.Add(new RecordReadError(Name, Relative(samplePath), Describe(runSample.Errors)));
@@ -220,7 +231,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             }
 
             var withPanel = AttachPanel(runSample.Value, samplePath, libraryRows, sheet, run.Value.RunDate);
-            ReportMissingReads(withPanel, run.Value, samplePath, errors);
+            ReportUnexpectedReadCount(withPanel, run.Value, samplePath, errors);
 
             if (!runSamplesByExternalId.TryGetValue(externalId, out var list))
             {
@@ -239,6 +250,43 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
                 Relative(Path.Join(samplesPath, missing.SampleId)),
                 "sample listed in the sample sheet has no folder in the run"));
         }
+    }
+
+    /// <summary>
+    /// Index a run's sample-sheet rows by sample id, reporting — rather than throwing on — a sample
+    /// the sheet lists more than once.
+    /// </summary>
+    /// <remarks>
+    /// The obvious <c>ToDictionary</c> throws on a repeated key, and this is the one place in the
+    /// reader where bad source data could do that: <see cref="ReadRecords"/> guards nothing, so the
+    /// exception would leave the endpoint returning 500 with not one record persisted — every run in
+    /// the corpus lost to a single duplicated line in a single sheet. Everything else here reports
+    /// and carries on, and so does this.
+    /// <para>
+    /// First row wins, which is the same rule <see cref="MmciMappingTableReader"/> applies to a
+    /// duplicate pseudonymized id, and the rows carry nothing that would let a later duplicate be
+    /// judged the better one.
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, MmciSampleSheetRow> IndexSheetRows(
+        MmciSampleSheet sheet,
+        string samplesPath,
+        List<RecordReadError> errors)
+    {
+        var rows = new Dictionary<string, MmciSampleSheetRow>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in sheet.Rows)
+        {
+            if (!rows.TryAdd(row.SampleId, row))
+            {
+                errors.Add(new RecordReadError(
+                    Name,
+                    Relative(Path.Join(samplesPath, row.SampleId)),
+                    "sample listed more than once in the sample sheet; the first row was used"));
+            }
+        }
+
+        return rows;
     }
 
     /// <summary>
@@ -277,11 +325,18 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
     }
 
     /// <summary>
-    /// Flag a sample that produced fewer read files than the run's own read structure implies. The
-    /// expectation is derived from what the instrument actually did — reads times lanes — never from
-    /// an assumption that sequencing is paired-end, because a large minority of these runs are not.
+    /// Flag a sample whose read-file count disagrees with the run's own read structure, in either
+    /// direction. The expectation is derived from what the instrument actually did — reads times
+    /// lanes — never from an assumption that sequencing is paired-end, because a large minority of
+    /// these runs are not.
     /// </summary>
-    private void ReportMissingReads(
+    /// <remarks>
+    /// A surplus is reported as well as a shortfall, and is arguably the more interesting of the two:
+    /// files that should not be there had to come from somewhere. Reporting only shortfalls is what
+    /// let another sample's reads sit unnoticed in a folder for two iterations — every run affected by
+    /// that turned out to have a surplus here.
+    /// </remarks>
+    private void ReportUnexpectedReadCount(
         RunSample runSample,
         SequencingRunAggregate run,
         string samplePath,
@@ -296,13 +351,16 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
 
         // Zero is its own, well-understood state (a sample folder with no reads at all, which over a
         // hundred of them are) and is left to HasFastq rather than reported as a shortfall.
-        if (actual > 0 && actual < expected)
+        if (actual == 0 || actual == expected)
         {
-            errors.Add(new RecordReadError(
-                Name,
-                Relative(samplePath),
-                $"expected {expected} read files from the run's read structure, found {actual}"));
+            return;
         }
+
+        var direction = actual < expected ? "found" : "found more:";
+        errors.Add(new RecordReadError(
+            Name,
+            Relative(samplePath),
+            $"expected {expected} read files from the run's read structure, {direction} {actual}"));
     }
 
     /// <summary>
@@ -376,13 +434,30 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         return panels;
     }
 
-    private MmciMappingTable ReadMappingTable(List<RecordReadError> errors)
+    /// <summary>
+    /// Read the predictive-number mapping, which ingestion cannot proceed without.
+    /// </summary>
+    /// <remarks>
+    /// Required rather than optional, and the difference only shows up on the second ingest. Falling
+    /// back to an empty table costs a first run its predictive numbers, which is survivable — but a
+    /// re-run persists those absent numbers over the good ones already stored, so a mapping file that
+    /// is briefly unreadable silently erases the one field the uploader joins on, for every sample at
+    /// once. Nothing downstream can distinguish that from a corpus that genuinely has no mapping.
+    /// <para>
+    /// Refusing to ingest keeps the stored data intact and says why, which is the safe direction:
+    /// stale sequencing data is a smaller harm than sequencing data no patient can be matched to.
+    /// </para>
+    /// </remarks>
+    private ErrorOr<MmciMappingTable> ReadMappingTable(List<RecordReadError> errors)
     {
         var path = Path.Join(_mappingTablePath, MmciMappingTableReader.FileName);
         if (!File.Exists(path))
         {
-            errors.Add(new RecordReadError(Name, path, "predictive-number mapping table not found"));
-            return MmciMappingTable.Empty;
+            return Error.Failure(
+                "Sequencing.MappingTableMissing",
+                $"predictive-number mapping table not found: {path}. Ingestion cannot proceed without "
+                + "it — every sample would be stored with no predictive number, which is the only "
+                + "field the patient data can be joined on.");
         }
 
         string json;
@@ -392,11 +467,23 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         }
         catch (IOException exception)
         {
-            errors.Add(new RecordReadError(Name, path, $"mapping table unreadable: {exception.Message}"));
-            return MmciMappingTable.Empty;
+            return Error.Failure(
+                "Sequencing.MappingTableUnreadable",
+                $"predictive-number mapping table unreadable: {path}: {exception.Message}");
         }
 
         var (table, problems) = MmciMappingTableReader.Read(json);
+
+        // A table that parsed to nothing is the same catastrophe as an absent one, so it is refused
+        // on the same grounds rather than reported and walked past.
+        if (table.Count == 0)
+        {
+            return Error.Failure(
+                "Sequencing.MappingTableEmpty",
+                $"predictive-number mapping table has no usable entries: {path}. "
+                + string.Join("; ", problems));
+        }
+
         Report(errors, path, problems);
         return table;
     }

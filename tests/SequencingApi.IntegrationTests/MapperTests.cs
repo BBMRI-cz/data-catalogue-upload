@@ -73,9 +73,7 @@ public sealed class MapperTests
             .Single(run => run.RunId.Value == SequencingFixtures.PrimaryRunId).Analyses.Single();
         Assert.Equal(AnalysisType.VariantCalling, analysis.AnalysisType);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal("2.4.2.2", analysis.PipelineVersion);
         Assert.Equal("GRCh37", analysis.ReferenceGenome);
-        Assert.Equal(new DateTime(2024, 1, 8, 9, 30, 0), analysis.ProducedAt);
 
         // Analysis outputs stay attached to the analysis, not to the run sample they came from.
         Assert.Equal(2, analysis.Files.Count);
@@ -86,18 +84,8 @@ public sealed class MapperTests
             file => file.Role == FileRole.Bam);
 
         var quality = analysis.Quality!;
-        Assert.Equal(812.5, quality.AverageCoverage);
-        Assert.Equal(97.25, quality.PctTargetOver100x);
         Assert.Equal(640, quality.MedianReadDepth);
         Assert.Equal(151, quality.ObservedReadLength);
-        Assert.Equal(4_200_000, quality.TotalReads);
-        Assert.Equal(4_100_000, quality.AlignedReads);
-        Assert.Equal(92.5, quality.OnTargetRatePercent);
-        Assert.Equal(37, quality.TotalVariants);
-        Assert.Equal(2.1, quality.TsTvRatio);
-        Assert.Equal(12, quality.HomozygousVariants);
-        Assert.Equal(25, quality.HeterozygousVariants);
-        Assert.Equal(QualityVerdict.Pass, quality.Verdict);
     }
 
     [Fact]
@@ -151,9 +139,13 @@ public sealed class MapperTests
         Assert.Equal("HyperCap-EP-240103", mapped.ExperimentName);
         Assert.Equal("Amplicon", mapped.Chemistry);
         Assert.Equal("MiSeq v2", mapped.ReagentKit);
-        Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), mapped.StartedAt);
-        Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), mapped.CompletedAt);
         Assert.Equal(94.7, mapped.PercentageQ30);
+        Assert.Equal(26_901_812L, mapped.ClusterCountPassingFilter);
+        Assert.Equal(87.14986, mapped.PercentageClustersPassingFilter);
+        Assert.Equal(233.356873, mapped.ClusterDensity);
+        Assert.Equal(112.832085, mapped.EstimatedYield);
+        Assert.Equal("CompletedAsPlanned", mapped.CompletionStatus);
+        Assert.Equal("Flowcell temperature out of range", mapped.ErrorDescription);
 
         // The read structure is what the expected-FASTQ derivation is built on, so its order and
         // index flags have to survive the JSON column intact.

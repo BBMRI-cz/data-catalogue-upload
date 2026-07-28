@@ -22,16 +22,25 @@ internal static partial class MmciSampleFolderReader
     /// <summary>The pipeline that produced every analysis in this tree, named in its own reports.</summary>
     private const string PipelineName = "NextGENe";
 
-    public static ErrorOr<RunSample> Read(
+    public static (ErrorOr<RunSample> Sample, IReadOnlyList<string> Problems) Read(
         string samplePath,
         string runId,
         MmciSampleSheetRow? sheetRow,
         string rootPath)
     {
-        var files = ReadFastqFiles(samplePath, rootPath);
+        var problems = new List<string>();
+        var files = ReadFastqFiles(samplePath, rootPath, problems);
         var analyses = ReadAnalyses(samplePath, rootPath);
 
-        return RunSample.Create(
+        return (Build(runId, sheetRow, files, analyses), problems);
+    }
+
+    private static ErrorOr<RunSample> Build(
+        string runId,
+        MmciSampleSheetRow? sheetRow,
+        IReadOnlyList<SequencingFile> files,
+        IReadOnlyList<Analysis> analyses) =>
+        RunSample.Create(
             runId,
             sampleIndex: SampleIndex(files) ?? sheetRow?.Position,
             sampleType: ParseSampleType(sheetRow?.SampleType),
@@ -42,20 +51,41 @@ internal static partial class MmciSampleFolderReader
             libraryPreparation: null,
             files: files,
             analyses: analyses);
-    }
 
     /// <summary>
     /// The reads. Lane and read number come from the filename the demultiplexer stamped them into,
     /// which is the only place they are recorded per file.
     /// </summary>
-    private static IReadOnlyList<SequencingFile> ReadFastqFiles(string samplePath, string rootPath)
+    /// <remarks>
+    /// A file is only this sample's if its own name says so. The pseudonymizer has spliced one
+    /// sample's id into another's filename in a handful of runs, leaving reads that belong to a
+    /// different sample sitting in this folder — and the folder alone cannot tell you that. Those are
+    /// reported and skipped rather than ingested under whoever's folder they happen to sit in, because
+    /// the alternative is serving one patient's reads under another's predictive number.
+    /// </remarks>
+    private static IReadOnlyList<SequencingFile> ReadFastqFiles(
+        string samplePath,
+        string rootPath,
+        List<string> problems)
     {
         var fastqPath = Path.Join(samplePath, FastqFolder);
+        var sampleId = Path.GetFileName(samplePath);
         var files = new List<SequencingFile>();
 
         foreach (var path in EnumerateFiles(fastqPath, "*.fastq.gz"))
         {
-            var match = FastqNamePattern().Match(Path.GetFileName(path));
+            var name = Path.GetFileName(path);
+            var match = FastqNamePattern().Match(name);
+
+            // Everything before the demultiplexer's `_S<n>_…` suffix is the id the file claims. Only
+            // checked when the suffix is actually present: without it there is nothing to compare.
+            if (match.Success
+                && !name[..match.Index].Equals(sampleId, StringComparison.OrdinalIgnoreCase))
+            {
+                problems.Add($"read file names a different sample and was skipped: {name}");
+                continue;
+            }
+
             var file = SequencingFile.Create(
                 FileRole.Fastq,
                 RelativePath(path, rootPath),
@@ -120,11 +150,7 @@ internal static partial class MmciSampleFolderReader
         var analysis = Analysis.Create(
             AnalysisType.VariantCalling,
             pipelineName: PipelineName,
-            pipelineVersion: null,
             referenceGenome: ReferenceGenome(analysisPath),
-            // ponytail: the reports state no production time, so this is the filesystem's mtime of the
-            // newest output — when the files appeared, not when the pipeline claims it ran.
-            producedAt: ProducedAt(analysisPath),
             files: [.. files.OrderBy(file => file.Path, StringComparer.Ordinal)],
             quality: quality);
 
@@ -135,16 +161,29 @@ internal static partial class MmciSampleFolderReader
     {
         var reportsPath = Path.Join(analysisPath, "Reports");
 
+        // The mutation statistics are not read: everything they state is a variant summary, and the
+        // catalogue has no field for one.
         return MmciNextGeneStatsReader.Read(
             ReadFirst(analysisPath, "*_StatInfo.txt"),
-            ReadFirst(reportsPath, "*_Coverage_Curve_Report*_Statistics.txt"),
-            ReadFirst(reportsPath, "*_Mutation_Report*_Statistics.txt"));
+            ReadFirst(reportsPath, "*_Coverage_Curve_Report*_Statistics.txt"));
     }
 
     /// <summary>
-    /// The reference build the alignment used, named in the pipeline's own statistics header (it
-    /// records the reference file it loaded, e.g. <c>Human_v37p10_dbsnp135</c>).
+    /// The reference build the alignment used, as the genome accession the data catalogue accepts.
     /// </summary>
+    /// <remarks>
+    /// The pipeline names the reference by the file it loaded, e.g.
+    /// <c>E:\SoftGenetics\NextGene\References\Human_v37p10_dbsnp135</c>. That is a local path, not an
+    /// accession, and the catalogue's field is a controlled vocabulary, so the build is translated
+    /// rather than passed through — an unrecognised build is left unset instead of published as a
+    /// value that would be rejected on arrival.
+    /// <para>
+    /// Matching on the key alone does not work here: every path in this file opens with a Windows
+    /// drive letter, so a key/value split lands on the drive's colon and yields the key <c>E</c>. The
+    /// reference is found by its section marker and read from the line beneath it, which is also what
+    /// keeps <c>Reference Length</c> — a measurement, in base pairs — from being mistaken for it.
+    /// </para>
+    /// </remarks>
     private static string? ReferenceGenome(string analysisPath)
     {
         if (ReadFirst(analysisPath, "*_StatInfo.txt") is not { } statInfo)
@@ -152,17 +191,18 @@ internal static partial class MmciSampleFolderReader
             return null;
         }
 
-        foreach (var line in MmciSourceValues.Lines(statInfo))
+        var lines = MmciSourceValues.Lines(statInfo);
+        for (var index = 0; index < lines.Length - 1; index++)
         {
-            if (MmciSourceValues.KeyValue(line) is not { } pair)
+            if (!lines[index].Contains("Reference File", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            if (pair.Key.Contains("Reference", StringComparison.OrdinalIgnoreCase) && pair.Value.Length > 0)
+            var build = Path.GetFileNameWithoutExtension(lines[index + 1].Trim().Replace('\\', '/'));
+            if (GenomeAccession(build) is { } accession)
             {
-                // The value is a path to the loaded reference; its filename is the build name.
-                return Path.GetFileNameWithoutExtension(pair.Value.Replace('\\', '/'));
+                return accession;
             }
         }
 
@@ -170,35 +210,17 @@ internal static partial class MmciSampleFolderReader
     }
 
     /// <summary>
-    /// When the analysis output appeared, taken as the newest write time in the folder.
+    /// The catalogue's genome accession for a reference build named the way NextGENe names it, or
+    /// null when the build is not one this adapter knows.
     /// </summary>
-    /// <remarks>
-    /// Local wall-clock time with <see cref="DateTimeKind.Unspecified"/>, to match every other
-    /// timestamp in this model: the sources state times without a zone, and the columns are
-    /// <c>timestamp without time zone</c>. A <see cref="DateTimeKind.Utc"/> value would be rejected
-    /// outright by PostgreSQL on write.
-    /// </remarks>
-    private static DateTime? ProducedAt(string analysisPath)
+    private static string? GenomeAccession(string build) => build switch
     {
-        DateTime? newest = null;
-        foreach (var path in EnumerateFiles(analysisPath, "*", recursive: true))
-        {
-            try
-            {
-                var written = File.GetLastWriteTime(path);
-                if (newest is null || written > newest)
-                {
-                    newest = written;
-                }
-            }
-            catch (IOException)
-            {
-                // A file that vanished mid-scan simply does not contribute a timestamp.
-            }
-        }
-
-        return newest is { } value ? DateTime.SpecifyKind(value, DateTimeKind.Unspecified) : null;
-    }
+        _ when build.Contains("v37", StringComparison.OrdinalIgnoreCase) => "GRCh37",
+        _ when build.Contains("hg19", StringComparison.OrdinalIgnoreCase) => "GRCh37",
+        _ when build.Contains("v38", StringComparison.OrdinalIgnoreCase) => "GRCh38",
+        _ when build.Contains("hg38", StringComparison.OrdinalIgnoreCase) => "GRCh38",
+        _ => null,
+    };
 
     /// <summary>
     /// What an analysis output is, by filename. Anything unrecognised is skipped rather than stored as
@@ -230,10 +252,14 @@ internal static partial class MmciSampleFolderReader
             return FileRole.SummaryReport;
         }
 
-        // The tabular reports, but never the `_Statistics` summaries beside them: those are metric
-        // sources, and their numbers are stored as quality metrics rather than as a file reference.
+        // The tabular reports, but never the `_Statistics` summaries beside them (those are metric
+        // sources, and their numbers are stored as quality metrics rather than as a file reference)
+        // and never the `_settings` dumps either — the pipeline writes one next to every report,
+        // naming the .ini template it used. Recording those as reports tripled the variant-report
+        // count and doubled the coverage-report count in the production corpus.
         if (fileName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-            && !fileName.Contains("_Statistics", StringComparison.OrdinalIgnoreCase))
+            && !fileName.Contains("_Statistics", StringComparison.OrdinalIgnoreCase)
+            && !fileName.Contains("_settings", StringComparison.OrdinalIgnoreCase))
         {
             if (fileName.Contains("Coverage_Curve", StringComparison.OrdinalIgnoreCase))
             {
@@ -344,8 +370,14 @@ internal static partial class MmciSampleFolderReader
     /// <c>&lt;name&gt;_S&lt;n&gt;_L00&lt;lane&gt;_R&lt;read&gt;_001.fastq.gz</c> — the demultiplexer's
     /// naming, and the only record of which lane and which read of the pair a file holds.
     /// </summary>
+    /// <remarks>
+    /// The lane segment is optional because some files simply do not carry one
+    /// (<c>&lt;name&gt;_S13_R1_001.fastq.gz</c>). Requiring it failed the whole match on those, which
+    /// threw away the read number the filename states perfectly clearly alongside the lane it does
+    /// not. An absent lane now costs the lane only.
+    /// </remarks>
     [GeneratedRegex(
-        @"_S(?<sample>\d+)_L(?<lane>\d+)_R(?<read>\d+)_",
+        @"_S(?<sample>\d+)(_L(?<lane>\d+))?_R(?<read>\d+)_",
         RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture)]
     private static partial Regex FastqNamePattern();
 }

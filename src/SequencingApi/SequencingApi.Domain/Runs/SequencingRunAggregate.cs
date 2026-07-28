@@ -70,16 +70,39 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
 
     public string? ReagentKit { get; init; }
 
-    public DateTime? StartedAt { get; init; }
-
-    public DateTime? CompletedAt { get; init; }
-
     /// <summary>
-    /// Share of bases the instrument called with high confidence across the whole run, 0-100. A
-    /// plain property rather than a quality-metrics object: this is the only quality number a run
-    /// produces, and everything else measured about sequencing is computed later by an analysis.
+    /// Share of bases the instrument called with high confidence across the whole run, 0-100.
     /// </summary>
     public double? PercentageQ30 { get; init; }
+
+    /// <summary>
+    /// Clusters that passed the instrument's chastity filter, as an absolute count.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="PercentageClustersPassingFilter"/> on purpose: the two instrument
+    /// families state this differently — one a count, the other a share — and they are not
+    /// interconvertible without the raw cluster total. Folding them into one field would put a
+    /// count and a percentage in the same column, which is a number nobody can safely read.
+    /// </remarks>
+    public long? ClusterCountPassingFilter { get; init; }
+
+    /// <summary>Share of clusters that passed the chastity filter, 0-100.</summary>
+    public double? PercentageClustersPassingFilter { get; init; }
+
+    /// <summary>Cluster density on the flowcell, in thousands per mm².</summary>
+    public double? ClusterDensity { get; init; }
+
+    /// <summary>Bases the run was estimated to yield, in gigabases.</summary>
+    public double? EstimatedYield { get; init; }
+
+    /// <summary>
+    /// How the control software says the run ended. Opaque text: the vocabulary is the vendor's, and
+    /// what counts as a clean finish is not something this model should decide.
+    /// </summary>
+    public string? CompletionStatus { get; init; }
+
+    /// <summary>The error the control software reported, or null when it reported none.</summary>
+    public string? ErrorDescription { get; init; }
 
     /// <summary>
     /// Reads that sequenced the fragment rather than a barcode — one for a single-read run, two for
@@ -115,9 +138,13 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
         string? experimentName = null,
         string? chemistry = null,
         string? reagentKit = null,
-        DateTime? startedAt = null,
-        DateTime? completedAt = null,
-        double? percentageQ30 = null)
+        double? percentageQ30 = null,
+        long? clusterCountPassingFilter = null,
+        double? percentageClustersPassingFilter = null,
+        double? clusterDensity = null,
+        double? estimatedYield = null,
+        string? completionStatus = null,
+        string? errorDescription = null)
     {
         // Normalize.RunId, not a local rule: RunSample normalizes its run id with the same helper,
         // and if the two ever diverge, de-duplicating a run discovered twice silently stops working.
@@ -136,14 +163,37 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
             return Error.Validation("SequencingRun.LaneCount", $"lane_count must be positive, got {laneCount}");
         }
 
-        if (startedAt is { } started && completedAt is { } completed && completed < started)
-        {
-            return Error.Validation("SequencingRun.CompletedAt", "completed_at must not precede started_at");
-        }
-
         if (percentageQ30 is { } q30 && q30 is < 0 or > 100)
         {
             return Error.Validation("SequencingRun.PercentageQ30", $"percentage_q30 must be 0-100, got {q30}");
+        }
+
+        if (clusterCountPassingFilter is < 0)
+        {
+            return Error.Validation(
+                "SequencingRun.ClusterCountPassingFilter",
+                $"cluster_count_passing_filter must not be negative, got {clusterCountPassingFilter}");
+        }
+
+        if (percentageClustersPassingFilter is { } clustersPf && clustersPf is < 0 or > 100)
+        {
+            return Error.Validation(
+                "SequencingRun.PercentageClustersPassingFilter",
+                $"percentage_clusters_passing_filter must be 0-100, got {clustersPf}");
+        }
+
+        if (clusterDensity is < 0)
+        {
+            return Error.Validation(
+                "SequencingRun.ClusterDensity",
+                $"cluster_density must not be negative, got {clusterDensity}");
+        }
+
+        if (estimatedYield is < 0)
+        {
+            return Error.Validation(
+                "SequencingRun.EstimatedYield",
+                $"estimated_yield must not be negative, got {estimatedYield}");
         }
 
         return new SequencingRunAggregate
@@ -163,9 +213,13 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
             ExperimentName = Normalize.Collapse(experimentName),
             Chemistry = Normalize.Collapse(chemistry),
             ReagentKit = Normalize.Collapse(reagentKit),
-            StartedAt = startedAt,
-            CompletedAt = completedAt,
             PercentageQ30 = percentageQ30,
+            ClusterCountPassingFilter = clusterCountPassingFilter,
+            PercentageClustersPassingFilter = percentageClustersPassingFilter,
+            ClusterDensity = clusterDensity,
+            EstimatedYield = estimatedYield,
+            CompletionStatus = Normalize.Collapse(completionStatus),
+            ErrorDescription = Normalize.Collapse(errorDescription),
         };
     }
 }

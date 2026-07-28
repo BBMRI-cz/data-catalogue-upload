@@ -71,5 +71,5 @@ dotnet test DataCatalogueUpload.slnx
 End commit messages created by the agent with:
 
 ```
-Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```

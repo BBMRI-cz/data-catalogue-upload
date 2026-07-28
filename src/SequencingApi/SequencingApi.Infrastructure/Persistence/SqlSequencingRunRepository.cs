@@ -92,6 +92,14 @@ internal sealed class SqlSequencingRunRepository : ISequencingRunRepository
         }
     }
 
+    /// <summary>Clear every run and its read structure, children first — see the sample repository.</summary>
+    public async Task DeleteAllRunsAsync(CancellationToken cancellationToken)
+    {
+        await _context.RunReads.ExecuteDeleteAsync(cancellationToken);
+        await _context.SequencingRuns.ExecuteDeleteAsync(cancellationToken);
+        _context.ChangeTracker.Clear();
+    }
+
     private async Task SaveAsync(
         IReadOnlyList<SequencingRunAggregate> runs,
         CancellationToken cancellationToken)

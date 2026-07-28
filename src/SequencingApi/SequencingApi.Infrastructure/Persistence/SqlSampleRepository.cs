@@ -100,6 +100,31 @@ internal sealed class SqlSampleRepository : ISampleRepository
         return failures;
     }
 
+    /// <summary>
+    /// Clear the whole sample aggregate — every table it owns, children first.
+    /// </summary>
+    /// <remarks>
+    /// Explicit per table rather than leaning on the cascade: the delete is issued in SQL without
+    /// loading anything, so what runs is whatever the database enforces, and the SQLite the
+    /// integration tests use does not enforce foreign keys unless asked. Deleting the roots alone
+    /// would leave orphaned children there and pass on PostgreSQL, which is exactly the kind of
+    /// difference that surfaces in production instead of in the suite.
+    /// <para>
+    /// Every <c>sequencing_file</c> row belongs to this aggregate whichever owner it carries — a
+    /// run-sample's reads or an analysis's outputs — so the table is cleared here in full.
+    /// </para>
+    /// </remarks>
+    public async Task DeleteAllSamplesAsync(CancellationToken cancellationToken)
+    {
+        await _context.SequencingFiles.ExecuteDeleteAsync(cancellationToken);
+        await _context.QualityMetrics.ExecuteDeleteAsync(cancellationToken);
+        await _context.Analyses.ExecuteDeleteAsync(cancellationToken);
+        await _context.LibraryPreparations.ExecuteDeleteAsync(cancellationToken);
+        await _context.RunSamples.ExecuteDeleteAsync(cancellationToken);
+        await _context.Samples.ExecuteDeleteAsync(cancellationToken);
+        _context.ChangeTracker.Clear();
+    }
+
     // Delete-then-insert per sample: removing the existing row cascades to its run-samples, files
     // and analyses, so a re-save never leaves stale or duplicate children behind.
     private async Task SaveBatchAsync(IReadOnlyList<SampleAggregate> batch, CancellationToken cancellationToken)

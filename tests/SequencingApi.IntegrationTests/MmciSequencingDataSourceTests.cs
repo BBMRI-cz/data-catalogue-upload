@@ -71,8 +71,16 @@ public sealed class MmciSequencingDataSourceTests
         Assert.Equal("HyperCap-EP-240103", run.ExperimentName);
         Assert.Equal("Amplicon", run.Chemistry);
         Assert.Equal("MiSeq v2", run.ReagentKit);                           // RunParameters
-        Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), run.StartedAt);    // CompletedJobInfo
-        Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), run.CompletedAt);
+        Assert.Equal(95.9, run.PercentageQ30);                              // AnalysisLog
+    }
+
+    [Fact]
+    public void ARunWithoutAnAnalysisLogSimplyHasNoQ30()
+    {
+        // Only the MiSeq control software writes one; three runs in ten do not have it at all.
+        var run = Assert.Single(Read().Runs, candidate => candidate.Id.Value == "240102_NB552710_0064_AHG7L");
+
+        Assert.Null(run.PercentageQ30);
     }
 
     [Fact]
@@ -175,6 +183,31 @@ public sealed class MmciSequencingDataSourceTests
                 && error.Reason.Contains("sample sheet", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// A sheet that lists one sample twice must cost that repeat and nothing else. The natural
+    /// <c>ToDictionary</c> threw here, and because nothing in the read path catches, the whole
+    /// ingest ended with no record persisted at all — so this pins the surrounding runs too.
+    /// </summary>
+    [Fact]
+    public void ASampleListedTwiceInTheSheetIsReportedAndCostsNothingElse()
+    {
+        var result = Read();
+
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0001", StringComparison.Ordinal)
+                && error.Reason.Contains("more than once", StringComparison.OrdinalIgnoreCase));
+
+        // The duplicate is dropped, not turned into a second run-sample...
+        Assert.Single(
+            Sample(result, "p0001").RunSamples,
+            candidate => candidate.RunId.Value == "240104_M02340_0399_LCBRW");
+
+        // ...and every other run in the tree still read, which is the half that was actually at risk.
+        Assert.Equal(3, result.Runs.Count);
+        Assert.Equal(4, result.Samples.Count);
+    }
+
     [Fact]
     public void NextSeqCarriesTheDnaRnaDistinctionAndFourLanesOfReads()
     {
@@ -216,8 +249,10 @@ public sealed class MmciSequencingDataSourceTests
         var analysis = Assert.Single(runSample.Analyses);
         Assert.Equal(AnalysisType.VariantCalling, analysis.AnalysisType);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal("Human_v37p10_dbsnp135", analysis.ReferenceGenome);
-        Assert.NotNull(analysis.ProducedAt);
+        // Translated from the loaded reference file to the accession the catalogue accepts, and
+        // taken from the line under the [Reference File(s)] marker rather than from a key match —
+        // the path opens with a drive letter, and "Reference Length" is a measurement, not a build.
+        Assert.Equal("GRCh37", analysis.ReferenceGenome);
 
         Assert.Contains(analysis.Files, file => file.Role == FileRole.Bam);
         Assert.Contains(analysis.Files, file => file.Role == FileRole.BamIndex);
@@ -235,27 +270,17 @@ public sealed class MmciSequencingDataSourceTests
         Assert.DoesNotContain(
             analysis.Files,
             file => file.Path.Contains("_Statistics", StringComparison.Ordinal));
-    }
 
-    [Fact]
-    public void EveryTimestampIsWallClockSoPostgresWillAcceptIt()
-    {
-        // Npgsql refuses a DateTimeKind.Utc value for a `timestamp without time zone` column, and the
-        // whole schema uses that type because the sources state times without a zone. SQLite stores
-        // datetimes as text and happily accepts any kind, so only an assertion catches this.
-        var result = Read();
+        // Nor the `_settings` dumps the pipeline writes beside every report, naming the .ini
+        // template it used. They are named after the report, so a role match on the report name
+        // alone swept them up: in the production corpus that was 9222 files, a fifth of the table.
+        Assert.DoesNotContain(
+            analysis.Files,
+            file => file.Path.Contains("_settings", StringComparison.OrdinalIgnoreCase));
 
-        var timestamps = result.Runs
-            .SelectMany(run => new[] { run.StartedAt, run.CompletedAt })
-            .Concat(result.Samples
-                .SelectMany(sample => sample.RunSamples)
-                .SelectMany(runSample => runSample.Analyses)
-                .Select(analysis => analysis.ProducedAt))
-            .OfType<DateTime>()
-            .ToList();
-
-        Assert.NotEmpty(timestamps);
-        Assert.All(timestamps, timestamp => Assert.Equal(DateTimeKind.Unspecified, timestamp.Kind));
+        // Exactly one of each report survives, not one report plus its settings file.
+        Assert.Single(analysis.Files, file => file.Role == FileRole.VariantReport);
+        Assert.Single(analysis.Files, file => file.Role == FileRole.CoverageReport);
     }
 
     [Fact]
@@ -267,20 +292,14 @@ public sealed class MmciSequencingDataSourceTests
 
         var quality = analysis.Quality;
         Assert.NotNull(quality);
-        Assert.Equal(812.5, quality!.AverageCoverage);
-        Assert.Equal(97.25, quality.PctTargetOver100x);
-        Assert.Equal(640, quality.MedianReadDepth);
-        Assert.Equal(151, quality.ObservedReadLength);
-        Assert.Equal(4_200_000L, quality.TotalReads);
-        Assert.Equal(4_100_000L, quality.AlignedReads);
-        Assert.Equal(92.5, quality.OnTargetRatePercent);
-        Assert.Equal(37, quality.TotalVariants);
-        Assert.Equal(2.1, quality.TsTvRatio);
-        Assert.Equal(12, quality.HomozygousVariants);
-        Assert.Equal(25, quality.HeterozygousVariants);
 
-        // No source states a verdict; the domain never computes one.
-        Assert.Null(quality.Verdict);
+        // Read off the tab-separated coverage report through its decimal comma, undiminished.
+        Assert.Equal(640.32, quality!.MedianReadDepth);
+        Assert.Equal(151, quality.ObservedReadLength);
+
+        // The alignment summary states an "Average Coverage" of its own — a mean over the whole
+        // reference, not over the target. The target figure is the one that must survive.
+        Assert.NotEqual(9, quality.MedianReadDepth);
     }
 
     [Fact]
@@ -331,6 +350,42 @@ public sealed class MmciSequencingDataSourceTests
     }
 
     [Fact]
+    public void AReadCountThatDisagreesWithTheRunsReadStructureIsReportedEitherWay()
+    {
+        var result = Read();
+
+        // Too few: p0009 is missing one lane's R2, so seven files where four lanes x two reads imply
+        // eight.
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0009", StringComparison.Ordinal)
+                && error.Reason.Contains("expected 8 read files", StringComparison.Ordinal)
+                && error.Reason.Contains("found 7", StringComparison.Ordinal));
+
+        // Too many: p0050 carries an R2 in a single-read run. A surplus went unreported for two
+        // iterations, which is how another sample's reads sat unnoticed in a folder — the extra files
+        // had to have come from somewhere, so the count disagreeing upwards matters just as much.
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0050", StringComparison.Ordinal)
+                && error.Reason.Contains("expected 1 read files", StringComparison.Ordinal)
+                && error.Reason.Contains("found more: 2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ASampleWithNoReadsAtAllIsNotReportedAsAShortfall()
+    {
+        // Zero is its own well-understood state, and over a hundred real folders are like this.
+        // Reporting it as a shortfall would bury the counts that actually disagree.
+        var result = Read();
+
+        Assert.DoesNotContain(
+            result.Errors,
+            error => error.Reference.EndsWith("p0002", StringComparison.Ordinal)
+                && error.Reason.Contains("read files", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void APanelThatCannotBeResolvedLeavesTheSampleWithout()
     {
         // The mamma-print run's "MP_18_2024" has no MammaPrint row in this libraries table.
@@ -367,16 +422,39 @@ public sealed class MmciSequencingDataSourceTests
         }
     }
 
+    /// <summary>
+    /// The mapping table is the one auxiliary input that is not optional. Tolerating its absence
+    /// would store every sample with no predictive number, and on a re-ingest that absence is
+    /// persisted over the numbers already held — erasing the only field the patient data joins on.
+    /// </summary>
     [Fact]
-    public void AMissingMappingTableCostsThePredictiveNumbersAndNothingElse()
+    public void AMissingMappingTableRefusesTheIngestRatherThanErasingThePredictiveNumbers()
     {
         var result = new MmciSequencingDataSource(RunsPath, LibrariesPath, "no-such-mapping-directory")
             .ReadRecords(default);
 
-        Assert.False(result.IsError);
-        Assert.NotEmpty(result.Value.Samples);
-        Assert.All(result.Value.Samples, sample => Assert.Null(sample.PredictiveNumber));
-        Assert.Contains(result.Value.Errors, error => error.Reason.Contains("mapping", StringComparison.OrdinalIgnoreCase));
+        Assert.True(result.IsError);
+        Assert.Equal("Sequencing.MappingTableMissing", result.FirstError.Code);
+        Assert.Contains("cannot proceed", result.FirstError.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AMappingTableThatParsesToNothingIsRefusedOnTheSameGrounds()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            File.WriteAllText(Path.Join(directory, "predictive.json"), """{"predictive":[]}""");
+
+            var result = new MmciSequencingDataSource(RunsPath, LibrariesPath, directory).ReadRecords(default);
+
+            Assert.True(result.IsError);
+            Assert.Equal("Sequencing.MappingTableEmpty", result.FirstError.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

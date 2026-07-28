@@ -1,7 +1,10 @@
-Total Reads: 4200000
-Aligned Reads: 4100000
-Reads on Target: 3885000
-Average Coverage: 812,5
-% ROI > 100x: 97,25
-Median Read Depth: 640
-BED File: MMCI_MOP_2024a_capture_targets.bed
+Total Reads	4200000
+Aligned Reads	4100000 	(97,619%)
+Reads on Target(Including Ambiguous Locations)	3885000 	(92,500%)
+Minimum Coverage	59
+Maximum Coverage	1331
+Average Coverage	640,32
+Percent of ROI with > 100x coverage	97,250%
+Number of Bases in ROI	88812
+BED File Name	MMCI_MOP_2024a_capture_targets.bed
+Number of Regions in BED File	323

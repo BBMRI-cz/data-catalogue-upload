@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace SequencingApi.Infrastructure.DataSource.Mmci;
 
 /// <summary>
@@ -84,35 +82,9 @@ internal static class MmciSampleSheetReader
     }
 
     /// <summary>
-    /// Split one CSV line. Handles the quoted cells the sheets use for values containing commas;
-    /// escaped quotes do not occur in this file and are not modelled.
+    /// Split one CSV line, honouring the quoted cells the sheets use for values containing commas.
     /// </summary>
-    private static string[] SplitCells(string line)
-    {
-        var cells = new List<string>();
-        var current = new StringBuilder();
-        var quoted = false;
-
-        foreach (var character in line)
-        {
-            switch (character)
-            {
-                case '"':
-                    quoted = !quoted;
-                    break;
-                case ',' when !quoted:
-                    cells.Add(current.ToString().Trim());
-                    current.Clear();
-                    break;
-                default:
-                    current.Append(character);
-                    break;
-            }
-        }
-
-        cells.Add(current.ToString().Trim());
-        return [.. cells];
-    }
+    private static string[] SplitCells(string line) => MmciSourceValues.DelimitedCells(line, ',');
 
     /// <summary>A cell by column name; null when the sheet has no such column or the row is short.</summary>
     private static string? Cell(string[] cells, string[]? columns, string columnName)

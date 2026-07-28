@@ -59,15 +59,3 @@ public enum AnalysisType
     /// <summary>An analysis whose purpose the source does not state.</summary>
     Other,
 }
-
-/// <summary>
-/// A recorded overall quality verdict. The domain stores the verdict someone else reached; it does
-/// not compute one, because the thresholds behind it are configuration and must be able to change
-/// without a code change (the raw metrics are kept alongside precisely so they can be re-judged).
-/// </summary>
-public enum QualityVerdict
-{
-    Pass,
-    Warn,
-    Fail,
-}

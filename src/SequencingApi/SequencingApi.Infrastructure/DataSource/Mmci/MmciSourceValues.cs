@@ -106,16 +106,6 @@ internal static class MmciSourceValues
             : null;
 
     /// <summary>
-    /// Parse an ISO-ish timestamp as the instrument writes it. Returns null rather than guessing when
-    /// the value is not a recognisable date-time.
-    /// </summary>
-    public static DateTime? Timestamp(string? raw) =>
-        Clean(raw) is { } value
-        && DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
-            ? parsed
-            : null;
-
-    /// <summary>
     /// Parse a date the source writes in full, used by the libraries table's availability range.
     /// Tries the day-first spellings the Czech-locale exports use before falling back to invariant.
     /// </summary>
@@ -146,12 +136,19 @@ internal static class MmciSourceValues
     };
 
     /// <summary>
-    /// Split a <c>Key: Value</c> line from a vendor statistics report. Returns null when the line
-    /// carries no separator (headers, blank rules, free text), so callers can skip it.
+    /// Split a <c>Key: Value</c> or <c>Key&lt;tab&gt;Value</c> line from a vendor statistics report.
+    /// Returns null when the line carries neither separator (headers, blank rules, free text), so
+    /// callers can skip it.
     /// </summary>
+    /// <remarks>
+    /// Both spellings occur, and which one a report uses is not a choice the reader gets to make:
+    /// NextGENe writes <c>_StatInfo.txt</c> colon-separated but the coverage and mutation statistics
+    /// beside it tab-separated. Whichever separator comes first wins, so a tabbed line whose value
+    /// happens to contain a colon still splits on the tab.
+    /// </remarks>
     public static (string Key, string Value)? KeyValue(string line)
     {
-        var separator = line.IndexOf(':', StringComparison.Ordinal);
+        var separator = line.IndexOfAny([':', '\t']);
         if (separator < 0)
         {
             return null;
@@ -163,15 +160,102 @@ internal static class MmciSourceValues
     }
 
     /// <summary>
+    /// Parse a quantity the operators write with its unit, and sometimes as a range: <c>100ngr</c>,
+    /// <c>200ng</c>, <c>10-25ngr</c>. A range yields its lower bound.
+    /// </summary>
+    /// <remarks>
+    /// Not something <see cref="Int32"/> can do, and the difference matters: every value in the
+    /// libraries table's input-amount column carries a unit, so a plain numeric parse returned null
+    /// for all of them. Taking the lower bound of a range is what the previous uploader did, and it is
+    /// the honest reading — the amount was at least this much.
+    /// <para>
+    /// The digits have to <em>lead</em>, which is what separates an amount from a name that merely
+    /// contains a number: the table has one cell holding <c>TSO500</c>, a panel name, where an amount
+    /// belongs. Harvesting digits from anywhere in the cell would turn that into an input amount of
+    /// 500 — a fabricated measurement, and a plausible-looking one. The previous uploader stripped
+    /// non-digits blindly and did exactly that; a value that states no amount is absent instead.
+    /// </para>
+    /// </remarks>
+    public static int? Quantity(string? raw)
+    {
+        if (Clean(raw) is not { } value)
+        {
+            return null;
+        }
+
+        var lower = value.Split('-', StringSplitOptions.TrimEntries)[0];
+        var digits = new string([.. lower.TakeWhile(char.IsAsciiDigit)]);
+
+        return int.TryParse(digits, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
+    /// Split one delimited line, honouring quoted cells: a delimiter inside quotes is data, not a
+    /// separator.
+    /// </summary>
+    /// <remarks>
+    /// Both source files that need this are written by a spreadsheet, which quotes a cell only when
+    /// it has to — so the quotes are rare, and treating them as decoration to be trimmed after the
+    /// split silently shifts every column after the offending cell. Escaped quotes (<c>""</c> inside
+    /// a quoted cell) do not occur in these files and are not modelled.
+    /// </remarks>
+    public static string[] DelimitedCells(string line, char delimiter)
+    {
+        var cells = new List<string>();
+        var current = new StringBuilder();
+        var quoted = false;
+
+        foreach (var character in line)
+        {
+            if (character == '"')
+            {
+                quoted = !quoted;
+            }
+            else if (character == delimiter && !quoted)
+            {
+                cells.Add(current.ToString().Trim());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(character);
+            }
+        }
+
+        cells.Add(current.ToString().Trim());
+        return [.. cells];
+    }
+
+    /// <summary>
     /// Split a delimited list of symbols (the panel's gene list), tolerating comma, semicolon,
     /// whitespace and newline separators mixed in one cell.
     /// </summary>
-    public static IReadOnlyList<string> SymbolList(string? raw) =>
+    /// <remarks>
+    /// One cell can carry several labelled lists — <c>"DNA panel: BRCA1, BRCA2; RNA panel: ALK"</c> —
+    /// and the label is prose, not a symbol. No gene symbol contains a colon, so within each
+    /// semicolon-separated segment everything up to one is a heading and is dropped.
+    /// </remarks>
+    public static IReadOnlyList<string> SymbolList(string? raw)
+    {
         // Deliberately not via Clean: that strips internal spaces, which are separators here.
-        string.IsNullOrWhiteSpace(raw)
-            ? []
-            : [.. raw.Split([',', ';', ' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries
-                | StringSplitOptions.TrimEntries)];
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return [];
+        }
+
+        var symbols = new List<string>();
+        foreach (var segment in raw.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var colon = segment.LastIndexOf(':');
+            var listed = colon >= 0 ? segment[(colon + 1)..] : segment;
+
+            symbols.AddRange(listed.Split(
+                [',', ' ', '\t', '\n', '\r'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        return symbols;
+    }
 
     /// <summary>
     /// Trim, drop the decorations the reports add to numbers, and treat a blank or an explicit

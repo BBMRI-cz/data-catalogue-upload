@@ -22,7 +22,11 @@ public class SequencingRunEntity
     public string? ExperimentName { get; set; }
     public string? Chemistry { get; set; }
     public string? ReagentKit { get; set; }
-    public DateTime? StartedAt { get; set; }
-    public DateTime? CompletedAt { get; set; }
     public double? PercentageQ30 { get; set; }
+    public long? ClusterCountPassingFilter { get; set; }
+    public double? PercentageClustersPassingFilter { get; set; }
+    public double? ClusterDensity { get; set; }
+    public double? EstimatedYield { get; set; }
+    public string? CompletionStatus { get; set; }
+    public string? ErrorDescription { get; set; }
 }

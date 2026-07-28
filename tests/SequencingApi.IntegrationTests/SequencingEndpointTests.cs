@@ -54,7 +54,36 @@ public sealed class SequencingEndpointTests : IClassFixture<IngestedSequencingHo
 
         var analysis = Assert.Single(analysed.Analyses);
         Assert.Equal("NextGENe", analysis.PipelineName);
-        Assert.Equal(812.5, analysis.Quality!.AverageCoverage);
+        // 640,32 as the coverage report states it — the fractional depth survives the round trip
+        // through PostgreSQL and the wire, rather than being rounded on the way in.
+        Assert.Equal(640.32, analysis.Quality!.MedianReadDepth!.Value, precision: 2);
+    }
+
+    /// <summary>
+    /// The run's cluster statistics reach the wire, and the two instrument families' incompatible
+    /// spellings of "clusters passing filter" stay in their own fields: MiSeq states an absolute
+    /// count in <c>GenerateFASTQRunStatistics.xml</c>, NextSeq a percentage in
+    /// <c>RunCompletionStatus.xml</c>. Sharing a field would make 87 read as 87 clusters.
+    /// </summary>
+    [Fact]
+    public async Task ServesTheRunClusterStatisticsPerInstrumentFamily()
+    {
+        var body = await Get("/sequencing?predictive_number=4-21");
+        var runs = body.Samples.SelectMany(sample => sample.Runs).ToList();
+
+        var miseq = Assert.Single(runs, run => run.RunId == "240104_M02340_0399_LCBRW");
+        Assert.Equal(26_901_812L, miseq.ClusterCountPassingFilter);
+        Assert.Null(miseq.PercentageClustersPassingFilter);
+
+        var nextseq = Assert.Single(runs, run => run.RunId == "240102_NB552710_0064_AHG7L");
+        Assert.Equal(87.14986, nextseq.PercentageClustersPassingFilter!.Value, precision: 5);
+        Assert.Equal(233.356873, nextseq.ClusterDensity!.Value, precision: 6);
+        Assert.Equal(112.832085, nextseq.EstimatedYield!.Value, precision: 6);
+        Assert.Equal("CompletedAsPlanned", nextseq.CompletionStatus);
+        Assert.Null(nextseq.ClusterCountPassingFilter);
+
+        // "None" is the control software's way of saying nothing went wrong, not a description.
+        Assert.Null(nextseq.ErrorDescription);
     }
 
     [Fact]

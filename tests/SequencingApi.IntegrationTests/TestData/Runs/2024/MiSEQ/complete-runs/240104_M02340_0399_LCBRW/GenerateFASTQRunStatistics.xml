@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<StatisticsGenerateFASTQ Version="2">
+  <CompletionTime>2024-01-05T02:35:20.6351293+01:00</CompletionTime>
+  <StartTime>2024-01-05T02:27:12.7344463+01:00</StartTime>
+  <RunStats>
+    <AnalysisSoftwareVersion>2.6.2.3</AnalysisSoftwareVersion>
+    <ErrorRate />
+    <NumberOfClustersPF>26901812</NumberOfClustersPF>
+    <NumberOfClustersRaw>30584900</NumberOfClustersRaw>
+  </RunStats>
+  <OverallSamples>
+    <!-- The same element names repeat per sample; only the RunStats block above is run-level. -->
+    <SummarizedSampleStatistics>
+      <NumberOfClustersPF>1529047</NumberOfClustersPF>
+      <NumberOfClustersRaw>1712000</NumberOfClustersRaw>
+    </SummarizedSampleStatistics>
+  </OverallSamples>
+</StatisticsGenerateFASTQ>

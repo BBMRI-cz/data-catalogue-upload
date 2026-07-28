@@ -33,7 +33,8 @@ internal static class MmciLibrariesTableReader
 
         var files = Directory
             .EnumerateFiles(librariesPath, FilePattern, new EnumerationOptions { MatchCasing = MatchCasing.CaseInsensitive })
-            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .OrderByDescending(Version)
+            .ThenByDescending(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         if (files.Count == 0)
@@ -102,7 +103,8 @@ internal static class MmciLibrariesTableReader
                 BedFile = Cell(cells, columns, "bedfile"),
                 AvailableFrom = availableFrom,
                 AvailableTo = availableTo,
-                InputAmount = MmciSourceValues.Int32(Cell(cells, columns, "inputamount")),
+                // Written with its unit and sometimes as a range ("10-25ngr"), so not a plain integer.
+                InputAmount = MmciSourceValues.Quantity(Cell(cells, columns, "inputamount")),
                 LibraryPrepKit = Cell(cells, columns, "librarypreparationkit", "libraryprepkit"),
                 PcrFree = MmciSourceValues.Boolean(Cell(cells, columns, "pcrfree")),
                 TargetEnrichmentKit = Cell(cells, columns, "targetenrichmentkit"),
@@ -177,6 +179,25 @@ internal static class MmciLibrariesTableReader
         };
     }
 
+    /// <summary>
+    /// The version a libraries file declares in its own name — the <c>YYMMDD</c> of
+    /// <c>LibrariesV260123.csv</c>. Files that do not follow the convention sort last.
+    /// </summary>
+    /// <remarks>
+    /// Ordering on this rather than on the modification time, which is what the name is for. An mtime
+    /// says when a file was last copied, not which revision of the table it holds: in the live
+    /// directory four versions share one timestamp to the second, and simply opening an old version
+    /// in a spreadsheet would promote it over the current one. Non-deterministic input ordering also
+    /// makes the back-fill below pick an arbitrary donor.
+    /// </remarks>
+    private static int Version(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var digits = new string([.. name.SkipWhile(character => !char.IsAsciiDigit(character)).TakeWhile(char.IsAsciiDigit)]);
+
+        return digits.Length >= 6 && int.TryParse(digits[..6], out var version) ? version : int.MinValue;
+    }
+
     /// <summary>A stable, readable panel id, so re-ingesting the same table produces the same rows.</summary>
     private static string Slug(string panelName, DateOnly? availableFrom)
     {
@@ -193,8 +214,7 @@ internal static class MmciLibrariesTableReader
         return availableFrom is { } from ? $"{name}-{from:yyyyMMdd}" : name;
     }
 
-    private static string[] Cells(string line) =>
-        [.. line.Split(';').Select(cell => cell.Trim().Trim('"').Trim())];
+    private static string[] Cells(string line) => MmciSourceValues.DelimitedCells(line, ';');
 
     /// <summary>
     /// A cell by column name, matched on the canonical form of the header and by prefix — the real

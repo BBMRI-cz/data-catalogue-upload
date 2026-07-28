@@ -83,6 +83,11 @@ services:
       SEQUENCING_DATA_PATH: /data/organised-runs
       SEQUENCING_LIBRARIES_PATH: /data/libraries
       SEQUENCING_MAPPING_TABLE_PATH: /data/mapping-table
+      # Required, not optional: the source trees above are NFSv3 mounts whose lock manager never
+      # answers, and .NET's FileStream takes an advisory flock() on every open to emulate Windows
+      # share semantics. Without this the ingest blocks on the first file it reads and never
+      # returns — no timeout, no error, and the weekly Quartz job hangs a worker thread for good.
+      DOTNET_SYSTEM_IO_DISABLEFILELOCKING: "1"
     depends_on:
       - sequencing-db
     ports:
@@ -90,7 +95,7 @@ services:
     volumes:
       - /muni-sc/OrganisedRuns:/data/organised-runs:ro
       - /muni-sc/Libraries:/data/libraries:ro
-      - /muni-sc/mapping_table:/data/mapping-table:ro
+      - /home/export/pseudonymization_table:/data/mapping-table:ro
 
 volumes:
   uploader_db_data:

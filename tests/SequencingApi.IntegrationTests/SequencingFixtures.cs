@@ -86,9 +86,7 @@ internal static class SequencingFixtures
         Analysis.Create(
             AnalysisType.VariantCalling,
             pipelineName: "NextGENe",
-            pipelineVersion: "2.4.2.2",
             referenceGenome: "GRCh37",
-            producedAt: new DateTime(2024, 1, 8, 9, 30, 0),
             files:
             [
                 SequencingFile.Create(
@@ -105,18 +103,8 @@ internal static class SequencingFixtures
                     checksum: "ddeeff").Value,
             ],
             quality: QualityMetrics.Create(
-                averageCoverage: 812.5,
-                pctTargetOver100x: 97.25,
                 medianReadDepth: 640,
-                observedReadLength: 151,
-                totalReads: 4_200_000,
-                alignedReads: 4_100_000,
-                onTargetRatePercent: 92.5,
-                totalVariants: 37,
-                tsTvRatio: 2.1,
-                homozygousVariants: 12,
-                heterozygousVariants: 25,
-                verdict: QualityVerdict.Pass).Value).Value;
+                observedReadLength: 151).Value).Value;
 
     public static SequencingRunAggregate FullRun(string runId = PrimaryRunId) =>
         SequencingRunAggregate.Create(
@@ -140,9 +128,15 @@ internal static class SequencingFixtures
             experimentName: "HyperCap-EP-240103",
             chemistry: "Amplicon",
             reagentKit: "MiSeq v2",
-            startedAt: new DateTime(2024, 1, 4, 14, 0, 0),
-            completedAt: new DateTime(2024, 1, 5, 2, 30, 0),
-            percentageQ30: 94.7).Value;
+            percentageQ30: 94.7,
+            // A real run states either the count or the share, never both; the fixture carries both
+            // so the round-trip covers every column.
+            clusterCountPassingFilter: 26_901_812,
+            percentageClustersPassingFilter: 87.14986,
+            clusterDensity: 233.356873,
+            estimatedYield: 112.832085,
+            completionStatus: "CompletedAsPlanned",
+            errorDescription: "Flowcell temperature out of range").Value;
 
     public static PanelAggregate FullPanel(string panelId = PanelId) =>
         PanelAggregate.Create(

@@ -4,105 +4,59 @@ using SequencingApi.Domain;
 namespace SequencingApi.Infrastructure.DataSource.Mmci;
 
 /// <summary>
-/// Turns the NextGENe statistics reports into <see cref="QualityMetrics"/>: the alignment summary
-/// (<c>_StatInfo.txt</c>), the coverage summary
-/// (<c>_Coverage_Curve_Report1_Statistics.txt</c>) and the variant summary
-/// (<c>_Mutation_Report1_Statistics.txt</c>).
+/// Turns the NextGENe statistics reports into <see cref="QualityMetrics"/>: read depth over the
+/// target from the coverage summary (<c>_Coverage_Curve_Report1_Statistics.txt</c>), and the achieved
+/// read length from the alignment summary (<c>_StatInfo.txt</c>).
 /// </summary>
 /// <remarks>
-/// All three are flat <c>Key: Value</c> text, written by a Czech-locale Windows tool: decimal commas,
-/// percent signs, Windows-1250 accents and mixed line endings. Keys are matched loosely (case- and
+/// Both are flat key/value text written by a Czech-locale Windows tool: decimal commas, percent
+/// signs, Windows-1250 accents and mixed line endings. The alignment summary separates key from value
+/// with a colon and the coverage summary with a tab, which
+/// <see cref="MmciSourceValues.KeyValue"/> absorbs. Keys are matched loosely (case- and
 /// space-insensitively, by prefix) because their exact spelling drifts between pipeline versions,
 /// while the values themselves have stayed put.
+/// <para>
+/// Each metric is read from the report that states it rather than from one merged lookup, because
+/// <em>both</em> files carry a key spelled "Average Coverage" and the two mean different things: the
+/// coverage report's is the mean over the region of interest (hundreds), while the alignment
+/// summary's is a mean over the whole loaded reference (single digits). Merging them silently
+/// published the wrong one.
+/// </para>
 /// </remarks>
 internal static class MmciNextGeneStatsReader
 {
     /// <summary>
-    /// Combine the three reports into one set of metrics. Returns null when none of them yielded a
-    /// single number — an analysis with no measurements attaches no metrics rather than an empty row.
+    /// Combine the two reports into one set of metrics. Returns null when neither yielded a number —
+    /// an analysis with no measurements attaches no metrics rather than an empty row.
     /// </summary>
-    public static ErrorOr<QualityMetrics>? Read(string? statInfo, string? coverage, string? mutations)
+    public static ErrorOr<QualityMetrics>? Read(string? statInfo, string? coverage)
     {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal);
-        Collect(values, statInfo);
-        Collect(values, coverage);
-        Collect(values, mutations);
+        // The catalogue asks for a median; the coverage report states only a mean over the region of
+        // interest, and that is the number the previous uploader sent, so it is the number kept here.
+        // Read as stated, decimal comma and all: the depth is fractional and a sample that managed
+        // 0,38x must not arrive looking like one that managed nothing.
+        var medianReadDepth = Double(coverage, "averagecoverage");
+        var observedReadLength = Int(statInfo, "averagereadlength", "observedreadlength", "readlength");
 
-        if (values.Count == 0)
+        if (medianReadDepth is null && observedReadLength is null)
         {
             return null;
         }
 
-        var totalReads = Long(values, "totalreads");
-        var alignedReads = Long(values, "alignedreads", "matchedreads");
-        var readsOnTarget = Long(values, "readsontarget");
-
-        var metrics = QualityMetrics.Create(
-            averageCoverage: Double(values, "averagecoverage"),
-            pctTargetOver100x: Percent(values, "roi>100x", "%roi>100x", "percentroiover100x"),
-            medianReadDepth: Int(values, "medianreaddepth", "avreaddepth"),
-            observedReadLength: Int(values, "observedreadlength", "obsreadlength", "readlength"),
-            totalReads: totalReads,
-            alignedReads: alignedReads,
-            onTargetRatePercent: OnTargetRate(values, readsOnTarget, totalReads),
-            totalVariants: Int(values, "totalmutations", "totalvariants"),
-            tsTvRatio: Double(values, "ts/tvratio", "tstvratio"),
-            homozygousVariants: Int(values, "homozygous", "homo"),
-            heterozygousVariants: Int(values, "heterozygous", "hetero"),
-            // ponytail: no source states a pass/warn/fail verdict, and the domain is explicit that it
-            // stores one rather than computing it — the thresholds are configuration. Null until a
-            // thresholds feature exists to judge these raw numbers.
-            verdict: null);
-
-        // Every metric came back empty: the files existed but said nothing this model understands.
-        // The cast is what makes the ternary's type the nullable one rather than ErrorOr itself.
-        return metrics.IsError || HasAnyValue(metrics.Value) ? metrics : (ErrorOr<QualityMetrics>?)null;
+        return QualityMetrics.Create(medianReadDepth, observedReadLength);
     }
 
     /// <summary>
-    /// On-target rate, preferring a stated percentage and otherwise derived from reads on target. The
-    /// derivation is guarded: a zero total would divide by zero, and a ratio above 100 means the two
-    /// numbers were not measured against each other and is better dropped than stored.
-    /// </summary>
-    private static double? OnTargetRate(Dictionary<string, string> values, long? readsOnTarget, long? totalReads)
-    {
-        if (Percent(values, "ontargetrate", "%readsontarget", "percentontarget") is { } stated)
-        {
-            return stated;
-        }
-
-        if (readsOnTarget is not { } onTarget || totalReads is not { } total || total <= 0)
-        {
-            return null;
-        }
-
-        var rate = 100d * onTarget / total;
-        return rate is >= 0 and <= 100 ? rate : null;
-    }
-
-    private static bool HasAnyValue(QualityMetrics metrics) =>
-        metrics.AverageCoverage is not null
-        || metrics.PctTargetOver100x is not null
-        || metrics.MedianReadDepth is not null
-        || metrics.ObservedReadLength is not null
-        || metrics.TotalReads is not null
-        || metrics.AlignedReads is not null
-        || metrics.OnTargetRatePercent is not null
-        || metrics.TotalVariants is not null
-        || metrics.TsTvRatio is not null
-        || metrics.HomozygousVariants is not null
-        || metrics.HeterozygousVariants is not null;
-
-    /// <summary>
-    /// Harvest every <c>Key: Value</c> line into one lookup, keyed on the canonical form of the key.
+    /// Harvest one report's key/value lines into a lookup, keyed on the canonical form of the key.
     /// First occurrence wins: these reports repeat a key inside per-section detail after stating the
     /// summary, and the summary is the number that describes the sample.
     /// </summary>
-    private static void Collect(Dictionary<string, string> values, string? content)
+    private static Dictionary<string, string> Values(string? content)
     {
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(content))
         {
-            return;
+            return values;
         }
 
         foreach (var line in MmciSourceValues.Lines(content))
@@ -114,6 +68,8 @@ internal static class MmciNextGeneStatsReader
 
             values.TryAdd(Canonical(pair.Key), pair.Value);
         }
+
+        return values;
     }
 
     /// <summary>
@@ -153,16 +109,9 @@ internal static class MmciNextGeneStatsReader
         return null;
     }
 
-    private static double? Double(Dictionary<string, string> values, params string[] keys) =>
-        MmciSourceValues.Number(Find(values, keys));
+    private static int? Int(string? content, params string[] keys) =>
+        MmciSourceValues.Int32(Find(Values(content), keys));
 
-    private static long? Long(Dictionary<string, string> values, params string[] keys) =>
-        MmciSourceValues.Integer(Find(values, keys));
-
-    private static int? Int(Dictionary<string, string> values, params string[] keys) =>
-        MmciSourceValues.Int32(Find(values, keys));
-
-    /// <summary>A percentage, dropped when it falls outside 0-100 rather than failing the whole record.</summary>
-    private static double? Percent(Dictionary<string, string> values, params string[] keys) =>
-        Double(values, keys) is { } value && value is >= 0 and <= 100 ? value : null;
+    private static double? Double(string? content, params string[] keys) =>
+        MmciSourceValues.Number(Find(Values(content), keys));
 }

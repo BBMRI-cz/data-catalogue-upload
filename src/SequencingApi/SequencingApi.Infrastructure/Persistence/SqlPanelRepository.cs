@@ -87,6 +87,13 @@ internal sealed class SqlPanelRepository : IPanelRepository
         }
     }
 
+    /// <summary>Clear every panel — see the sample repository for why this exists.</summary>
+    public async Task DeleteAllPanelsAsync(CancellationToken cancellationToken)
+    {
+        await _context.Panels.ExecuteDeleteAsync(cancellationToken);
+        _context.ChangeTracker.Clear();
+    }
+
     private async Task SaveAsync(IReadOnlyList<PanelAggregate> panels, CancellationToken cancellationToken)
     {
         var ids = panels.Select(panel => panel.Id.Value).ToList();
