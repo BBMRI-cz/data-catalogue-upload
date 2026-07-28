@@ -190,6 +190,12 @@ is actually produced elsewhere.
 | `StartedAt` | `CompletedJobInfo.xml` **only** | `<StartTime>` → `<RunStartDate>` | [`RunMetadataReader`] |
 | `CompletedAt` | `CompletedJobInfo.xml` → `RunCompletionStatus.xml` | `<CompletionTime>` in either | [`RunMetadataReader`] |
 | `PercentageQ30` | `AnalysisLog.txt` **only** | the line containing `Q30`, e.g. `Percent >= Q30: 95.9%`; accepted only within 0–100. The statistics XML's `PercentQ30` elements are not used — they read zero throughout this corpus | [`RunMetadataReader`] (`PercentageQ30`) |
+| `ClusterCountPassingFilter` | `GenerateFASTQRunStatistics.xml` (**MiSeq only**) | `RunStats/NumberOfClustersPF`, an absolute count. Scoped to the `RunStats` block: the same element name repeats under every per-sample summary — one real run carries seventeen of them. A stated `0` reads as "not stated": the control software stopped filling it in after 2024-02-05 and every later run states zero while still producing reads | [`RunMetadataReader`] (`ClusterCountPassingFilter`, `RunStat`) |
+| `PercentageClustersPassingFilter` | `RunCompletionStatus.xml` (**NextSeq only**) | `<ClustersPassingFilter>`, a **percentage**. Despite the name, not the same quantity as the MiSeq count above — that is why they are separate fields | [`RunMetadataReader`] |
+| `ClusterDensity` | `RunCompletionStatus.xml` **only** | `<ClusterDensity>`, thousands per mm² | [`RunMetadataReader`] |
+| `EstimatedYield` | `RunCompletionStatus.xml` **only** | `<EstimatedYield>`, gigabases | [`RunMetadataReader`] |
+| `CompletionStatus` | `RunCompletionStatus.xml` **only** | `<CompletionStatus>`, e.g. `CompletedAsPlanned`; the vendor's vocabulary, kept opaque | [`RunMetadataReader`] |
+| `ErrorDescription` | `RunCompletionStatus.xml` **only** | `<ErrorDescription>`; the literal `None` is a sentinel and reads as no error, the same treatment the biobank reader gives its `-` | [`RunMetadataReader`] (`NoErrorToNull`) |
 | `TemplateReadCount` | *derived* | reads that are not indexed | domain |
 | `ExpectedFastqFilesPerSample` | *derived* | `TemplateReadCount × LaneCount`, null when `LaneCount` is | domain |
 
@@ -248,7 +254,9 @@ depth, insert size and TR20, which FAIR Genomes names but MMCI states nowhere.
 
 **Source data deliberately not read:** `patient.json`, `samples.json` and
 `catalog_info_per_pred_number/` — patient data, and this service holds none · the statistics XML's
-`PercentQ30` · the mutation statistics as a metric source · the sheet's `[Reads]` section (the read
+`PercentQ30` and its per-sample `SummarizedSampleStatistics` blocks (a run-sample's own cluster
+counts; only the run-level `RunStats` block is read) · the mutation statistics as a metric source ·
+the sheet's `[Reads]` section (the read
 structure comes from `RunInfo.xml`) · `backups/`, `errors/`, `logs/` · `_Statistics` and `_settings`
 files inside `Analysis/` · anything in `Libraries/` that is not `Libraries*.csv`.
 
@@ -264,7 +272,8 @@ The reverse lookup: what breaks if a file changes shape.
 | `RunInfo.xml` | `RunNumber`, `InstrumentId`, `FlowcellId`, `RunDate`, `LaneCount`, `Reads` | [`RunMetadataReader`] |
 | `RunParameters.xml` / `runParameters.xml` | `ReagentKit`, and fallbacks for run number, instrument, flowcell, experiment name, chemistry | [`RunMetadataReader`] |
 | `CompletedJobInfo.xml` | `StartedAt`, `CompletedAt`, `Workflow` fallback | [`RunMetadataReader`] |
-| `RunCompletionStatus.xml` | `CompletedAt` fallback (NextSeq) | [`RunMetadataReader`] |
+| `RunCompletionStatus.xml` | `PercentageClustersPassingFilter`, `ClusterDensity`, `EstimatedYield`, `CompletionStatus`, `ErrorDescription`, `CompletedAt` fallback (all NextSeq) | [`RunMetadataReader`] |
+| `GenerateFASTQRunStatistics.xml` | `ClusterCountPassingFilter` (MiSeq) | [`RunMetadataReader`] |
 | `AnalysisLog.txt` | `PercentageQ30` | [`RunMetadataReader`] |
 | `SampleSheet.csv` | `Assay`, `Workflow`, `ExperimentName`, `Chemistry`, `SampleType`, `SampleIndex` fallback, and the folder/row reconciliation | [`SampleSheetReader`], [`SequencingDataSource`] |
 | `FASTQ/*.fastq.gz` | every read `SequencingFile`, `SampleIndex`, `LaneCount` | [`SampleFolderReader`] |

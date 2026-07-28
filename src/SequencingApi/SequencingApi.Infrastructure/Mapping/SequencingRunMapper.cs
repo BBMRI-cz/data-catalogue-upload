@@ -39,6 +39,12 @@ internal static class SequencingRunMapper
         StartedAt = run.StartedAt,
         CompletedAt = run.CompletedAt,
         PercentageQ30 = run.PercentageQ30,
+        ClusterCountPassingFilter = run.ClusterCountPassingFilter,
+        PercentageClustersPassingFilter = run.PercentageClustersPassingFilter,
+        ClusterDensity = run.ClusterDensity,
+        EstimatedYield = run.EstimatedYield,
+        CompletionStatus = run.CompletionStatus,
+        ErrorDescription = run.ErrorDescription,
     };
 
     // Reconstitution from trusted persistence intentionally bypasses SequencingRunAggregate.Create.
@@ -69,5 +75,11 @@ internal static class SequencingRunMapper
         StartedAt = row.StartedAt,
         CompletedAt = row.CompletedAt,
         PercentageQ30 = row.PercentageQ30,
+        ClusterCountPassingFilter = row.ClusterCountPassingFilter,
+        PercentageClustersPassingFilter = row.PercentageClustersPassingFilter,
+        ClusterDensity = row.ClusterDensity,
+        EstimatedYield = row.EstimatedYield,
+        CompletionStatus = row.CompletionStatus,
+        ErrorDescription = row.ErrorDescription,
     };
 }

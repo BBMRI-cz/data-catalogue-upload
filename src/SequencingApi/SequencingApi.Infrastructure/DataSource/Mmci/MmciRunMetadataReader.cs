@@ -8,8 +8,8 @@ namespace SequencingApi.Infrastructure.DataSource.Mmci;
 /// <summary>
 /// Builds a <see cref="SequencingRunAggregate"/> from the metadata files sitting directly inside a
 /// run folder: <c>RunInfo.xml</c>, <c>runParameters.xml</c>/<c>RunParameters.xml</c>,
-/// <c>CompletedJobInfo.xml</c> (MiSeq), <c>RunCompletionStatus.xml</c> (NextSeq) and the sample
-/// sheet's <c>[Header]</c>.
+/// <c>CompletedJobInfo.xml</c> and <c>GenerateFASTQRunStatistics.xml</c> (MiSeq),
+/// <c>RunCompletionStatus.xml</c> (NextSeq) and the sample sheet's <c>[Header]</c>.
 /// </summary>
 /// <remarks>
 /// No single file holds the whole picture, and which files exist depends on the instrument and its
@@ -40,7 +40,8 @@ internal static class MmciRunMetadataReader
         var runInfo = LoadXml(runPath, "RunInfo.xml");
         var parameters = LoadXml(runPath, "RunParameters.xml") ?? LoadXml(runPath, "runParameters.xml");
         var completedJob = LoadXml(runPath, "CompletedJobInfo.xml");
-        var completionStatus = LoadXml(runPath, "RunCompletionStatus.xml");
+        var runCompletion = LoadXml(runPath, "RunCompletionStatus.xml");
+        var fastqStats = LoadXml(runPath, "GenerateFASTQRunStatistics.xml");
 
         var run = runInfo?.Descendants("Run").FirstOrDefault();
         var flowcellLayout = runInfo?.Descendants("FlowcellLayout").FirstOrDefault();
@@ -67,9 +68,51 @@ internal static class MmciRunMetadataReader
             reagentKit: Value(parameters, "ReagentKitVersion", "ReagentKitBarcode", "ChemistryVersion"),
             startedAt: MmciSourceValues.Timestamp(Value(completedJob, "StartTime", "RunStartDate")),
             completedAt: MmciSourceValues.Timestamp(
-                Value(completedJob, "CompletionTime") ?? Value(completionStatus, "CompletionTime")),
-            percentageQ30: PercentageQ30(runPath));
+                Value(completedJob, "CompletionTime") ?? Value(runCompletion, "CompletionTime")),
+            percentageQ30: PercentageQ30(runPath),
+            // The two instrument families report the run's cluster statistics in different files and
+            // in different units, so each field comes from exactly one of them and stays null on the
+            // other. See the remarks on ClusterCountPassingFilter for why they are not merged.
+            clusterCountPassingFilter: ClusterCountPassingFilter(fastqStats),
+            percentageClustersPassingFilter: MmciSourceValues.Number(Element(runCompletion, "ClustersPassingFilter")),
+            clusterDensity: MmciSourceValues.Number(Element(runCompletion, "ClusterDensity")),
+            estimatedYield: MmciSourceValues.Number(Element(runCompletion, "EstimatedYield")),
+            completionStatus: Element(runCompletion, "CompletionStatus"),
+            errorDescription: NoErrorToNull(Element(runCompletion, "ErrorDescription")));
     }
+
+    /// <summary>
+    /// Clusters the run passed through the chastity filter, as an absolute count.
+    /// </summary>
+    /// <remarks>
+    /// A stated zero is read as "not stated", not as zero clusters. The control software stopped
+    /// filling this element in partway through the corpus — every run up to 2024-02-05 carries a real
+    /// figure and every run from 2024-02-13 onwards carries <c>0</c>, while still producing reads
+    /// (those runs hold 1975 FASTQ files between them). Storing the zero would be a fabricated
+    /// measurement, and a plausible-looking one; it is the same reason the <c>PercentQ30</c> element
+    /// beside it is not used at all.
+    /// </remarks>
+    private static long? ClusterCountPassingFilter(XDocument? fastqStats) =>
+        MmciSourceValues.Integer(RunStat(fastqStats, "NumberOfClustersPF")) is { } count and > 0 ? count : null;
+
+    /// <summary>
+    /// A run-level value from <c>GenerateFASTQRunStatistics.xml</c>'s <c>RunStats</c> block.
+    /// </summary>
+    /// <remarks>
+    /// Scoped to that block rather than searched for across the document, because the same element
+    /// names repeat inside every per-sample summary further down the file — one real run in this
+    /// corpus carries seventeen <c>NumberOfClustersPF</c> elements, and only the first is the run's.
+    /// </remarks>
+    private static string? RunStat(XDocument? document, string name) =>
+        Trimmed(document?.Descendants("RunStats").FirstOrDefault()?.Element(name)?.Value);
+
+    /// <summary>
+    /// The control software writes the literal <c>None</c> when a run raised no error. That is a
+    /// sentinel, not an error description, so it reads as "no error" — the same treatment the
+    /// biobank reader gives its <c>-</c>.
+    /// </summary>
+    private static string? NoErrorToNull(string? raw) =>
+        string.Equals(raw, "None", StringComparison.OrdinalIgnoreCase) ? null : raw;
 
     /// <summary>
     /// The run's read structure, in order. This is what makes "how many read files should a sample

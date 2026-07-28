@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
 <RunCompletionStatus>
+  <CompletionStatus>CompletedAsPlanned</CompletionStatus>
   <CompletionTime>2024-01-03T20:15:00</CompletionTime>
+  <ClusterDensity>233.356873</ClusterDensity>
+  <ClustersPassingFilter>87.14986</ClustersPassingFilter>
+  <EstimatedYield>112.832085</EstimatedYield>
+  <ErrorDescription>None</ErrorDescription>
 </RunCompletionStatus>

@@ -130,7 +130,15 @@ internal static class SequencingFixtures
             reagentKit: "MiSeq v2",
             startedAt: new DateTime(2024, 1, 4, 14, 0, 0),
             completedAt: new DateTime(2024, 1, 5, 2, 30, 0),
-            percentageQ30: 94.7).Value;
+            percentageQ30: 94.7,
+            // A real run states either the count or the share, never both; the fixture carries both
+            // so the round-trip covers every column.
+            clusterCountPassingFilter: 26_901_812,
+            percentageClustersPassingFilter: 87.14986,
+            clusterDensity: 233.356873,
+            estimatedYield: 112.832085,
+            completionStatus: "CompletedAsPlanned",
+            errorDescription: "Flowcell temperature out of range").Value;
 
     public static PanelAggregate FullPanel(string panelId = PanelId) =>
         PanelAggregate.Create(

@@ -142,6 +142,12 @@ public sealed class MapperTests
         Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), mapped.StartedAt);
         Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), mapped.CompletedAt);
         Assert.Equal(94.7, mapped.PercentageQ30);
+        Assert.Equal(26_901_812L, mapped.ClusterCountPassingFilter);
+        Assert.Equal(87.14986, mapped.PercentageClustersPassingFilter);
+        Assert.Equal(233.356873, mapped.ClusterDensity);
+        Assert.Equal(112.832085, mapped.EstimatedYield);
+        Assert.Equal("CompletedAsPlanned", mapped.CompletionStatus);
+        Assert.Equal("Flowcell temperature out of range", mapped.ErrorDescription);
 
         // The read structure is what the expected-FASTQ derivation is built on, so its order and
         // index flags have to survive the JSON column intact.

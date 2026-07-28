@@ -307,6 +307,50 @@ public sealed class DomainModelsTests
             94.5,
             SequencingRunAggregate.Create("240104_M02340_0399_LCBRW", percentageQ30: 94.5).Value.PercentageQ30);
 
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(100.1)]
+    public void SequencingRunRejectsOutOfRangeClustersPassingFilter(double percentage) =>
+        AssertValidationError(SequencingRunAggregate.Create(
+            "240104_M02340_0399_LCBRW", percentageClustersPassingFilter: percentage));
+
+    [Fact]
+    public void SequencingRunRejectsNegativeClusterCount() =>
+        AssertValidationError(SequencingRunAggregate.Create(
+            "240104_M02340_0399_LCBRW", clusterCountPassingFilter: -1));
+
+    [Fact]
+    public void SequencingRunRejectsNegativeClusterDensity() =>
+        AssertValidationError(SequencingRunAggregate.Create("240104_M02340_0399_LCBRW", clusterDensity: -0.1));
+
+    [Fact]
+    public void SequencingRunRejectsNegativeEstimatedYield() =>
+        AssertValidationError(SequencingRunAggregate.Create("240104_M02340_0399_LCBRW", estimatedYield: -0.1));
+
+    /// <summary>
+    /// A count and a share of the same thing, kept apart: one instrument family states 26.9 million
+    /// clusters, the other states 87%. Merged into one field, "87" would read as a cluster count.
+    /// </summary>
+    [Fact]
+    public void SequencingRunKeepsClusterCountAndShareApart()
+    {
+        var run = SequencingRunAggregate.Create(
+            "240104_M02340_0399_LCBRW",
+            clusterCountPassingFilter: 26_901_812,
+            percentageClustersPassingFilter: 87.14986,
+            clusterDensity: 233.356873,
+            estimatedYield: 112.832085,
+            completionStatus: "  CompletedAsPlanned ",
+            errorDescription: "Flowcell  temperature out of range").Value;
+
+        Assert.Equal(26_901_812L, run.ClusterCountPassingFilter);
+        Assert.Equal(87.14986, run.PercentageClustersPassingFilter);
+        Assert.Equal(233.356873, run.ClusterDensity);
+        Assert.Equal(112.832085, run.EstimatedYield);
+        Assert.Equal("CompletedAsPlanned", run.CompletionStatus);
+        Assert.Equal("Flowcell temperature out of range", run.ErrorDescription);
+    }
+
     [Fact]
     public void SequencingRunRejectsCompletionBeforeStart() =>
         AssertValidationError(SequencingRunAggregate.Create(
