@@ -441,16 +441,39 @@ public sealed class MmciSequencingDataSourceTests
         }
     }
 
+    /// <summary>
+    /// The mapping table is the one auxiliary input that is not optional. Tolerating its absence
+    /// would store every sample with no predictive number, and on a re-ingest that absence is
+    /// persisted over the numbers already held — erasing the only field the patient data joins on.
+    /// </summary>
     [Fact]
-    public void AMissingMappingTableCostsThePredictiveNumbersAndNothingElse()
+    public void AMissingMappingTableRefusesTheIngestRatherThanErasingThePredictiveNumbers()
     {
         var result = new MmciSequencingDataSource(RunsPath, LibrariesPath, "no-such-mapping-directory")
             .ReadRecords(default);
 
-        Assert.False(result.IsError);
-        Assert.NotEmpty(result.Value.Samples);
-        Assert.All(result.Value.Samples, sample => Assert.Null(sample.PredictiveNumber));
-        Assert.Contains(result.Value.Errors, error => error.Reason.Contains("mapping", StringComparison.OrdinalIgnoreCase));
+        Assert.True(result.IsError);
+        Assert.Equal("Sequencing.MappingTableMissing", result.FirstError.Code);
+        Assert.Contains("cannot proceed", result.FirstError.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AMappingTableThatParsesToNothingIsRefusedOnTheSameGrounds()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            File.WriteAllText(Path.Join(directory, "predictive.json"), """{"predictive":[]}""");
+
+            var result = new MmciSequencingDataSource(RunsPath, LibrariesPath, directory).ReadRecords(default);
+
+            Assert.True(result.IsError);
+            Assert.Equal("Sequencing.MappingTableEmpty", result.FirstError.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

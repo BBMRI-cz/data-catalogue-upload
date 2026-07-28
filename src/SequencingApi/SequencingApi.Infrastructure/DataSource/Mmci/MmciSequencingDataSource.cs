@@ -65,13 +65,18 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             return Error.Failure("Sequencing.NoRuns", $"no sequencing runs found in: {_organisedRunsPath}");
         }
 
-        // Both auxiliary tables are optional. Without them panels go unresolved and samples carry no
-        // subject reference, which the model can express — unlike a failed ingest, which loses the
-        // sequencing data too.
+        // The libraries table is optional: without it panels go unresolved, which the model can
+        // express — unlike a failed ingest, which loses the sequencing data too.
         var (libraryRows, libraryProblems) = MmciLibrariesTableReader.ReadDirectory(_librariesPath);
         Report(errors, _librariesPath, libraryProblems);
 
+        // The mapping table is not optional; see ReadMappingTable. Read before the tree walk so the
+        // refusal costs seconds rather than the minutes the walk takes.
         var mappingTable = ReadMappingTable(errors);
+        if (mappingTable.IsError)
+        {
+            return mappingTable.Errors;
+        }
 
         var runs = new List<SequencingRunAggregate>();
         var runSamplesByExternalId = new Dictionary<string, List<RunSample>>(StringComparer.Ordinal);
@@ -82,7 +87,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
             ReadRun(folder, libraryRows, runs, runSamplesByExternalId, errors);
         }
 
-        var samples = BuildSamples(runSamplesByExternalId, mappingTable, errors);
+        var samples = BuildSamples(runSamplesByExternalId, mappingTable.Value, errors);
         var panels = BuildPanels(libraryRows, errors);
 
         return new RecordReadResult(samples, runs, panels, errors);
@@ -429,13 +434,30 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         return panels;
     }
 
-    private MmciMappingTable ReadMappingTable(List<RecordReadError> errors)
+    /// <summary>
+    /// Read the predictive-number mapping, which ingestion cannot proceed without.
+    /// </summary>
+    /// <remarks>
+    /// Required rather than optional, and the difference only shows up on the second ingest. Falling
+    /// back to an empty table costs a first run its predictive numbers, which is survivable — but a
+    /// re-run persists those absent numbers over the good ones already stored, so a mapping file that
+    /// is briefly unreadable silently erases the one field the uploader joins on, for every sample at
+    /// once. Nothing downstream can distinguish that from a corpus that genuinely has no mapping.
+    /// <para>
+    /// Refusing to ingest keeps the stored data intact and says why, which is the safe direction:
+    /// stale sequencing data is a smaller harm than sequencing data no patient can be matched to.
+    /// </para>
+    /// </remarks>
+    private ErrorOr<MmciMappingTable> ReadMappingTable(List<RecordReadError> errors)
     {
         var path = Path.Join(_mappingTablePath, MmciMappingTableReader.FileName);
         if (!File.Exists(path))
         {
-            errors.Add(new RecordReadError(Name, path, "predictive-number mapping table not found"));
-            return MmciMappingTable.Empty;
+            return Error.Failure(
+                "Sequencing.MappingTableMissing",
+                $"predictive-number mapping table not found: {path}. Ingestion cannot proceed without "
+                + "it — every sample would be stored with no predictive number, which is the only "
+                + "field the patient data can be joined on.");
         }
 
         string json;
@@ -445,11 +467,23 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         }
         catch (IOException exception)
         {
-            errors.Add(new RecordReadError(Name, path, $"mapping table unreadable: {exception.Message}"));
-            return MmciMappingTable.Empty;
+            return Error.Failure(
+                "Sequencing.MappingTableUnreadable",
+                $"predictive-number mapping table unreadable: {path}: {exception.Message}");
         }
 
         var (table, problems) = MmciMappingTableReader.Read(json);
+
+        // A table that parsed to nothing is the same catastrophe as an absent one, so it is refused
+        // on the same grounds rather than reported and walked past.
+        if (table.Count == 0)
+        {
+            return Error.Failure(
+                "Sequencing.MappingTableEmpty",
+                $"predictive-number mapping table has no usable entries: {path}. "
+                + string.Join("; ", problems));
+        }
+
         Report(errors, path, problems);
         return table;
     }
