@@ -71,8 +71,6 @@ public sealed class MmciSequencingDataSourceTests
         Assert.Equal("HyperCap-EP-240103", run.ExperimentName);
         Assert.Equal("Amplicon", run.Chemistry);
         Assert.Equal("MiSeq v2", run.ReagentKit);                           // RunParameters
-        Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), run.StartedAt);    // CompletedJobInfo
-        Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), run.CompletedAt);
         Assert.Equal(95.9, run.PercentageQ30);                              // AnalysisLog
     }
 
@@ -283,23 +281,6 @@ public sealed class MmciSequencingDataSourceTests
         // Exactly one of each report survives, not one report plus its settings file.
         Assert.Single(analysis.Files, file => file.Role == FileRole.VariantReport);
         Assert.Single(analysis.Files, file => file.Role == FileRole.CoverageReport);
-    }
-
-    [Fact]
-    public void EveryTimestampIsWallClockSoPostgresWillAcceptIt()
-    {
-        // Npgsql refuses a DateTimeKind.Utc value for a `timestamp without time zone` column, and the
-        // whole schema uses that type because the sources state times without a zone. SQLite stores
-        // datetimes as text and happily accepts any kind, so only an assertion catches this.
-        var result = Read();
-
-        var timestamps = result.Runs
-            .SelectMany(run => new[] { run.StartedAt, run.CompletedAt })
-            .OfType<DateTime>()
-            .ToList();
-
-        Assert.NotEmpty(timestamps);
-        Assert.All(timestamps, timestamp => Assert.Equal(DateTimeKind.Unspecified, timestamp.Kind));
     }
 
     [Fact]

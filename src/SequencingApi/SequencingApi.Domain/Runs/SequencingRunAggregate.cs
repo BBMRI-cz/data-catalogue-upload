@@ -70,10 +70,6 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
 
     public string? ReagentKit { get; init; }
 
-    public DateTime? StartedAt { get; init; }
-
-    public DateTime? CompletedAt { get; init; }
-
     /// <summary>
     /// Share of bases the instrument called with high confidence across the whole run, 0-100.
     /// </summary>
@@ -142,8 +138,6 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
         string? experimentName = null,
         string? chemistry = null,
         string? reagentKit = null,
-        DateTime? startedAt = null,
-        DateTime? completedAt = null,
         double? percentageQ30 = null,
         long? clusterCountPassingFilter = null,
         double? percentageClustersPassingFilter = null,
@@ -167,11 +161,6 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
         if (laneCount is < 1)
         {
             return Error.Validation("SequencingRun.LaneCount", $"lane_count must be positive, got {laneCount}");
-        }
-
-        if (startedAt is { } started && completedAt is { } completed && completed < started)
-        {
-            return Error.Validation("SequencingRun.CompletedAt", "completed_at must not precede started_at");
         }
 
         if (percentageQ30 is { } q30 && q30 is < 0 or > 100)
@@ -224,8 +213,6 @@ public sealed class SequencingRunAggregate : AggregateRoot<SequencingRunId>
             ExperimentName = Normalize.Collapse(experimentName),
             Chemistry = Normalize.Collapse(chemistry),
             ReagentKit = Normalize.Collapse(reagentKit),
-            StartedAt = startedAt,
-            CompletedAt = completedAt,
             PercentageQ30 = percentageQ30,
             ClusterCountPassingFilter = clusterCountPassingFilter,
             PercentageClustersPassingFilter = percentageClustersPassingFilter,

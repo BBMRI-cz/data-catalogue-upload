@@ -187,8 +187,6 @@ is actually produced elsewhere.
 | `ExperimentName` | sheet → parameters | `[Header] Experiment Name` → `<ExperimentName>` | [`SampleSheetReader`], [`RunMetadataReader`] |
 | `Chemistry` | sheet → parameters | `[Header] Chemistry` → `<Chemistry>` | [`SampleSheetReader`], [`RunMetadataReader`] |
 | `ReagentKit` | parameters **only** | `<ReagentKitVersion>` → `<ReagentKitBarcode>` → `<ChemistryVersion>` | [`RunMetadataReader`] |
-| `StartedAt` | `CompletedJobInfo.xml` **only** | `<StartTime>` → `<RunStartDate>` | [`RunMetadataReader`] |
-| `CompletedAt` | `CompletedJobInfo.xml` → `RunCompletionStatus.xml` | `<CompletionTime>` in either | [`RunMetadataReader`] |
 | `PercentageQ30` | `AnalysisLog.txt` **only** | the line containing `Q30`, e.g. `Percent >= Q30: 95.9%`; accepted only within 0–100. The statistics XML's `PercentQ30` elements are not used — they read zero throughout this corpus | [`RunMetadataReader`] (`PercentageQ30`) |
 | `ClusterCountPassingFilter` | `GenerateFASTQRunStatistics.xml` (**MiSeq only**) | `RunStats/NumberOfClustersPF`, an absolute count. Scoped to the `RunStats` block: the same element name repeats under every per-sample summary — one real run carries seventeen of them. A stated `0` reads as "not stated": the control software stopped filling it in after 2024-02-05 and every later run states zero while still producing reads | [`RunMetadataReader`] (`ClusterCountPassingFilter`, `RunStat`) |
 | `PercentageClustersPassingFilter` | `RunCompletionStatus.xml` (**NextSeq only**) | `<ClustersPassingFilter>`, a **percentage**. Despite the name, not the same quantity as the MiSeq count above — that is why they are separate fields | [`RunMetadataReader`] |
@@ -252,6 +250,15 @@ aggregates and de-duplicates them by panel id.
 reading the whole tree) · `PanelAggregate.Assay` · `Lane`/`Read` on analysis artifacts · a true median
 depth, insert size and TR20, which FAIR Genomes names but MMCI states nowhere.
 
+**No run start or completion time.** The run carries neither, and the model has no field for either.
+`CompletedJobInfo.xml` appears to state both, but its `<StartTime>`/`<CompletionTime>` belong to
+MiSeq Reporter's *secondary analysis*: across the production corpus they fall a day after the run for
+270 of the 277 folders that have them, and span roughly ten minutes where a run takes the better part
+of a day. `RunParameters.xml`'s `<RunStartDate>` is the run's own, but equals the run folder's date
+for all 358 runs and so is already `RunDate`. No `RunCompletionStatus.xml` in the corpus states a
+`<CompletionTime>` at all. A timestamp from the wrong clock is worse than an absent one, because
+nothing downstream can tell — the same reason `Analysis.ProducedAt` was removed.
+
 **Source data deliberately not read:** `patient.json`, `samples.json` and
 `catalog_info_per_pred_number/` — patient data, and this service holds none · the statistics XML's
 `PercentQ30` and its per-sample `SummarizedSampleStatistics` blocks (a run-sample's own cluster
@@ -271,8 +278,8 @@ The reverse lookup: what breaks if a file changes shape.
 | the sample folder name | `Sample.Id`, and the identity every read file is checked against | [`SequencingDataSource`], [`SampleFolderReader`] |
 | `RunInfo.xml` | `RunNumber`, `InstrumentId`, `FlowcellId`, `RunDate`, `LaneCount`, `Reads` | [`RunMetadataReader`] |
 | `RunParameters.xml` / `runParameters.xml` | `ReagentKit`, and fallbacks for run number, instrument, flowcell, experiment name, chemistry | [`RunMetadataReader`] |
-| `CompletedJobInfo.xml` | `StartedAt`, `CompletedAt`, `Workflow` fallback | [`RunMetadataReader`] |
-| `RunCompletionStatus.xml` | `PercentageClustersPassingFilter`, `ClusterDensity`, `EstimatedYield`, `CompletionStatus`, `ErrorDescription`, `CompletedAt` fallback (all NextSeq) | [`RunMetadataReader`] |
+| `CompletedJobInfo.xml` | `Workflow` fallback. Its `<StartTime>`/`<CompletionTime>` are **not** read — see "No run start or completion time" below | [`RunMetadataReader`] |
+| `RunCompletionStatus.xml` | `PercentageClustersPassingFilter`, `ClusterDensity`, `EstimatedYield`, `CompletionStatus`, `ErrorDescription` (all NextSeq) | [`RunMetadataReader`] |
 | `GenerateFASTQRunStatistics.xml` | `ClusterCountPassingFilter` (MiSeq) | [`RunMetadataReader`] |
 | `AnalysisLog.txt` | `PercentageQ30` | [`RunMetadataReader`] |
 | `SampleSheet.csv` | `Assay`, `Workflow`, `ExperimentName`, `Chemistry`, `SampleType`, `SampleIndex` fallback, and the folder/row reconciliation | [`SampleSheetReader`], [`SequencingDataSource`] |

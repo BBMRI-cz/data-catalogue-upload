@@ -16,6 +16,17 @@ namespace SequencingApi.Infrastructure.DataSource.Mmci;
 /// software generation — the parameters file is even spelled with a different initial letter on old
 /// MiSeq. Every field is therefore read defensively and independently: a missing file costs the
 /// fields it would have supplied, never the run.
+/// <para>
+/// <strong>The run carries no start or completion time, deliberately.</strong> Nothing in this tree
+/// states either. <c>CompletedJobInfo.xml</c> looks like it does, but its <c>StartTime</c> and
+/// <c>CompletionTime</c> belong to MiSeq Reporter's secondary analysis: they run the day after the
+/// run for 270 of the 277 folders that have them, and span about ten minutes where a run takes the
+/// better part of a day. Reading them as the run's own clock is a plausible wrong answer, which is
+/// worse than none. <c>RunParameters.xml</c>'s <c>&lt;RunStartDate&gt;</c> is genuine but adds
+/// nothing: it equals the run folder's date for all 358 runs, which is already
+/// <see cref="SequencingRunAggregate.RunDate"/>. And no <c>RunCompletionStatus.xml</c> in the corpus
+/// carries a <c>&lt;CompletionTime&gt;</c> at all.
+/// </para>
 /// </remarks>
 internal static class MmciRunMetadataReader
 {
@@ -66,9 +77,6 @@ internal static class MmciRunMetadataReader
             experimentName: sheet.ExperimentName ?? Value(parameters, "ExperimentName"),
             chemistry: sheet.Chemistry ?? Value(parameters, "Chemistry"),
             reagentKit: Value(parameters, "ReagentKitVersion", "ReagentKitBarcode", "ChemistryVersion"),
-            startedAt: MmciSourceValues.Timestamp(Value(completedJob, "StartTime", "RunStartDate")),
-            completedAt: MmciSourceValues.Timestamp(
-                Value(completedJob, "CompletionTime") ?? Value(runCompletion, "CompletionTime")),
             percentageQ30: PercentageQ30(runPath),
             // The two instrument families report the run's cluster statistics in different files and
             // in different units, so each field comes from exactly one of them and stays null on the

@@ -128,8 +128,6 @@ internal static class SequencingFixtures
             experimentName: "HyperCap-EP-240103",
             chemistry: "Amplicon",
             reagentKit: "MiSeq v2",
-            startedAt: new DateTime(2024, 1, 4, 14, 0, 0),
-            completedAt: new DateTime(2024, 1, 5, 2, 30, 0),
             percentageQ30: 94.7,
             // A real run states either the count or the share, never both; the fixture carries both
             // so the round-trip covers every column.

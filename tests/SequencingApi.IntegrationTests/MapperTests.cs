@@ -139,8 +139,6 @@ public sealed class MapperTests
         Assert.Equal("HyperCap-EP-240103", mapped.ExperimentName);
         Assert.Equal("Amplicon", mapped.Chemistry);
         Assert.Equal("MiSeq v2", mapped.ReagentKit);
-        Assert.Equal(new DateTime(2024, 1, 4, 14, 0, 0), mapped.StartedAt);
-        Assert.Equal(new DateTime(2024, 1, 5, 2, 30, 0), mapped.CompletedAt);
         Assert.Equal(94.7, mapped.PercentageQ30);
         Assert.Equal(26_901_812L, mapped.ClusterCountPassingFilter);
         Assert.Equal(87.14986, mapped.PercentageClustersPassingFilter);

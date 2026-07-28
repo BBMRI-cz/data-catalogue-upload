@@ -351,24 +351,6 @@ public sealed class DomainModelsTests
         Assert.Equal("Flowcell temperature out of range", run.ErrorDescription);
     }
 
-    [Fact]
-    public void SequencingRunRejectsCompletionBeforeStart() =>
-        AssertValidationError(SequencingRunAggregate.Create(
-            "240104_M02340_0399_LCBRW",
-            startedAt: new DateTime(2024, 1, 4, 11, 20, 0),
-            completedAt: new DateTime(2024, 1, 4, 11, 15, 0)));
-
-    [Fact]
-    public void SequencingRunAllowsCompletionAfterStart()
-    {
-        var run = SequencingRunAggregate.Create(
-            "240104_M02340_0399_LCBRW",
-            startedAt: new DateTime(2024, 1, 4, 11, 15, 0),
-            completedAt: new DateTime(2024, 1, 4, 19, 40, 0)).Value;
-
-        Assert.Equal(new DateTime(2024, 1, 4, 19, 40, 0), run.CompletedAt);
-    }
-
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

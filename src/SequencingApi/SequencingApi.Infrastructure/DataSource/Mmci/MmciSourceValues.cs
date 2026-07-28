@@ -106,16 +106,6 @@ internal static class MmciSourceValues
             : null;
 
     /// <summary>
-    /// Parse an ISO-ish timestamp as the instrument writes it. Returns null rather than guessing when
-    /// the value is not a recognisable date-time.
-    /// </summary>
-    public static DateTime? Timestamp(string? raw) =>
-        Clean(raw) is { } value
-        && DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
-            ? parsed
-            : null;
-
-    /// <summary>
     /// Parse a date the source writes in full, used by the libraries table's availability range.
     /// Tries the day-first spellings the Czech-locale exports use before falling back to invariant.
     /// </summary>
