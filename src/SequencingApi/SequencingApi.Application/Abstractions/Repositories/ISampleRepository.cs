@@ -24,6 +24,17 @@ public interface ISampleRepository
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Remove every stored sample and everything hanging off it.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to a source that is read in full every time: saving alone only ever adds and
+    /// replaces, so a sample withdrawn from the source would otherwise be served for ever. Called
+    /// once per ingest, after the read has succeeded — never on a read that failed, or a source
+    /// briefly unreadable would empty the database.
+    /// </remarks>
+    Task DeleteAllSamplesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Load one sample with every run it was sequenced in, its files and its analyses. Null when
     /// the sample is unknown. This is the core read of the service: the whole point of persisting
     /// is to answer it without re-scanning the source tree.

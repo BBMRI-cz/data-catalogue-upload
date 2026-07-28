@@ -27,14 +27,20 @@ internal static class SqliteWebHost
     /// <paramref name="connection"/> must be open and stay open for the test, or the
     /// <c>:memory:</c> database vanishes between the request scopes.
     /// </remarks>
+    /// <param name="runsPath">
+    /// The run tree to read, defaulting to the committed fixture. A test that needs the source to
+    /// <em>change</em> between ingests passes a temporary copy instead, since the fixture is shared
+    /// and must stay as committed.
+    /// </param>
     public static WebApplicationFactory<Program> Configure(
         WebApplicationFactory<Program> root,
-        SqliteConnection connection)
+        SqliteConnection connection,
+        string? runsPath = null)
     {
         var factory = root.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("DisableScheduler", "true");
-            builder.UseSetting("SEQUENCING_DATA_PATH", Path.Join(TestDataPath, "Runs"));
+            builder.UseSetting("SEQUENCING_DATA_PATH", runsPath ?? Path.Join(TestDataPath, "Runs"));
             builder.UseSetting("SEQUENCING_LIBRARIES_PATH", Path.Join(TestDataPath, "Libraries"));
             builder.UseSetting("SEQUENCING_MAPPING_TABLE_PATH", Path.Join(TestDataPath, "MappingTable"));
 

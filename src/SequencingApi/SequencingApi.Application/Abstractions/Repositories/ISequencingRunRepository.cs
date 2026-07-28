@@ -18,6 +18,12 @@ public interface ISequencingRunRepository
         CancellationToken cancellationToken);
 
     /// <summary>Load one run by id, or null when it is unknown.</summary>
+    /// <summary>
+    /// Remove every stored run and its read structure. The run-side counterpart to
+    /// <c>ISampleRepository.DeleteAllSamplesAsync</c>; see there for why it exists.
+    /// </summary>
+    Task DeleteAllRunsAsync(CancellationToken cancellationToken);
+
     Task<SequencingRunAggregate?> GetRunAsync(SequencingRunId id, CancellationToken cancellationToken);
 
     /// <summary>

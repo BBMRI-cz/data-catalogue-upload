@@ -120,6 +120,80 @@ public sealed class IngestEndToEndTests
             runSample => runSample.RunId.Value == "240104_M02340_0399_LCBRW").Files.Count);
     }
 
+    /// <summary>
+    /// A run that leaves the source must leave the database with it. Saving alone only ever adds and
+    /// replaces, so before the ingest cleared first, a withdrawn run kept its samples, its files and
+    /// its predictive numbers indefinitely — served by <c>GET /sequencing</c> as though still real,
+    /// with the ingest response reporting only what it had read and nothing about what it had not.
+    /// </summary>
+    [Fact]
+    public async Task ARunWithdrawnFromTheSourceIsRemovedOnTheNextIngest()
+    {
+        // A copy, because this test mutates the tree and the fixture is shared and stays as committed.
+        var tree = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            CopyDirectory(Path.Join(SqliteWebHost.TestDataPath, "Runs"), tree);
+
+            using var connection = new SqliteConnection("Filename=:memory:");
+            connection.Open();
+
+            using var rootFactory = new WebApplicationFactory<Program>();
+            var factory = SqliteWebHost.Configure(rootFactory, connection, tree);
+            using var client = factory.CreateClient();
+
+            var before = await Ingest(client);
+            Assert.Equal(3, before.IngestedRuns);
+            Assert.Equal(4, before.IngestedSamples);
+
+            // p0050 is sequenced only in this run, so withdrawing it withdraws that sample entirely.
+            Directory.Delete(Path.Join(tree, "2024", "MiSEQ", "complete-runs", "240430_M02340_0412_ABCDE"), recursive: true);
+            Directory.Delete(Path.Join(tree, "2024", "MiSEQ", "mamma-print", "240430_M02340_0412_ABCDE"), recursive: true);
+
+            var after = await Ingest(client);
+            Assert.Equal(2, after.IngestedRuns);
+
+            using var scope = factory.Services.CreateScope();
+
+            var stats = await scope.ServiceProvider
+                .GetRequiredService<ISequencingStatsReader>()
+                .GetSummaryAsync(default);
+
+            // The database is a copy of the source, not the union of every source it has ever seen.
+            Assert.Equal(2, stats.RunCount);
+            Assert.Equal(3, stats.SampleCount);
+
+            var samples = scope.ServiceProvider.GetRequiredService<ISampleRepository>();
+            Assert.Null(await samples.GetSampleAsync(new SampleId("p0050"), default));
+
+            // ...and the sample that survives keeps only the runs that still exist.
+            var resequenced = await samples.GetSampleAsync(new SampleId("p0001"), default);
+            Assert.Equal(2, resequenced!.RunSamples.Count);
+            Assert.DoesNotContain(
+                resequenced.RunSamples,
+                runSample => runSample.RunId.Value == "240430_M02340_0412_ABCDE");
+        }
+        finally
+        {
+            Directory.Delete(tree, recursive: true);
+        }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+
+        foreach (var directory in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(Path.Join(destination, Path.GetRelativePath(source, directory)));
+        }
+
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            File.Copy(file, Path.Join(destination, Path.GetRelativePath(source, file)));
+        }
+    }
+
     private static async Task<IngestResponse> Ingest(HttpClient client)
     {
         using var response = await client.PostAsync("/admin/ingest", content: null, default);
