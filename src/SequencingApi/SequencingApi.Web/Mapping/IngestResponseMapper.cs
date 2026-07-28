@@ -11,10 +11,10 @@ namespace SequencingApi.Web.Mapping;
 internal static class IngestResponseMapper
 {
     public static IngestResponse ToResponse(IngestRecordsCommandResult ingest) => new(
-        ingest.Ingested,
+        ingest.IngestedSamples,
         ingest.IngestedRuns,
         ingest.IngestedPanels,
-        ingest.Failed,
+        ingest.ErrorCount,
         [.. ingest.Errors.Select(ToResponse)]);
 
     private static IngestErrorResponse ToResponse(RecordReadError error) =>

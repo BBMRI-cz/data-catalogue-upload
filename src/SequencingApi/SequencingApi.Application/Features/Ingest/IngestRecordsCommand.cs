@@ -49,13 +49,13 @@ internal sealed class IngestRecordsCommandHandler
         var runErrors = await _runs.SaveRunsAsync(result.Runs, cancellationToken);
         var sampleErrors = await _samples.SaveSamplesAsync(result.Samples, cancellationToken);
 
-        // Read failures and per-record persistence failures are both reported, not fatal.
+        // Read problems and per-record persistence failures are both reported, not fatal.
         var errors = result.Errors.Concat(panelErrors).Concat(runErrors).Concat(sampleErrors).ToList();
         return new IngestRecordsCommandResult(
-            Ingested: result.Samples.Count - sampleErrors.Count,
+            IngestedSamples: result.Samples.Count - sampleErrors.Count,
             IngestedRuns: result.Runs.Count - runErrors.Count,
             IngestedPanels: result.Panels.Count - panelErrors.Count,
-            Failed: errors.Count,
+            ErrorCount: errors.Count,
             Errors: errors);
     }
 }

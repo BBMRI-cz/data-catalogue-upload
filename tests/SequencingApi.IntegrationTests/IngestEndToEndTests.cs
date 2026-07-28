@@ -45,13 +45,14 @@ public sealed class IngestEndToEndTests
 
         // Four distinct samples across three runs (p0001, p0002, p0009, p0050); the orphan folder
         // p0003 is reported instead of ingested, which is why this is not five.
-        Assert.Equal(4, summary.Ingested);
+        Assert.Equal(4, summary.IngestedSamples);
         Assert.Equal(3, summary.IngestedRuns);
         Assert.Equal(2, summary.IngestedPanels);
 
-        // Failures are reported rather than thrown - the orphan folder and the duplicate run copy.
+        // Problems are reported rather than thrown - the orphan folder and the duplicate run copy.
+        // ErrorCount is the length of that list and nothing else, which is what this pins.
         Assert.NotEmpty(summary.Errors);
-        Assert.Equal(summary.Failed, summary.Errors.Count);
+        Assert.Equal(summary.ErrorCount, summary.Errors.Count);
 
         using var readScope = factory.Services.CreateScope();
         var samples = readScope.ServiceProvider.GetRequiredService<ISampleRepository>();
@@ -91,10 +92,10 @@ public sealed class IngestEndToEndTests
 
         // The scheduled job runs weekly over a tree that mostly has not changed, so a second run must
         // land on exactly the same numbers.
-        Assert.Equal(first.Ingested, second.Ingested);
+        Assert.Equal(first.IngestedSamples, second.IngestedSamples);
         Assert.Equal(first.IngestedRuns, second.IngestedRuns);
         Assert.Equal(first.IngestedPanels, second.IngestedPanels);
-        Assert.Equal(first.Failed, second.Failed);
+        Assert.Equal(first.ErrorCount, second.ErrorCount);
 
         using var readScope = factory.Services.CreateScope();
 

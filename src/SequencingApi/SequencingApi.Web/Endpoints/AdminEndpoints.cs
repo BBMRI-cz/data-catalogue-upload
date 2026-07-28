@@ -25,15 +25,24 @@ internal static class AdminEndpoints
 }
 
 /// <summary>
-/// Response shape for <c>POST /admin/ingest</c>. Failures are reported rather than thrown, so the
+/// Response shape for <c>POST /admin/ingest</c>. Problems are reported rather than thrown, so the
 /// counts and the per-record reasons are the point of the payload, not an afterthought.
 /// </summary>
+/// <remarks>
+/// <c>error_count</c> is the length of <c>errors</c> and is not a count of records that failed: the
+/// entries sit at whatever level the problem occurred, and most of them describe records that were
+/// ingested regardless. Read it alongside <c>errors</c>, never as the complement of
+/// <c>ingested_samples</c>.
+/// </remarks>
 public sealed record IngestResponse(
-    int Ingested,
+    int IngestedSamples,
     int IngestedRuns,
     int IngestedPanels,
-    int Failed,
+    int ErrorCount,
     IReadOnlyList<IngestErrorResponse> Errors);
 
-/// <summary>One record that could not be turned into a valid sequencing entity.</summary>
+/// <summary>
+/// One problem the reader found, naming what it is about — which may be a file, a folder, a
+/// run-sample or an aggregate — and why.
+/// </summary>
 public sealed record IngestErrorResponse(string Source, string Reference, string Reason);
