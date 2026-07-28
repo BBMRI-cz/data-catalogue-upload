@@ -185,6 +185,31 @@ public sealed class MmciSequencingDataSourceTests
                 && error.Reason.Contains("sample sheet", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// A sheet that lists one sample twice must cost that repeat and nothing else. The natural
+    /// <c>ToDictionary</c> threw here, and because nothing in the read path catches, the whole
+    /// ingest ended with no record persisted at all — so this pins the surrounding runs too.
+    /// </summary>
+    [Fact]
+    public void ASampleListedTwiceInTheSheetIsReportedAndCostsNothingElse()
+    {
+        var result = Read();
+
+        Assert.Contains(
+            result.Errors,
+            error => error.Reference.EndsWith("p0001", StringComparison.Ordinal)
+                && error.Reason.Contains("more than once", StringComparison.OrdinalIgnoreCase));
+
+        // The duplicate is dropped, not turned into a second run-sample...
+        Assert.Single(
+            Sample(result, "p0001").RunSamples,
+            candidate => candidate.RunId.Value == "240104_M02340_0399_LCBRW");
+
+        // ...and every other run in the tree still read, which is the half that was actually at risk.
+        Assert.Equal(3, result.Runs.Count);
+        Assert.Equal(4, result.Samples.Count);
+    }
+
     [Fact]
     public void NextSeqCarriesTheDnaRnaDistinctionAndFourLanesOfReads()
     {

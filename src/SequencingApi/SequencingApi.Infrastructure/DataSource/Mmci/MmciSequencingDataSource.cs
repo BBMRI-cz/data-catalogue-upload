@@ -188,7 +188,7 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
         runs.Add(run.Value);
 
         var samplesPath = Path.Join(folder.Path, SamplesFolder);
-        var sheetRows = sheet.Rows.ToDictionary(row => row.SampleId, StringComparer.OrdinalIgnoreCase);
+        var sheetRows = IndexSheetRows(sheet, samplesPath, errors);
         var seenInTree = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var samplePath in Subdirectories(samplesPath))
@@ -245,6 +245,43 @@ internal sealed class MmciSequencingDataSource : ISequencingDataSource
                 Relative(Path.Join(samplesPath, missing.SampleId)),
                 "sample listed in the sample sheet has no folder in the run"));
         }
+    }
+
+    /// <summary>
+    /// Index a run's sample-sheet rows by sample id, reporting — rather than throwing on — a sample
+    /// the sheet lists more than once.
+    /// </summary>
+    /// <remarks>
+    /// The obvious <c>ToDictionary</c> throws on a repeated key, and this is the one place in the
+    /// reader where bad source data could do that: <see cref="ReadRecords"/> guards nothing, so the
+    /// exception would leave the endpoint returning 500 with not one record persisted — every run in
+    /// the corpus lost to a single duplicated line in a single sheet. Everything else here reports
+    /// and carries on, and so does this.
+    /// <para>
+    /// First row wins, which is the same rule <see cref="MmciMappingTableReader"/> applies to a
+    /// duplicate pseudonymized id, and the rows carry nothing that would let a later duplicate be
+    /// judged the better one.
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, MmciSampleSheetRow> IndexSheetRows(
+        MmciSampleSheet sheet,
+        string samplesPath,
+        List<RecordReadError> errors)
+    {
+        var rows = new Dictionary<string, MmciSampleSheetRow>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in sheet.Rows)
+        {
+            if (!rows.TryAdd(row.SampleId, row))
+            {
+                errors.Add(new RecordReadError(
+                    Name,
+                    Relative(Path.Join(samplesPath, row.SampleId)),
+                    "sample listed more than once in the sample sheet; the first row was used"));
+            }
+        }
+
+        return rows;
     }
 
     /// <summary>

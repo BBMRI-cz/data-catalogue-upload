@@ -25,6 +25,7 @@ size; it never opens them.
 | ” `Samples/p0001` | Reads plus analysis, quality metrics with decimal commas, and a `_Parameters.txt` that resolves the panel. |
 | ” `Samples/p0002/FASTQ` (empty) | A sample folder that exists with no reads at all — over a hundred real ones do. |
 | ” `Samples/p0003` (empty) | An orphan folder absent from the sample sheet: reported, not ingested. |
+| ” `SampleSheet.csv` | Lists `p0001` **twice**: the first row wins and the repeat is reported. Indexing the rows with `ToDictionary` threw on this, which ended the entire ingest rather than that one run. |
 | `.../complete-runs/240430_M02340_0412_ABCDE` | Single-read run (R1 only, no R2) — the MammaPrint case; also re-sequences `p0001`. |
 | ” `Samples/p0050/FASTQ` | Carries an R2 in a single-read run: **more** read files than the read structure implies, which is reported. |
 | `.../mamma-print/240430_M02340_0412_ABCDE` | **The same run id in a second subtype folder**, with fewer samples: de-duplicated away and reported. |
