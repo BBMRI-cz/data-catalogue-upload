@@ -48,7 +48,12 @@ internal sealed class HttpCatalogueGateway : ICatalogueGateway
     public Task<ErrorOr<string>> UpsertSequencingAsync(SequencingAggregate sequencing, CancellationToken cancellationToken) =>
         PostAsync(
             "/sequencing/upsert",
-            new { external_id = sequencing.Id.Value, sample_id = sequencing.SampleId.Value, entries = sequencing.Entries },
+            new
+            {
+                external_id = sequencing.Id.Value,
+                sample_id = sequencing.SampleId.Value,
+                sample_preparations = sequencing.Preparations,
+            },
             sequencing.Id.Value,
             cancellationToken);
 

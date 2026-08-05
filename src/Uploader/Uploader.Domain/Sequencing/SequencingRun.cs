@@ -17,5 +17,10 @@ public sealed record SequencingRun : ValueObject
     public double? PercentageQ30 { get; init; }
     public double? PercentageTr20 { get; init; }
     public string? OtherQualityMetrics { get; init; }
-    public Analysis? Analysis { get; init; }
+
+    /// <summary>
+    /// FAIR Genomes relates an analysis to one sequencing, so a run may carry several. The source
+    /// serves them as a list and all of them are kept.
+    /// </summary>
+    public IReadOnlyList<Analysis> Analyses { get; init; } = [];
 }

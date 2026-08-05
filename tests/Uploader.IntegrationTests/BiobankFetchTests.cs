@@ -17,7 +17,7 @@ public sealed class BiobankFetchTests
 {
     private static async Task<IReadOnlyList<PatientDto>> FetchAsync()
     {
-        var gateway = new HttpSourceDataGateway(BiobankResponse.ClientFactory(BiobankResponse.Json()));
+        var gateway = new HttpSourceDataGateway(RecordedResponse.ClientFactory(RecordedResponse.Patients()));
         return await gateway.FetchPatientsAsync(CancellationToken.None);
     }
 

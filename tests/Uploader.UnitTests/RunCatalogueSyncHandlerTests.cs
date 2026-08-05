@@ -136,4 +136,59 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.True(state.Patients["GONE"].IsDeleted);
         Assert.True(result.Value.Deleted >= 1);
     }
+
+    [Fact]
+    public async Task SequencingReachesTheAssembledPatientRecord()
+    {
+        var source = new FakeSourceDataGateway([SequencedPatient()]);
+        source.Sequencing["PRED1"] = new SequencingDto
+        {
+            PredictiveNumber = "PRED1",
+            Samples =
+            [
+                new SequencingSampleDto
+                {
+                    SampleId = "p0001",
+                    Runs = [new SequencingRunDto { RunId = "R1", Platform = "Illumina" }],
+                },
+            ],
+        };
+
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
+            new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // Patient, sample and now the sequencing the sample points at.
+        Assert.Equal(["patient:P1", "sample:S1", "sequencing:S1"], catalogue.Upserts);
+        Assert.Equal(0, result.Value.Failed);
+        Assert.Equal(SyncStatus.Synced, state.Sequencing["PRED1"].Status);
+    }
+
+    [Fact]
+    public async Task PatientWithoutSequencingIsNotAFailure()
+    {
+        // The sequencing API answers an unknown predictive number with 200 and an empty sample list.
+        var source = new FakeSourceDataGateway([SequencedPatient()]);
+        source.Sequencing["PRED1"] = new SequencingDto { PredictiveNumber = "PRED1", Samples = [] };
+
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
+            new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // No sequencing record and no failure: an empty answer is a normal one.
+        Assert.Equal(["patient:P1", "sample:S1"], catalogue.Upserts);
+        Assert.Equal(0, result.Value.Failed);
+        Assert.Empty(state.Sequencing);
+    }
+
+    private static PatientDto SequencedPatient() => new()
+    {
+        PatientId = "P1",
+        Consent = true,
+        Samples = [new SampleDto { SampleId = "S1", Type = "tissue", PredictiveNumber = "PRED1" }],
+    };
 }

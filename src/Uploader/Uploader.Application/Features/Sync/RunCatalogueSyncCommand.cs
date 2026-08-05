@@ -226,7 +226,10 @@ internal sealed class RunCatalogueSyncCommandHandler
             if (sample.SequencingId is { } sequencingId)
             {
                 var sequencingDto = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
-                if (sequencingDto is not null)
+
+                // A predictive number the sequencing API does not know answers 200 with an empty
+                // sample list. That is a normal answer, not a failure: no aggregate, no counter moved.
+                if (sequencingDto is { Samples.Count: > 0 })
                 {
                     var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
                     if (sequencingResult.IsError)

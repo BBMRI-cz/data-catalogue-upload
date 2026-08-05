@@ -14,6 +14,9 @@ internal sealed class FakeSourceDataGateway : ISourceDataGateway
 
     public FakeSourceDataGateway(IReadOnlyList<PatientDto> patients) => _patients = patients;
 
+    /// <summary>What the sequencing API answers with, keyed by predictive number.</summary>
+    public Dictionary<string, SequencingDto> Sequencing { get; } = [];
+
     public Task<IReadOnlyList<PatientDto>> FetchPatientsAsync(CancellationToken cancellationToken) =>
         Task.FromResult(_patients);
 
@@ -22,7 +25,7 @@ internal sealed class FakeSourceDataGateway : ISourceDataGateway
         Task.FromResult<IReadOnlyList<ImagingStudyDto>>([]);
 
     public Task<SequencingDto?> FetchSequencingAsync(string predictiveNumber, CancellationToken cancellationToken) =>
-        Task.FromResult<SequencingDto?>(null);
+        Task.FromResult(Sequencing.GetValueOrDefault(predictiveNumber));
 
     public Task<WsiDto?> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
         Task.FromResult<WsiDto?>(null);
