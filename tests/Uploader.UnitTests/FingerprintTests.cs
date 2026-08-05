@@ -52,4 +52,19 @@ public sealed class FingerprintTests
         var changed = PatientAggregate.Create("P1", new Personal { YearOfBirth = 1990 }, null).Value;
         Assert.NotEqual(unchanged.ComputeFingerprint(), changed.ComputeFingerprint());
     }
+
+    [Fact]
+    public void SequencingFingerprintReflectsEveryPreparation()
+    {
+        // A sample resequenced on a second run must read as changed, not as the same record: the
+        // preparation list is what change detection has to see.
+        var sampleId = new SampleId("S1");
+        var first = new SamplePreparation { SampleprepIdentifier = "sampleprep_p0001_R1" };
+        var second = new SamplePreparation { SampleprepIdentifier = "sampleprep_p0001_R2" };
+
+        var once = SequencingAggregate.Create("PRED1", sampleId, [first]).Value;
+        var twice = SequencingAggregate.Create("PRED1", sampleId, [first, second]).Value;
+
+        Assert.NotEqual(once.ComputeFingerprint(), twice.ComputeFingerprint());
+    }
 }

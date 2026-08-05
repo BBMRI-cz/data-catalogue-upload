@@ -131,40 +131,8 @@ public sealed class UploaderMapperTests
         Assert.Null(sample.WsiId);
     }
 
-    [Fact]
-    public void SequencingEntryHasNoPrepWhenAbsent()
-    {
-        var sequencing = SequencingMapper.ToSequencing(new SequencingDto(), new SequencingId("PRED1"), new SampleId("S1")).Value;
-
-        var entry = Assert.Single(sequencing.Entries);
-        Assert.Null(entry.SamplePreparation);
-        Assert.Null(entry.FixedBlockId);
-    }
-
-    [Fact]
-    public void SequencingBuildsNestedPipeline()
-    {
-        var dto = new SequencingDto
-        {
-            FixedBlock = new FixedBlockRefDto { BlockIdentifier = "FB1" },
-            SamplePreparation = new SamplePreparationDto
-            {
-                LibraryPreparationKit = "KitA",
-                Sequencing = new SequencingRunDto
-                {
-                    SequencingPlatform = "Illumina",
-                    Analyses = [new AnalysisDto { AnalysisIdentifier = "A1" }],
-                },
-            },
-        };
-
-        var entry = Assert.Single(SequencingMapper.ToSequencing(dto, new SequencingId("PRED1"), new SampleId("S1")).Value.Entries);
-
-        Assert.Equal(new FixedBlockId("FB1"), entry.FixedBlockId);
-        Assert.Equal("KitA", entry.SamplePreparation!.LibraryPreparationKit);
-        Assert.Equal("Illumina", entry.SamplePreparation.Sequencing!.SequencingPlatform);
-        Assert.Equal("A1", entry.SamplePreparation.Sequencing.Analysis!.AnalysisIdentifier);
-    }
+    // Sequencing lives in SequencingMapperTests: its source serves a nested list rather than one
+    // record, so its cardinality and drops need a file of their own.
 
     [Fact]
     public void WsiReturnsNullFixedBlockWhenNoKeys()

@@ -116,99 +116,141 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Null(m.DerivedFrom);
     }
 
+    /// <summary>A run the sequencing API fills in as completely as its sources allow.</summary>
+    private static SequencingDto FullyPopulatedSequencing() => new()
+    {
+        PredictiveNumber = "PRED1",
+        Samples =
+        [
+            new SequencingSampleDto
+            {
+                SampleId = "p0001",
+                IdScheme = "mmci_predictive",
+                Runs =
+                [
+                    new SequencingRunDto
+                    {
+                        RunId = "R1",
+                        RunDate = "2021-05-05",
+                        Platform = "Illumina",
+                        InstrumentModel = "NovaSeq",
+                        InstrumentId = "NB1",
+                        FlowcellId = "FC1",
+                        Assay = "KAPA HyperPlus",
+                        Workflow = "GenerateFASTQ",
+                        PercentageQ30 = 95.5,
+                        ClusterCountPassingFilter = 26901812,
+                        PercentageClustersPassingFilter = 87.1,
+                        ClusterDensity = 233.3,
+                        EstimatedYield = 112.8,
+                        CompletionStatus = "CompletedAsPlanned",
+                        ErrorDescription = "none stated",
+                        SampleIndex = 3,
+                        SampleType = "dna",
+                        LaneCount = 4,
+                        LibraryPreparation = new LibraryPreparationDto
+                        {
+                            InputAmount = 100,
+                            LibraryPrepKit = "KitA",
+                            PcrFree = true,
+                            TargetEnrichmentKit = "Enrich",
+                            UmiPresent = false,
+                            IntendedInsertSize = 350,
+                            IntendedReadLength = 150,
+                            Panel = new PanelDto
+                            {
+                                PanelId = "panel-1",
+                                Name = "TSO",
+                                Abbreviation = "T",
+                                Vendor = "Illumina",
+                                CatalogueCode = "TSO500",
+                                Genes = ["BRCA1", "BRCA2"],
+                                TargetRegionsRef = "tso.bed",
+                            },
+                        },
+                        Files =
+                        [
+                            new SequencingFileDto
+                            {
+                                Role = "fastq",
+                                Path = "/r1.fastq.gz",
+                                Format = "fastq.gz",
+                                Lane = 1,
+                                Read = 1,
+                                SizeBytes = 18,
+                                Checksum = null,
+                            },
+                        ],
+                        Analyses =
+                        [
+                            new AnalysisDto
+                            {
+                                AnalysisType = "variant_calling",
+                                PipelineName = "NextGENe",
+                                ReferenceGenome = "GRCh38",
+                                Files =
+                                [
+                                    new SequencingFileDto { Role = "vcf", Path = "s3://data.vcf", Format = "vcf" },
+                                ],
+                                Quality = new QualityMetricsDto { MedianReadDepth = 30.4, ObservedReadLength = 149 },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    };
+
     [Fact]
     public void SamplePreparationSequencingRunAndAnalysisMapEveryField()
     {
-        var dto = new SequencingDto
-        {
-            SamplePreparation = new SamplePreparationDto
-            {
-                SampleprepIdentifier = "PREP",
-                BelongsToMaterial = "MAT",
-                InputAmount = 100,
-                LibraryPreparationKit = "KitA",
-                PcrFree = true,
-                TargetEnrichmentKit = "Enrich",
-                FullSequenceGenes = ["BRCA1", "BRCA2"],
-                PartialSequenceGenes = ["TP53"],
-                UmisPresent = false,
-                IntendedInsertSize = 350,
-                IntendedReadLength = 150,
-                Sequencing = new SequencingRunDto
-                {
-                    SequencingIdentifier = "SEQ",
-                    BelongsToSamplePreparation = "PREP",
-                    SequencingDate = "2021-05-05",
-                    SequencingPlatform = "Illumina",
-                    SequencingInstrumentModel = "NovaSeq",
-                    SequencingMethod = "WGS",
-                    MedianReadDepth = 30,
-                    ObservedReadLength = 149,
-                    ObservedInsertSize = 348,
-                    PercentageQ30 = 95.5,
-                    PercentageTr20 = 98.1,
-                    OtherQualityMetrics = "ok",
-                    Analyses =
-                    [
-                        new AnalysisDto
-                        {
-                            AnalysisIdentifier = "AN",
-                            BelongsToSequencing = "SEQ",
-                            PhysicalDataLocation = "/data",
-                            AbstractDataLocation = "s3://data",
-                            DataFormatsStored = ["bam", "vcf"],
-                            AlgorithmsUsed = ["bwa", "gatk"],
-                            ReferenceGenomeUsed = "GRCh38",
-                            BioinformaticProtocolUsed = "proto",
-                            BioinformaticProtocolDeviation = "dev",
-                            ReasonForBioinformaticProtocolDeviation = "reason",
-                            WgsGuidelineFollowed = "yes",
-                        },
-                    ],
-                },
-            },
-        };
+        var sequencing = SequencingMapper
+            .ToSequencing(FullyPopulatedSequencing(), new SequencingId("PRED1"), new SampleId("S1"))
+            .Value;
 
-        var entry = Assert.Single(SequencingMapper.ToSequencing(dto, new SequencingId("PRED1"), new SampleId("S1")).Value.Entries);
-        var prep = entry.SamplePreparation!;
-        Assert.Equal("PREP", prep.SampleprepIdentifier);
-        Assert.Equal("MAT", prep.BelongsToMaterial);
+        var prep = Assert.Single(sequencing.Preparations);
+        Assert.Equal("sampleprep_p0001_R1", prep.SampleprepIdentifier);
+        Assert.Equal("S1", prep.BelongsToMaterial);
         Assert.Equal(100, prep.InputAmount);
         Assert.Equal("KitA", prep.LibraryPreparationKit);
         Assert.True(prep.PcrFree);
         Assert.Equal("Enrich", prep.TargetEnrichmentKit);
         Assert.Equal(["BRCA1", "BRCA2"], prep.FullSequenceGenes);
-        Assert.Equal(["TP53"], prep.PartialSequenceGenes);
+        Assert.Null(prep.PartialSequenceGenes);   // no source states a partial set
         Assert.False(prep.UmisPresent);
         Assert.Equal(350, prep.IntendedInsertSize);
         Assert.Equal(150, prep.IntendedReadLength);
 
         var run = prep.Sequencing!;
-        Assert.Equal("SEQ", run.SequencingIdentifier);
-        Assert.Equal("PREP", run.BelongsToSamplePreparation);
+        Assert.Equal("p0001_R1", run.SequencingIdentifier);
+        Assert.Equal("sampleprep_p0001_R1", run.BelongsToSamplePreparation);
         Assert.Equal("2021-05-05", run.SequencingDate);
         Assert.Equal("Illumina", run.SequencingPlatform);
         Assert.Equal("NovaSeq", run.SequencingInstrumentModel);
-        Assert.Equal("WGS", run.SequencingMethod);
+        Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
         Assert.Equal(30, run.MedianReadDepth);
         Assert.Equal(149, run.ObservedReadLength);
-        Assert.Equal(348, run.ObservedInsertSize);
+        Assert.Null(run.ObservedInsertSize);      // no source
         Assert.Equal(95.5, run.PercentageQ30);
-        Assert.Equal(98.1, run.PercentageTr20);
-        Assert.Equal("ok", run.OtherQualityMetrics);
+        Assert.Null(run.PercentageTr20);          // no source
+        Assert.Equal(
+            "ClusterPF: 26901812 PercentageClustersPF: 87.1 NumLanes: 4 FlowcellID: FC1 "
+            + "ClusterDensity: 233.3 EstimatedYield: 112.8 CompletionStatus: CompletedAsPlanned "
+            + "ErrorDescription: none stated",
+            run.OtherQualityMetrics);
 
-        var analysis = run.Analysis!;
-        Assert.Equal("AN", analysis.AnalysisIdentifier);
-        Assert.Equal("SEQ", analysis.BelongsToSequencing);
-        Assert.Equal("/data", analysis.PhysicalDataLocation);
-        Assert.Equal("s3://data", analysis.AbstractDataLocation);
-        Assert.Equal(["bam", "vcf"], analysis.DataFormatsStored);
-        Assert.Equal(["bwa", "gatk"], analysis.AlgorithmsUsed);
+        var analysis = Assert.Single(run.Analyses);
+        Assert.Equal("analysis_p0001_R1", analysis.AnalysisIdentifier);
+        Assert.Equal("p0001_R1", analysis.BelongsToSequencing);
+        Assert.Null(analysis.PhysicalDataLocation);   // a deployment constant, not source data
+        Assert.Equal("s3://data.vcf", analysis.AbstractDataLocation);
+        Assert.Equal(["vcf"], analysis.DataFormatsStored);
+        Assert.Null(analysis.AlgorithmsUsed);         // no source
         Assert.Equal("GRCh38", analysis.ReferenceGenomeUsed);
-        Assert.Equal("proto", analysis.BioinformaticProtocolUsed);
-        Assert.Equal("dev", analysis.BioinformaticProtocolDeviation);
-        Assert.Equal("reason", analysis.ReasonForBioinformaticProtocolDeviation);
-        Assert.Equal("yes", analysis.WgsGuidelineFollowed);
+        Assert.Equal("NextGENe", analysis.BioinformaticProtocolUsed);
+        Assert.Null(analysis.BioinformaticProtocolDeviation);
+        Assert.Null(analysis.ReasonForBioinformaticProtocolDeviation);
+        Assert.Null(analysis.WgsGuidelineFollowed);
     }
 
     [Fact]
