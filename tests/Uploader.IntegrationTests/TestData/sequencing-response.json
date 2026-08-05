@@ -1,0 +1,298 @@
+{
+  "predictive_number": "4-21",
+  "samples": [
+    {
+      "sample_id": "p0001",
+      "id_scheme": "mmci_predictive",
+      "runs": [
+        {
+          "run_id": "240102_NB552710_0064_AHG7L",
+          "run_date": "2024-01-02",
+          "platform": "Illumina",
+          "instrument_model": "NextSeq",
+          "instrument_id": "NB552710",
+          "flowcell_id": "AHG7LGBGXV",
+          "assay": null,
+          "workflow": "NextSeq FASTQ Only",
+          "percentage_q30": null,
+          "cluster_count_passing_filter": null,
+          "percentage_clusters_passing_filter": 87.14986,
+          "cluster_density": 233.356873,
+          "estimated_yield": 112.832085,
+          "completion_status": "CompletedAsPlanned",
+          "error_description": null,
+          "sample_index": 3,
+          "sample_type": "dna",
+          "lane_count": 4,
+          "library_preparation": {
+            "input_amount": 100,
+            "library_prep_kit": "TSO500 DNA",
+            "pcr_free": false,
+            "target_enrichment_kit": "TSO500",
+            "umi_present": false,
+            "intended_insert_size": 200,
+            "intended_read_length": 101,
+            "panel": {
+              "panel_id": "trusight-oncology-500-20210101",
+              "name": "TruSight Oncology 500",
+              "abbreviation": "TSO",
+              "vendor": "Illumina",
+              "catalogue_code": "TSO500",
+              "genes": [
+                "ALK",
+                "EGFR"
+              ],
+              "target_regions_ref": "TSO500bedTargetVisible.bed"
+            }
+          },
+          "files": [
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L001_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 1,
+              "read": 1,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L001_R2_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 1,
+              "read": 2,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L002_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 2,
+              "read": 1,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L002_R2_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 2,
+              "read": 2,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L003_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 3,
+              "read": 1,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L003_R2_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 3,
+              "read": 2,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L004_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 4,
+              "read": 1,
+              "size_bytes": 18,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/NextSeq/240102_NB552710_0064_AHG7L/Samples/p0001/FASTQ/p0001_S3_L004_R2_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 4,
+              "read": 2,
+              "size_bytes": 18,
+              "checksum": null
+            }
+          ],
+          "analyses": []
+        },
+        {
+          "run_id": "240104_M02340_0399_LCBRW",
+          "run_date": "2024-01-04",
+          "platform": "Illumina",
+          "instrument_model": "MiSeq",
+          "instrument_id": "M02340",
+          "flowcell_id": "000000000-LCBRW",
+          "assay": "KAPA HyperPlus",
+          "workflow": "GenerateFASTQ",
+          "percentage_q30": 95.9,
+          "cluster_count_passing_filter": 26901812,
+          "percentage_clusters_passing_filter": null,
+          "cluster_density": null,
+          "estimated_yield": null,
+          "completion_status": null,
+          "error_description": null,
+          "sample_index": 7,
+          "sample_type": null,
+          "lane_count": 1,
+          "library_preparation": {
+            "input_amount": 250,
+            "library_prep_kit": "KAPA HyperPlus",
+            "pcr_free": false,
+            "target_enrichment_kit": "KAPA HyperCap",
+            "umi_present": true,
+            "intended_insert_size": 350,
+            "intended_read_length": 151,
+            "panel": {
+              "panel_id": "hypercap-mop-20240101",
+              "name": "HyperCap MOP",
+              "abbreviation": "HC",
+              "vendor": "Roche",
+              "catalogue_code": "MOP2024A",
+              "genes": [
+                "BRCA1",
+                "BRCA2",
+                "TP53"
+              ],
+              "target_regions_ref": "MMCI_MOP_2024a_capture_targets.bed"
+            }
+          },
+          "files": [
+            {
+              "role": "fastq",
+              "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/FASTQ/p0001_S7_L001_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 1,
+              "read": 1,
+              "size_bytes": 21,
+              "checksum": null
+            },
+            {
+              "role": "fastq",
+              "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/FASTQ/p0001_S7_L001_R2_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 1,
+              "read": 2,
+              "size_bytes": 21,
+              "checksum": null
+            }
+          ],
+          "analyses": [
+            {
+              "analysis_type": "variant_calling",
+              "pipeline_name": "NextGENe",
+              "reference_genome": "GRCh37",
+              "files": [
+                {
+                  "role": "coverage_report",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/Reports/p0001_Coverage_Curve_Report1.txt",
+                  "format": "txt",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 48,
+                  "checksum": null
+                },
+                {
+                  "role": "variant_report",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/Reports/p0001_Mutation_Report1.txt",
+                  "format": "txt",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 33,
+                  "checksum": null
+                },
+                {
+                  "role": "vcf",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/Reports/p0001_Mutation_Report1.vcf",
+                  "format": "vcf",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 21,
+                  "checksum": null
+                },
+                {
+                  "role": "vcf_filtered",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/Reports/p0001_Mutation_Report1_Filtered.vcf",
+                  "format": "vcf",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 21,
+                  "checksum": null
+                },
+                {
+                  "role": "summary_report",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/Reports/p0001_SummaryReport.pdf",
+                  "format": "pdf",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 21,
+                  "checksum": null
+                },
+                {
+                  "role": "bam",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/p0001.bam",
+                  "format": "bam",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 22,
+                  "checksum": null
+                },
+                {
+                  "role": "bam_index",
+                  "path": "2024/MiSEQ/complete-runs/240104_M02340_0399_LCBRW/Samples/p0001/Analysis/p0001.bam.bai",
+                  "format": "bam.bai",
+                  "lane": null,
+                  "read": null,
+                  "size_bytes": 18,
+                  "checksum": null
+                }
+              ],
+              "quality": {
+                "median_read_depth": 640.32,
+                "observed_read_length": 151
+              }
+            }
+          ]
+        },
+        {
+          "run_id": "240430_M02340_0412_ABCDE",
+          "run_date": "2024-04-30",
+          "platform": "Illumina",
+          "instrument_model": "MiSeq",
+          "instrument_id": "M02340",
+          "flowcell_id": "000000000-ABCDE",
+          "assay": null,
+          "workflow": "GenerateFASTQ",
+          "percentage_q30": null,
+          "cluster_count_passing_filter": null,
+          "percentage_clusters_passing_filter": null,
+          "cluster_density": null,
+          "estimated_yield": null,
+          "completion_status": null,
+          "error_description": null,
+          "sample_index": 1,
+          "sample_type": null,
+          "lane_count": 1,
+          "library_preparation": null,
+          "files": [
+            {
+              "role": "fastq",
+              "path": "2024/MiSEQ/complete-runs/240430_M02340_0412_ABCDE/Samples/p0001/FASTQ/p0001_S1_L001_R1_001.fastq.gz",
+              "format": "fastq.gz",
+              "lane": 1,
+              "read": 1,
+              "size_bytes": 15,
+              "checksum": null
+            }
+          ],
+          "analyses": []
+        }
+      ]
+    }
+  ]
+}

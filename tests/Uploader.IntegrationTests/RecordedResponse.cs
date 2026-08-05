@@ -4,13 +4,23 @@ using System.Text;
 namespace Uploader.IntegrationTests;
 
 /// <summary>
-/// The recorded <c>GET /patients</c> payload plus the HTTP plumbing to serve it, so tests can drive
-/// the real <c>HttpSourceDataGateway</c> without a biobank service.
+/// A recorded source-API payload plus the HTTP plumbing to serve it, so tests can drive the real
+/// <c>HttpSourceDataGateway</c> without any source service running. Each fixture under
+/// <c>TestData/</c> is a body the corresponding API actually served.
 /// </summary>
-internal static class BiobankResponse
+internal static class RecordedResponse
 {
-    public static string Json() =>
-        File.ReadAllText(Path.Join(AppContext.BaseDirectory, "TestData", "patients-response.json"));
+    /// <summary>The recorded <c>GET /patients</c> body.</summary>
+    public static string Patients() => Json("patients-response.json");
+
+    /// <summary>The recorded <c>GET /sequencing?predictive_number=4-21</c> body.</summary>
+    public static string Sequencing() => Json("sequencing-response.json");
+
+    /// <summary>The recorded body for a predictive number the sequencing API does not know.</summary>
+    public static string EmptySequencing() => Json("sequencing-empty-response.json");
+
+    public static string Json(string fileName) =>
+        File.ReadAllText(Path.Join(AppContext.BaseDirectory, "TestData", fileName));
 
     public static IHttpClientFactory ClientFactory(string json) => new StubHttpClientFactory(json);
 
@@ -21,7 +31,7 @@ internal static class BiobankResponse
         public StubHttpClientFactory(string json) => _json = json;
 
         public HttpClient CreateClient(string name) =>
-            new(new StubHandler(_json)) { BaseAddress = new Uri("http://biobank.test") };
+            new(new StubHandler(_json)) { BaseAddress = new Uri("http://source.test") };
     }
 
     private sealed class StubHandler : HttpMessageHandler
