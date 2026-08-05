@@ -52,7 +52,7 @@ Mirrors biobank_api (host + ingestion handler persisting through the repositorie
 
 ## uploader
 
-EF Core (Npgsql) + typed `HttpClient`s. Domain `PatientAggregate` + `Sample`/sequencing/WSI/radiology value objects and the `*SyncState` types; `FingerprintSyncPlanner` decides CREATE/UPDATE/SKIP/DELETE. CQRS: `RunCatalogueSyncCommand`. Host `Uploader.Host` applies migrations, runs the sync, prints a JSON summary, and exits `0` (no failures) or `1`. Config via env vars (`POSTGRES_*` + the five `*_API_URL`s); see `UploaderOptions`.
+EF Core (Npgsql) + typed `HttpClient`s. Domain `PatientAggregate` + `Sample`/sequencing/WSI/radiology value objects and the `*SyncState` types; `FingerprintSyncPlanner` decides CREATE/UPDATE/SKIP/DELETE. CQRS: `RunCatalogueSyncCommand`. **Each source API serves its own vocabulary and the uploader translates** - one mapper per source in `Application/Mapping/`, over DTOs in `Application/Dtos/` whose property names mirror the source's response records (both sides use `SnakeCaseLower`, so matching names are what makes the wire keys line up; `BiobankContractParityTests` guards that). The biobank's `p_tnm`, `morphology`, counts and the rest have no value-object slot yet and are dropped deliberately - each mapper names what it drops and why - and anything the catalogue's own vocabulary shapes (nullflavors, MOLGENIS lookup strings) waits for the catalogue contract. A patient is uploaded only when `PatientCatalogueData.IsUploadEligible`: consented **and** carrying at least one sample. Host `Uploader.Host` applies migrations, runs the sync, prints a JSON summary, and exits `0` (no failures) or `1`. Config via env vars (`POSTGRES_*` + the five `*_API_URL`s); see `UploaderOptions`.
 
 ## Commands
 

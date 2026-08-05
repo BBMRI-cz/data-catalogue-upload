@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the test projects under tests/ (unit + integration per service) - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the SourceMapper and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper) and the API hosts with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
+description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the test projects under tests/ (unit + integration per service) - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the uploader's source mappers and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper), source contracts against a recorded response, and the API hosts with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
 ---
 
 # Testing (data-catalogue-upload)
@@ -13,8 +13,8 @@ tests/
 ├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
-├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, SourceMapperTests, RunCatalogueSyncHandlerTests
-└── Uploader.IntegrationTests        SyncStateRepositoryTests
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, RunCatalogueSyncHandlerTests
+└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, BiobankFetchTests, BiobankContractParityTests
 ```
 
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
@@ -157,6 +157,22 @@ var client = factory.CreateClient();
 ```
 
 JSON is **snake_case** (`JsonNamingPolicy.SnakeCaseLower`) - match that when deserializing responses in tests.
+
+## Integration tests: a source contract (uploader)
+
+A mapper unit test starts from a DTO that is already built, so it cannot see the failure that matters most
+here: a wire key no DTO property lands on, which turns a whole value object silently empty. `BiobankFetchTests`
+starts from the recorded `GET /patients` body in `tests/Uploader.IntegrationTests/TestData/` instead, drives it
+through the real `HttpSourceDataGateway` (internal, reachable via `InternalsVisibleTo`) with a stub
+`HttpMessageHandler`, and asserts the assembled aggregates. `BiobankContractParityTests` compares the served
+keys against the DTO property names (converted with `JsonNamingPolicy.SnakeCaseLower.ConvertName`) **in both
+directions**, so a rename fails as one missing key plus one orphaned property and an added field fails as a key
+with nowhere to go.
+
+Refresh the fixture from the real API when that test fails - that is the moment to decide what a new field maps
+to. Two things it deliberately does not do: reflect over the source service's response records (that would
+couple the two services' assemblies) and put `[JsonUnmappedMemberHandling(Disallow)]` on the DTOs (type-level,
+so production would throw the first time the source adds a field, when it should log and carry on).
 
 ## CI
 
