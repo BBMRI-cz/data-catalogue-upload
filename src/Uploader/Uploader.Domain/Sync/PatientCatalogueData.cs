@@ -13,6 +13,10 @@ public sealed record PatientCatalogueData
     public IReadOnlyList<WsiAggregate> Wsis { get; init; } = [];
     public IReadOnlyList<ImagingStudyAggregate> ImagingStudies { get; init; } = [];
 
-    /// <summary>A patient is only uploaded to the catalogue when it has at least one sample.</summary>
-    public bool IsUploadEligible => Samples.Count > 0;
+    /// <summary>
+    /// A patient is only uploaded to the catalogue when they consented and have at least one sample.
+    /// The consent half is checked here rather than being left to follow from the biobank refusing to
+    /// attach samples to a non-consenting patient — an upload permission deserves its own test.
+    /// </summary>
+    public bool IsUploadEligible => Patient.HasConsent && Samples.Count > 0;
 }

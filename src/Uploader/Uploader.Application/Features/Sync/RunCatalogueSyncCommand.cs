@@ -214,7 +214,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
-            var sampleResult = SampleMapper.ToSample(rawSample, patient.Id);
+            var sampleResult = SampleMapper.ToSample(rawSample, patient.Id, rawPatient.Biobank);
             if (sampleResult.IsError)
             {
                 return sampleResult.Errors;
@@ -254,7 +254,12 @@ internal sealed class RunCatalogueSyncCommandHandler
             }
         }
 
-        var accessionNumbers = rawPatient.AccessionNumbers ?? [];
+        // Samples carry accession numbers of their own, in the same namespace as the patient's.
+        var accessionNumbers = (rawPatient.AccessionNumbers ?? [])
+            .Concat((rawPatient.Samples ?? []).SelectMany(sample => sample.AccessionNumbers ?? []))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
         var studies = new List<ImagingStudyAggregate>();
         foreach (var studyDto in await _sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
         {
