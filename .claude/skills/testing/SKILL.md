@@ -13,8 +13,8 @@ tests/
 ├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
-├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, RunCatalogueSyncHandlerTests
-└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, BiobankFetchTests, BiobankContractParityTests
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMapperTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
+└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
 ```
 
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
@@ -161,18 +161,26 @@ JSON is **snake_case** (`JsonNamingPolicy.SnakeCaseLower`) - match that when des
 ## Integration tests: a source contract (uploader)
 
 A mapper unit test starts from a DTO that is already built, so it cannot see the failure that matters most
-here: a wire key no DTO property lands on, which turns a whole value object silently empty. `BiobankFetchTests`
-starts from the recorded `GET /patients` body in `tests/Uploader.IntegrationTests/TestData/` instead, drives it
-through the real `HttpSourceDataGateway` (internal, reachable via `InternalsVisibleTo`) with a stub
-`HttpMessageHandler`, and asserts the assembled aggregates. `BiobankContractParityTests` compares the served
-keys against the DTO property names (converted with `JsonNamingPolicy.SnakeCaseLower.ConvertName`) **in both
-directions**, so a rename fails as one missing key plus one orphaned property and an added field fails as a key
-with nowhere to go.
+here: a wire key no DTO property lands on, which turns a whole value object silently empty. **Each source gets
+a pair of tests, one per half of that failure.** `BiobankFetchTests` and `SequencingFetchTests` start from a
+recorded response body instead of a built DTO, drive it through the real `HttpSourceDataGateway` (internal,
+reachable via `InternalsVisibleTo`) with a stub `HttpMessageHandler`, and assert the assembled aggregates.
+`BiobankContractParityTests` and `SequencingContractParityTests` compare the served keys against the DTO
+property names (converted with `JsonNamingPolicy.SnakeCaseLower.ConvertName`) **in both directions** via the
+shared `ContractParity.AssertKeysMatch<T>`, so a rename fails as one missing key plus one orphaned property and
+an added field fails as a key with nowhere to go. A nested response gets one fact per level (root, sample, run,
+library preparation, panel, file, analysis, quality).
 
-Refresh the fixture from the real API when that test fails - that is the moment to decide what a new field maps
-to. Two things it deliberately does not do: reflect over the source service's response records (that would
-couple the two services' assemblies) and put `[JsonUnmappedMemberHandling(Disallow)]` on the DTOs (type-level,
-so production would throw the first time the source adds a field, when it should log and carry on).
+Fixtures live in `tests/Uploader.IntegrationTests/TestData/` and are served by `RecordedResponse`, which owns
+the stub factory as well as one accessor per fixture. They are **recorded, not hand-written**: run the source
+service's own `WebApplicationFactory` over its committed `TestData` tree and dump the body. Refresh from the
+real API when a parity test fails - that is the moment to decide what a new field maps to. Two things these
+deliberately do not do: reflect over the source service's response records (that would couple the two services'
+assemblies) and put `[JsonUnmappedMemberHandling(Disallow)]` on the DTOs (type-level, so production would throw
+the first time the source adds a field, when it should log and carry on).
+
+Reading keys off any element is safe because the source APIs leave `DefaultIgnoreCondition` at `Never` - an
+unset field is written as an explicit null rather than omitted.
 
 ## CI
 
