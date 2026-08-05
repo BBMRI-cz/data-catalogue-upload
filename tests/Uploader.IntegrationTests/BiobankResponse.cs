@@ -10,7 +10,7 @@ namespace Uploader.IntegrationTests;
 internal static class BiobankResponse
 {
     public static string Json() =>
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "patients-response.json"));
+        File.ReadAllText(Path.Join(AppContext.BaseDirectory, "TestData", "patients-response.json"));
 
     public static IHttpClientFactory ClientFactory(string json) => new StubHttpClientFactory(json);
 
