@@ -16,82 +16,104 @@ namespace Uploader.UnitTests;
 /// </summary>
 public sealed class UploaderMapperFieldParityTests
 {
+    /// <summary>A patient the biobank fills in as completely as its export allows.</summary>
+    private static PatientDto FullyPopulatedPatient() => new()
+    {
+        PatientId = "P1",
+        Biobank = "MOU",
+        Consent = true,
+        Sex = "male",
+        BirthYear = 1980,
+        BirthMonth = 4,
+        AccessionNumbers = ["ACC1", "ACC2"],
+        Samples =
+        [
+            new SampleDto
+            {
+                SampleId = "S-T",
+                Type = "tissue",
+                MaterialType = "1",
+                MaterialTypeLabel = "Malignant tumour",
+                EventNumber = 1,
+                CollectionYear = 2020,
+                Biopsy = "2020/2872-1",
+                PredictiveNumber = "2020/1052",
+                SamplesNo = 5,
+                AvailableSamplesNo = 3,
+                AccessionNumbers = ["ACC3"],
+                Diagnosis = "C504",
+                PTnm = "pT1",
+                Morphology = "8500/3",
+                CutTime = new DateTime(2020, 1, 2, 3, 4, 5),
+                FreezeTime = new DateTime(2020, 1, 2, 4, 0, 0),
+                Retrieved = "operational",
+            },
+        ],
+        DiagnosticSpecimens =
+        [
+            new SpecimenDto
+            {
+                SpecimenId = "D-1",
+                SpecimenNumber = 2,
+                Year = 2019,
+                MaterialType = "S",
+                MaterialTypeLabel = "Serum / surgical specimen",
+                Diagnosis = "C777",
+                TakingDate = new DateTime(2019, 3, 4, 5, 6, 7),
+                Retrieved = "unknown",
+            },
+        ],
+    };
+
     [Fact]
     public void PersonalAndClinicalMapEveryField()
     {
-        var patient = PatientMapper.ToPatient(new PatientDto
-        {
-            PatientId = "P1",
-            PersonalIdentifier = "PI",
-            YearOfBirth = 1980,
-            GenderAtBirth = "male",
-            GenderIdentity = "male",
-            ClinicalIdentifier = "CI",
-            BelongsToPerson = "P1",
-            ClinicalDiagnosis = ["C50", "C51"],
-            AgeAtDiagnosis = 40,
-            AgeOfOnset = 38,
-        }).Value;
+        var patient = PatientMapper.ToPatient(FullyPopulatedPatient()).Value;
 
         var personal = patient.Personal!;
-        Assert.Equal("PI", personal.PersonalIdentifier);
+        Assert.Equal("P1", personal.PersonalIdentifier);
         Assert.Equal(1980, personal.YearOfBirth);
         Assert.Equal("male", personal.GenderAtBirth);
-        Assert.Equal("male", personal.GenderIdentity);
+
+        // The biobank records sex, not gender identity.
+        Assert.Null(personal.GenderIdentity);
 
         var clinical = patient.Clinical!;
-        Assert.Equal("CI", clinical.ClinicalIdentifier);
+        Assert.Equal("clinical_P1", clinical.ClinicalIdentifier);
         Assert.Equal("P1", clinical.BelongsToPerson);
-        Assert.Equal(["C50", "C51"], clinical.ClinicalDiagnosis);
-        Assert.Equal(40, clinical.AgeAtDiagnosis);
-        Assert.Equal(38, clinical.AgeOfOnset);
+        Assert.Equal(["C50.4", "C77.7"], clinical.ClinicalDiagnosis);
+        Assert.Equal(39, clinical.AgeAtDiagnosis);
+
+        // Never served: the export has no onset date.
+        Assert.Null(clinical.AgeOfOnset);
     }
 
     [Fact]
     public void MaterialMapsEveryField()
     {
-        var sample = SampleMapper.ToSample(
-            new SampleDto
-            {
-                SampleId = "S1",
-                MaterialIdentifier = "MI",
-                CollectedFromPerson = "P1",
-                BelongsToDiagnosis = ["C50"],
-                SamplingTimestamp = "2020-01-01",
-                RegistrationTimestamp = "2020-01-02",
-                SamplingProtocol = "SP",
-                SamplingProtocolDeviation = "dev",
-                ReasonForSamplingProtocolDeviation = "reason",
-                BiospecimenType = "tissue",
-                AnatomicalSource = "liver",
-                PathologicalState = "tumour",
-                StorageConditions = "-80",
-                ExpirationDate = "2030-01-01",
-                PercentageTumorCells = 12.5,
-                PhysicalLocation = "freezer-1",
-                AnalysesPerformed = ["wgs", "rna"],
-                DerivedFrom = "BLOCK1",
-            },
-            new PatientId("P1")).Value;
+        var dto = FullyPopulatedPatient();
+        var sample = SampleMapper.ToSample(dto.Samples![0], new PatientId("P1"), dto.Biobank).Value;
 
         var m = sample.Material!;
-        Assert.Equal("MI", m.MaterialIdentifier);
+        Assert.Equal("S-T", m.MaterialIdentifier);
         Assert.Equal("P1", m.CollectedFromPerson);
-        Assert.Equal(["C50"], m.BelongsToDiagnosis);
-        Assert.Equal("2020-01-01", m.SamplingTimestamp);
-        Assert.Equal("2020-01-02", m.RegistrationTimestamp);
-        Assert.Equal("SP", m.SamplingProtocol);
-        Assert.Equal("dev", m.SamplingProtocolDeviation);
-        Assert.Equal("reason", m.ReasonForSamplingProtocolDeviation);
-        Assert.Equal("tissue", m.BiospecimenType);
-        Assert.Equal("liver", m.AnatomicalSource);
-        Assert.Equal("tumour", m.PathologicalState);
-        Assert.Equal("-80", m.StorageConditions);
-        Assert.Equal("2030-01-01", m.ExpirationDate);
-        Assert.Equal(12.5, m.PercentageTumorCells);
-        Assert.Equal("freezer-1", m.PhysicalLocation);
-        Assert.Equal(["wgs", "rna"], m.AnalysesPerformed);
-        Assert.Equal("BLOCK1", m.DerivedFrom);
+        Assert.Equal(["clinical_P1"], m.BelongsToDiagnosis);
+        Assert.Equal("2020-01-02T03:04:05", m.SamplingTimestamp);
+        Assert.Equal("2020-01-02T04:00:00", m.RegistrationTimestamp);
+        Assert.Equal("1", m.BiospecimenType);
+        Assert.Equal("MOU", m.PhysicalLocation);
+
+        // Not served by the biobank; filling these is the catalogue mapping's job (#24).
+        Assert.Null(m.SamplingProtocol);
+        Assert.Null(m.SamplingProtocolDeviation);
+        Assert.Null(m.ReasonForSamplingProtocolDeviation);
+        Assert.Null(m.AnatomicalSource);
+        Assert.Null(m.PathologicalState);
+        Assert.Null(m.StorageConditions);
+        Assert.Null(m.ExpirationDate);
+        Assert.Null(m.PercentageTumorCells);
+        Assert.Null(m.AnalysesPerformed);
+        Assert.Null(m.DerivedFrom);
     }
 
     [Fact]
