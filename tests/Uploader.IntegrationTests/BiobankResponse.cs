@@ -30,6 +30,9 @@ internal static class BiobankResponse
 
         public StubHandler(string json) => _json = json;
 
+        // The response is owned by whoever sent the request, as with any handler: HttpClient hands it
+        // to the caller, and HttpSourceDataGateway disposes it. Disposing it here would close the
+        // content before it could be read.
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
