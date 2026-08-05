@@ -24,8 +24,13 @@ public sealed class RunCatalogueSyncHandlerTests
             TimeProvider.System,
             NullLogger<RunCatalogueSyncCommandHandler>.Instance);
 
-    private static PatientDto PatientWithSample(string patientId, string sampleId) =>
-        new() { PatientId = patientId, Samples = [new SampleDto { SampleId = sampleId }] };
+    private static PatientDto PatientWithSample(string patientId, string sampleId, bool consent = true) =>
+        new()
+        {
+            PatientId = patientId,
+            Consent = consent,
+            Samples = [new SampleDto { SampleId = sampleId }],
+        };
 
     [Fact]
     public async Task UploadsNewPatientAndSample()
@@ -68,11 +73,38 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal("sample failed", state.Samples["S1"].LastError);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)]
+    public async Task PatientWithoutConsentIsNeverUploaded(bool? consent)
+    {
+        // Sample and all: without a recorded "yes" nothing about this patient reaches the catalogue.
+        var patient = new PatientDto
+        {
+            PatientId = "P1",
+            Consent = consent,
+            Samples = [new SampleDto { SampleId = "S1" }],
+        };
+        var catalogue = new FakeCatalogueGateway();
+
+        var result = await CreateHandler(
+                new FakeSourceDataGateway([patient]),
+                catalogue,
+                new InMemorySyncStateRepository(),
+                new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Empty(catalogue.Upserts);
+        Assert.Equal(1, result.Value.Scanned);
+        Assert.Equal(0, result.Value.Uploaded);
+        Assert.Equal(0, result.Value.Failed);
+    }
+
     [Fact]
     public async Task SkipsMalformedPatientWithoutCrashing()
     {
         // A blank patient id can't form a PatientId; the patient is failed, not fatal.
-        var source = new FakeSourceDataGateway([new PatientDto { PatientId = "", Samples = [new SampleDto { SampleId = "S1" }] }]);
+        var source = new FakeSourceDataGateway([new PatientDto { PatientId = "", Consent = true, Samples = [new SampleDto { SampleId = "S1" }] }]);
         var catalogue = new FakeCatalogueGateway();
 
         var result = await CreateHandler(source, catalogue, new InMemorySyncStateRepository(), new FakeSyncRunRepository())

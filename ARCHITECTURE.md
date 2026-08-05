@@ -57,7 +57,7 @@ flowchart TD
 
     subgraph application [Application - CQRS]
         SyncService["RunCatalogueSyncCommandHandler"]
-        Mapper["SourceMapper (hand-written: DTO -> domain)"]
+        Mapper["Mapping/ (hand-written: source DTO -> domain)"]
         Ports["Abstractions (port interfaces)"]
     end
 
@@ -87,7 +87,7 @@ flowchart TD
 | Layer | Path | Responsibility |
 |-------|------|----------------|
 | Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object each aggregate uses for its `ComputeFingerprint()`. No I/O, no framework dependencies. |
-| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written `SourceMapper` (`Mapping/`, DTO -> domain), and the port interfaces in `Abstractions/`. |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. |
 | Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
 The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
@@ -120,13 +120,13 @@ flowchart TD
 ```
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
-2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number`), and radiology (by `accession_numbers`).
+2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number` - the biobank serves none, so this stays empty until #31), and radiology (by `accession_numbers`, patient-level and sample-level combined). The biobank serves its own vocabulary; translating it is the uploader's job, and the values it cannot place yet are carried raw until the catalogue contract fixes them.
 3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
 4. **Execute** the plan against the catalogue API (upsert or delete per entity).
 5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB subtree.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
-Upload eligibility: a patient is only uploaded if it has at least one sample (`PatientAggregate.IsUploadEligible()`).
+Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient; it is permission, not content, so it stays out of the fingerprint.
 
 ## Sync state machine
 

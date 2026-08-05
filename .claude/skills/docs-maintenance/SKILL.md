@@ -40,7 +40,8 @@ Cross-check each item against the live code/config:
    `dotnet-tools.json`, and a doc must not describe a package the code doesn't reference. (FluentValidation
    is referenced now - it backs the application-level `ValidationBehavior` - so it is no longer a dead claim.)
 6. **Type & service names.** Domain services, aggregates, ports, and helpers named in docs/skills must exist
-   (`FingerprintSyncPlanner`, `Fingerprint.Of`/`ComputeFingerprint()`, `SourceMapper`, `XmlValueReader`,
+   (`FingerprintSyncPlanner`, `Fingerprint.Of`/`ComputeFingerprint()`, the uploader's per-source mappers
+   in `Mapping/` (there is no single `SourceMapper` any more), `XmlValueReader`,
    the `I*Gateway`/`I*Repository` ports). The biobank has no domain "cleaning service"; the uploader has no
    "FingerprintCalculator" - don't reintroduce names that aren't in the code.
 7. **No Python residue.** No `pytest`, `mypy`, `ruff`, `uv`, `dataclass`, `Protocol`, `apps/`, `alembic`,

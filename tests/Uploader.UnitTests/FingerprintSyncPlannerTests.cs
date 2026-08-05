@@ -10,8 +10,12 @@ public sealed class FingerprintSyncPlannerTests
 {
     private readonly FingerprintSyncPlanner _planner = new();
 
-    private static PatientAggregate Patient(string id, Personal? personal = null, Clinical? clinical = null) =>
-        PatientAggregate.Create(id, personal, clinical).Value;
+    private static PatientAggregate Patient(
+        string id,
+        Personal? personal = null,
+        Clinical? clinical = null,
+        bool hasConsent = true) =>
+        PatientAggregate.Create(id, personal, clinical, hasConsent).Value;
 
     private static SampleAggregate Sample(string id, string patientId, string? sequencing = null, string? wsi = null) =>
         SampleAggregate.Create(
@@ -43,6 +47,20 @@ public sealed class FingerprintSyncPlannerTests
 
         var ops = _planner.Plan(data, PatientSyncStates.Empty());
 
+        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(ops));
+        Assert.Equal(SyncOp.Skip, patientOp.Op);
+    }
+
+    [Fact]
+    public void PatientWithoutConsentIsSkippedEvenWithSamples()
+    {
+        var data = Data(
+            Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
+            Sample("S1", "P1"));
+
+        var ops = _planner.Plan(data, PatientSyncStates.Empty());
+
+        // The sample is not planned at all, and the patient itself is never uploaded.
         var patientOp = Assert.IsType<PatientOperation>(Assert.Single(ops));
         Assert.Equal(SyncOp.Skip, patientOp.Op);
     }

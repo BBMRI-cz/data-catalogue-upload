@@ -130,7 +130,7 @@ child collection gets rows with an explicit `Position` column (`run_read`), neve
 lives in a serialized string is order a query cannot restore. JSON columns are reserved for **scalar** lists
 (`patient.AccessionNumbers`, `panel.Genes`), stored via a `ValueConverter` + `ValueComparer` pair.
 
-**Mapping is hand-written.** DTO -> domain (uploader `SourceMapper`) and domain <-> EF entity
+**Mapping is hand-written.** DTO -> domain (uploader `Mapping/`, one mapper per source) and domain <-> EF entity
 (`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field
 copies. There is no source generator, so a dropped or mis-sourced field is **not** a compile error: keep the
 public mapper signatures stable and cover every field with a round-trip / record-equality test (see the

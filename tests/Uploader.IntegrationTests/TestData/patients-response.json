@@ -1,0 +1,96 @@
+[
+  {
+    "patient_id": "P1",
+    "biobank": "BBM",
+    "consent": true,
+    "sex": "male",
+    "birth_year": 1980,
+    "birth_month": 4,
+    "accession_numbers": ["ACC1", "ACC2"],
+    "samples": [
+      {
+        "sample_id": "S-T",
+        "type": "tissue",
+        "material_type": "1",
+        "material_type_label": "Malignant tumour",
+        "event_number": 1,
+        "collection_year": 2020,
+        "biopsy": "2020/2872-1",
+        "predictive_number": "2020/1052",
+        "samples_no": 5,
+        "available_samples_no": 3,
+        "accession_numbers": ["ACC3"],
+        "diagnosis": "C504",
+        "p_tnm": "pT1",
+        "morphology": "8500/3",
+        "cut_time": "2020-01-02T03:04:05",
+        "freeze_time": "2020-01-02T04:00:00",
+        "taking_date": null,
+        "retrieved": "operational"
+      },
+      {
+        "sample_id": "S-S",
+        "type": "serum",
+        "material_type": "SD",
+        "material_type_label": "Serum, nitrogen-stored",
+        "event_number": null,
+        "collection_year": null,
+        "biopsy": null,
+        "predictive_number": null,
+        "samples_no": null,
+        "available_samples_no": null,
+        "accession_numbers": [],
+        "diagnosis": "C504",
+        "p_tnm": null,
+        "morphology": null,
+        "cut_time": null,
+        "freeze_time": null,
+        "taking_date": "2021-05-06T07:08:09",
+        "retrieved": "operational"
+      },
+      {
+        "sample_id": "S-G",
+        "type": "genome",
+        "material_type": "gD",
+        "material_type_label": "Extracted genomic DNA",
+        "event_number": null,
+        "collection_year": null,
+        "biopsy": null,
+        "predictive_number": null,
+        "samples_no": null,
+        "available_samples_no": null,
+        "accession_numbers": [],
+        "diagnosis": null,
+        "p_tnm": null,
+        "morphology": null,
+        "cut_time": null,
+        "freeze_time": null,
+        "taking_date": "2022-06-07T08:09:10",
+        "retrieved": "unknown"
+      }
+    ],
+    "diagnostic_specimens": [
+      {
+        "specimen_id": "D-1",
+        "specimen_number": 2,
+        "year": 2019,
+        "material_type": "S",
+        "material_type_label": "Serum / surgical specimen",
+        "diagnosis": "C777",
+        "taking_date": "2019-03-04T05:06:07",
+        "retrieved": "unknown"
+      }
+    ]
+  },
+  {
+    "patient_id": "P2",
+    "biobank": "BBM",
+    "consent": false,
+    "sex": "female",
+    "birth_year": 1975,
+    "birth_month": null,
+    "accession_numbers": [],
+    "samples": [],
+    "diagnostic_specimens": []
+  }
+]
