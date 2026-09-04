@@ -87,10 +87,10 @@ flowchart TD
 | Layer | Path | Responsibility |
 |-------|------|----------------|
 | Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object each aggregate uses for its `ComputeFingerprint()`. No I/O, no framework dependencies. |
-| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. Outbound, `CatalogueMapper` turns aggregates into the FAIR Genomes records under `Dtos/Catalogue/`, substituting a pseudonym for every real identifier - see [`docs/pseudonymization.md`](docs/pseudonymization.md). |
 | Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
-The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
+The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`, `IPseudonymMap`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
 
 ## Sync flow
 

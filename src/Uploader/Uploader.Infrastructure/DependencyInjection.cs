@@ -6,6 +6,7 @@ using Uploader.Application.Abstractions;
 using Uploader.Infrastructure.Configuration;
 using Uploader.Infrastructure.Http;
 using Uploader.Infrastructure.Persistence;
+using Uploader.Infrastructure.Pseudonymization;
 
 namespace Uploader.Infrastructure;
 
@@ -23,6 +24,13 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
 
         services.AddDbContext<UploaderDbContext>(db => db.UseNpgsql(options.ConnectionString));
+
+        // Scoped, like the repositories: it writes newly minted pseudonyms through the same
+        // DbContext the rest of the run uses.
+        services.AddScoped<IPseudonymMap>(provider => new PseudonymStore(
+            provider.GetRequiredService<UploaderDbContext>(),
+            provider.GetRequiredService<TimeProvider>(),
+            options.PseudonymPrefix));
 
         services.AddScoped<ISyncStateRepository, SyncStateRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();

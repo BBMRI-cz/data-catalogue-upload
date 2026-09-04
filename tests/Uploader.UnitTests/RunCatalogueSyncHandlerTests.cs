@@ -21,6 +21,7 @@ public sealed class RunCatalogueSyncHandlerTests
             state,
             runs,
             new FingerprintSyncPlanner(),
+            new FakePseudonymMap(),
             TimeProvider.System,
             NullLogger<RunCatalogueSyncCommandHandler>.Instance);
 
@@ -49,7 +50,7 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(2, summary.Uploaded);
         Assert.Equal(0, summary.Failed);
         Assert.Equal(0, summary.Deleted);
-        Assert.Equal(["patient:P1", "sample:S1"], catalogue.Upserts);
+        Assert.Equal(["patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
         Assert.Equal(SyncStatus.Synced, state.Patients["P1"].Status);
         Assert.Equal(SyncStatus.Synced, state.Samples["S1"].Status);
         Assert.Same(summary, runs.Finished);
@@ -161,7 +162,9 @@ public sealed class RunCatalogueSyncHandlerTests
             new RunCatalogueSyncCommand(), CancellationToken.None);
 
         // Patient, sample and now the sequencing the sample points at.
-        Assert.Equal(["patient:P1", "sample:S1", "sequencing:S1"], catalogue.Upserts);
+        Assert.Equal(
+            ["patient:mmci_patient_P1", "sample:mmci_sample_S1", "sequencing:mmci_sample_S1"],
+            catalogue.Upserts);
         Assert.Equal(0, result.Value.Failed);
         Assert.Equal(SyncStatus.Synced, state.Sequencing["PRED1"].Status);
     }
@@ -180,7 +183,7 @@ public sealed class RunCatalogueSyncHandlerTests
             new RunCatalogueSyncCommand(), CancellationToken.None);
 
         // No sequencing record and no failure: an empty answer is a normal one.
-        Assert.Equal(["patient:P1", "sample:S1"], catalogue.Upserts);
+        Assert.Equal(["patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
         Assert.Equal(0, result.Value.Failed);
         Assert.Empty(state.Sequencing);
     }
