@@ -46,7 +46,9 @@ For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 against `sequencing-db`, set `POSTGRES_PORT=5434`.
 
 **uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
-`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`.
+`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`,
+and `PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader
+mints. See [`docs/pseudonymization.md`](docs/pseudonymization.md).
 
 ## Migrations (EF Core)
 
