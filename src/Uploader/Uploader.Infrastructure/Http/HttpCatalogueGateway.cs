@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using ErrorOr;
 using Uploader.Application.Abstractions;
+using Uploader.Application.Dtos;
 using Uploader.Domain;
 
 namespace Uploader.Infrastructure.Http;
@@ -17,45 +18,31 @@ internal sealed class HttpCatalogueGateway : ICatalogueGateway
 
     public HttpCatalogueGateway(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
 
-    private static readonly JsonSerializerOptions PayloadOptions = new()
+    /// <summary>
+    /// Internal so the leak test can serialize a payload exactly as the wire would see it, rather
+    /// than against a copy of these settings that could drift.
+    /// </summary>
+    internal static readonly JsonSerializerOptions PayloadOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
         Converters = { new StronglyTypedIdJsonConverterFactory() },
     };
 
-    public Task<ErrorOr<string>> UpsertPatientAsync(PatientAggregate patient, CancellationToken cancellationToken) =>
-        PostAsync(
-            "/patients/upsert",
-            new { external_id = patient.Id.Value, personal = patient.Personal, clinical = patient.Clinical },
-            patient.Id.Value,
-            cancellationToken);
+    public Task<ErrorOr<string>> UpsertPatientAsync(
+        CataloguePatientPayload payload,
+        CancellationToken cancellationToken) =>
+        PostAsync("/patients/upsert", payload, payload.ExternalId, cancellationToken);
 
-    public Task<ErrorOr<string>> UpsertSampleAsync(SampleAggregate sample, CancellationToken cancellationToken) =>
-        PostAsync(
-            "/samples/upsert",
-            new
-            {
-                external_id = sample.Id.Value,
-                patient_id = sample.PatientId.Value,
-                predictive_number = sample.SequencingId?.Value,
-                bioptic_number = sample.WsiId?.Value,
-                material = sample.Material,
-            },
-            sample.Id.Value,
-            cancellationToken);
+    public Task<ErrorOr<string>> UpsertSampleAsync(
+        CatalogueSamplePayload payload,
+        CancellationToken cancellationToken) =>
+        PostAsync("/samples/upsert", payload, payload.ExternalId, cancellationToken);
 
-    public Task<ErrorOr<string>> UpsertSequencingAsync(SequencingAggregate sequencing, CancellationToken cancellationToken) =>
-        PostAsync(
-            "/sequencing/upsert",
-            new
-            {
-                external_id = sequencing.Id.Value,
-                sample_id = sequencing.SampleId.Value,
-                sample_preparations = sequencing.Preparations,
-            },
-            sequencing.Id.Value,
-            cancellationToken);
+    public Task<ErrorOr<string>> UpsertSequencingAsync(
+        CatalogueSequencingPayload payload,
+        CancellationToken cancellationToken) =>
+        PostAsync("/sequencing/upsert", payload, payload.ExternalId, cancellationToken);
 
     public Task<ErrorOr<string>> UpsertWsiAsync(WsiAggregate wsi, CancellationToken cancellationToken) =>
         PostAsync(
