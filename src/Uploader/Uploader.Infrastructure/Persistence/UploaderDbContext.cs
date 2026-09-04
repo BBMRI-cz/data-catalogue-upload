@@ -16,6 +16,7 @@ public sealed class UploaderDbContext : DbContext
     public DbSet<SequencingSyncStateEntity> SequencingSyncStates => Set<SequencingSyncStateEntity>();
     public DbSet<WsiSyncStateEntity> WsiSyncStates => Set<WsiSyncStateEntity>();
     public DbSet<ImagingStudySyncStateEntity> ImagingStudySyncStates => Set<ImagingStudySyncStateEntity>();
+    public DbSet<PseudonymEntity> Pseudonyms => Set<PseudonymEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +79,16 @@ public sealed class UploaderDbContext : DbContext
             builder.ToTable("imaging_study_sync_state");
             builder.HasKey(state => state.Id);
             ConfigureCommon(builder);
+        });
+
+        modelBuilder.Entity<PseudonymEntity>(builder =>
+        {
+            builder.ToTable("pseudonym");
+            builder.HasKey(pseudonym => new { pseudonym.Kind, pseudonym.RealId });
+
+            // Two real ids sharing a pseudonym would merge two people in the catalogue, so the
+            // database refuses it rather than trusting the generator never to repeat.
+            builder.HasIndex(pseudonym => new { pseudonym.Kind, pseudonym.Pseudonym }).IsUnique();
         });
     }
 
