@@ -37,22 +37,30 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
     public List<string> Deletes { get; } = [];
     public HashSet<string> FailUpsertTypes { get; } = [];
 
-    public Task<ErrorOr<string>> UpsertPatientAsync(PatientAggregate patient, CancellationToken ct)
+    /// <summary>The payloads as they went out, so a test can assert on what the catalogue would see.</summary>
+    public List<CataloguePatientPayload> PatientPayloads { get; } = [];
+    public List<CatalogueSamplePayload> SamplePayloads { get; } = [];
+    public List<CatalogueSequencingPayload> SequencingPayloads { get; } = [];
+
+    public Task<ErrorOr<string>> UpsertPatientAsync(CataloguePatientPayload payload, CancellationToken ct)
     {
-        Upserts.Add($"patient:{patient.Id.Value}");
-        return Upsert("patient", patient.Id.Value);
+        PatientPayloads.Add(payload);
+        Upserts.Add($"patient:{payload.ExternalId}");
+        return Upsert("patient", payload.ExternalId);
     }
 
-    public Task<ErrorOr<string>> UpsertSampleAsync(SampleAggregate sample, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertSampleAsync(CatalogueSamplePayload payload, CancellationToken ct)
     {
-        Upserts.Add($"sample:{sample.Id.Value}");
-        return Upsert("sample", sample.Id.Value);
+        SamplePayloads.Add(payload);
+        Upserts.Add($"sample:{payload.ExternalId}");
+        return Upsert("sample", payload.ExternalId);
     }
 
-    public Task<ErrorOr<string>> UpsertSequencingAsync(SequencingAggregate sequencing, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertSequencingAsync(CatalogueSequencingPayload payload, CancellationToken ct)
     {
-        Upserts.Add($"sequencing:{sequencing.SampleId.Value}");
-        return Upsert("sequencing", sequencing.SampleId.Value);
+        SequencingPayloads.Add(payload);
+        Upserts.Add($"sequencing:{payload.SampleId}");
+        return Upsert("sequencing", payload.SampleId);
     }
 
     public Task<ErrorOr<string>> UpsertWsiAsync(WsiAggregate wsi, CancellationToken ct)
@@ -165,5 +173,21 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
     {
         Finished = result;
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Pseudonymizes by prefixing, so a test can predict the value and still tell it from the real id.
+/// Mirrors the real store's <c>&lt;prefix&gt;_&lt;kind&gt;_&lt;id&gt;</c> shape, minus the uuid.
+/// </summary>
+internal sealed class FakePseudonymMap : IPseudonymMap
+{
+    public List<string> Resolved { get; } = [];
+
+    public Task<string> PseudonymizeAsync(PseudonymKind kind, string realId, CancellationToken cancellationToken)
+    {
+        var kindName = kind.ToString().ToLowerInvariant();
+        Resolved.Add($"{kindName}:{realId}");
+        return Task.FromResult($"mmci_{kindName}_{realId}");
     }
 }

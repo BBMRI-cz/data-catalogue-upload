@@ -39,6 +39,7 @@ internal sealed class RunCatalogueSyncCommandHandler
     private readonly ISyncStateRepository _stateRepository;
     private readonly ISyncRunRepository _runRepository;
     private readonly ISyncPlanner _planner;
+    private readonly IPseudonymMap _pseudonyms;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RunCatalogueSyncCommandHandler> _logger;
 
@@ -48,6 +49,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         ISyncStateRepository stateRepository,
         ISyncRunRepository runRepository,
         ISyncPlanner planner,
+        IPseudonymMap pseudonyms,
         TimeProvider timeProvider,
         ILogger<RunCatalogueSyncCommandHandler> logger)
     {
@@ -56,6 +58,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         _stateRepository = stateRepository;
         _runRepository = runRepository;
         _planner = planner;
+        _pseudonyms = pseudonyms;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -99,10 +102,14 @@ internal sealed class RunCatalogueSyncCommandHandler
             var data = built.Value;
             seenPatientIds.Add(data.Patient.Id);
 
+            // Resolved once per patient, before anything is planned: every payload built below
+            // publishes these in place of the real ids, while the sync state keeps the real ones.
+            var pseudonyms = await ResolvePseudonymsAsync(data, cancellationToken);
+
             var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
             foreach (var operation in _planner.Plan(data, existing))
             {
-                await ExecuteAsync(operation, runId, result, cancellationToken);
+                await ExecuteAsync(operation, pseudonyms, runId, result, cancellationToken);
             }
         }
 
@@ -111,8 +118,26 @@ internal sealed class RunCatalogueSyncCommandHandler
         return result;
     }
 
+    private async Task<PatientPseudonyms> ResolvePseudonymsAsync(
+        PatientCatalogueData data,
+        CancellationToken cancellationToken)
+    {
+        var patient = await _pseudonyms.PseudonymizeAsync(
+            PseudonymKind.Patient, data.Patient.Id.Value, cancellationToken);
+
+        var samples = new Dictionary<SampleId, string>();
+        foreach (var sample in data.Samples)
+        {
+            samples[sample.Id] = await _pseudonyms.PseudonymizeAsync(
+                PseudonymKind.Sample, sample.Id.Value, cancellationToken);
+        }
+
+        return new PatientPseudonyms(patient, samples);
+    }
+
     private async Task ExecuteAsync(
         SyncOperation operation,
+        PatientPseudonyms pseudonyms,
         string runId,
         RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
@@ -135,7 +160,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         result.Changed++;
-        var upserted = await UpsertAsync(operation, cancellationToken);
+        var upserted = await UpsertAsync(operation, pseudonyms, cancellationToken);
         if (!upserted.IsError)
         {
             operation.State.CatalogueRemoteId = upserted.Value;
@@ -154,16 +179,29 @@ internal sealed class RunCatalogueSyncCommandHandler
         await _stateRepository.SaveAsync(operation.State, cancellationToken);
     }
 
-    private Task<ErrorOr<string>> UpsertAsync(SyncOperation operation, CancellationToken cancellationToken) =>
+    private Task<ErrorOr<string>> UpsertAsync(
+        SyncOperation operation,
+        PatientPseudonyms pseudonyms,
+        CancellationToken cancellationToken) =>
         operation switch
         {
-            PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(patient, cancellationToken),
-            SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(sample, cancellationToken),
-            SequencingOperation { Sequencing: { } sequencing } =>
-                _catalogueGateway.UpsertSequencingAsync(sequencing, cancellationToken),
-            WsiOperation { Wsi: { } wsi } => _catalogueGateway.UpsertWsiAsync(wsi, cancellationToken),
-            ImagingStudyOperation { ImagingStudy: { } study } =>
-                _catalogueGateway.UpsertImagingStudyAsync(study, cancellationToken),
+            PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(
+                CatalogueMapper.ToPayload(patient, pseudonyms.Patient), cancellationToken),
+
+            SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(
+                CatalogueMapper.ToPayload(sample, pseudonyms.Sample(sample.Id), pseudonyms.Patient),
+                cancellationToken),
+
+            SequencingOperation { Sequencing: { } sequencing } => _catalogueGateway.UpsertSequencingAsync(
+                CatalogueMapper.ToPayload(sequencing, pseudonyms.Sample(sequencing.SampleId)), cancellationToken),
+
+            // No WSI or radiology source is wired yet, so neither of these can carry data today. If
+            // one ever answers, its identifiers are still the real bioptic and accession numbers and
+            // there is no FAIR mapping for them - so the run reports a failure rather than publishing
+            // them. Turning that back on means giving them payloads, as the three above have.
+            WsiOperation or ImagingStudyOperation => Task.FromResult<ErrorOr<string>>(Error.Failure(
+                "Catalogue.NotPseudonymized",
+                $"{operation.GetType().Name} carries identifiers that are not pseudonymized yet; refusing to upload.")),
 
             // Unreachable: Skip/Delete are handled before this, and create/update operations always
             // carry their aggregate. Reaching here is a programmer error, not bad source data.
@@ -284,4 +322,19 @@ internal sealed class RunCatalogueSyncCommandHandler
             ImagingStudies = studies,
         };
     }
+}
+
+/// <summary>
+/// The pseudonyms published for one patient's subtree, resolved once before its operations run. The
+/// aggregates keep their real identifiers; only what crosses to the catalogue is substituted.
+/// </summary>
+internal sealed record PatientPseudonyms(string Patient, IReadOnlyDictionary<SampleId, string> Samples)
+{
+    /// <summary>
+    /// Every sample in the patient's data is resolved up front, and sequencing hangs off one of
+    /// those samples, so a miss here is a programmer error rather than absent source data.
+    /// </summary>
+    public string Sample(SampleId id) => Samples.TryGetValue(id, out var pseudonym)
+        ? pseudonym
+        : throw new InvalidOperationException($"No pseudonym resolved for sample {id.Value}.");
 }

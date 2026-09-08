@@ -21,6 +21,13 @@ public sealed class UploaderOptions
     public string WsiApiUrl { get; init; } = "http://localhost:8004";
     public string CatalogueApiUrl { get; init; } = "http://localhost:8000";
 
+    /// <summary>
+    /// Biobank prefix on every pseudonym this uploader mints, as <c>&lt;prefix&gt;_&lt;kind&gt;_&lt;uuid&gt;</c>.
+    /// Matches what the pseudonymizer already produces for MMCI; a second biobank is a second
+    /// deployment with a different value.
+    /// </summary>
+    public string PseudonymPrefix { get; init; } = "mmci";
+
     public string ConnectionString =>
         $"Host={PostgresHost};Port={PostgresPort};Database={PostgresDb};Username={PostgresUser};Password={PostgresPassword}";
 
@@ -39,6 +46,7 @@ public sealed class UploaderOptions
             SequencingApiUrl = configuration["SEQUENCING_API_URL"] ?? defaults.SequencingApiUrl,
             WsiApiUrl = configuration["WSI_API_URL"] ?? defaults.WsiApiUrl,
             CatalogueApiUrl = configuration["CATALOGUE_API_URL"] ?? defaults.CatalogueApiUrl,
+            PseudonymPrefix = configuration["PSEUDONYM_PREFIX"] ?? defaults.PseudonymPrefix,
         };
     }
 

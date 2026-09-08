@@ -1,38 +1,5 @@
 namespace Uploader.Application.Dtos;
 
-/// <summary>
-/// Raw WSI payload for one bioptic number. The fixed block is carried at the root (block
-/// attributes plus its slide-container chain).
-/// </summary>
-public sealed record WsiDto
-{
-    public string? BlockIdentifier { get; init; }
-    public string? SourceMaterial { get; init; }
-    public string? NameOfFixative { get; init; }
-    public string? EmbeddingMedium { get; init; }
-    public SlideContainerDto? SlideContainer { get; init; }
-}
-
-public sealed record SlideContainerDto
-{
-    public string? SlideContainerIdentifier { get; init; }
-    public string? SourceFixedBlock { get; init; }
-    public string? ContainerType { get; init; }
-    public int? SectionThickness { get; init; }
-    public IReadOnlyList<string>? CellType { get; init; }
-    public IReadOnlyList<string>? TissueType { get; init; }
-    public SlidePreparationAssayDto? SlidePreparationAssay { get; init; }
-}
-
-public sealed record SlidePreparationAssayDto
-{
-    public string? AssayIdentifier { get; init; }
-    public string? HasInputSlideContainer { get; init; }
-    public string? StainingMethod { get; init; }
-    public string? AssayType { get; init; }
-    public WholeSlideImagingDto? WholeSlideImaging { get; init; }
-}
-
 public sealed record WholeSlideImagingDto
 {
     public string? WsiIdentifier { get; init; }
