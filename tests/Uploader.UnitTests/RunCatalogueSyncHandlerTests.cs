@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Uploader.Application.Abstractions;
 using Uploader.Application.Features.Sync;
 using Uploader.Application.Dtos;
 using Uploader.Domain.Common;
@@ -22,6 +23,7 @@ public sealed class RunCatalogueSyncHandlerTests
             runs,
             new FingerprintSyncPlanner(),
             new FakePseudonymMap(),
+            new CatalogueStudy("study_1", "Test Study"),
             TimeProvider.System,
             NullLogger<RunCatalogueSyncCommandHandler>.Instance);
 
@@ -50,7 +52,7 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(2, summary.Uploaded);
         Assert.Equal(0, summary.Failed);
         Assert.Equal(0, summary.Deleted);
-        Assert.Equal(["patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
+        Assert.Equal(["study:study_1", "patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
         Assert.Equal(SyncStatus.Synced, state.Patients["P1"].Status);
         Assert.Equal(SyncStatus.Synced, state.Samples["S1"].Status);
         Assert.Same(summary, runs.Finished);
@@ -95,7 +97,8 @@ public sealed class RunCatalogueSyncHandlerTests
                 new FakeSyncRunRepository())
             .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
 
-        Assert.Empty(catalogue.Upserts);
+        // The study is upserted once per run, before any patient can reference it.
+        Assert.Equal(["study:study_1"], catalogue.Upserts);
         Assert.Equal(1, result.Value.Scanned);
         Assert.Equal(0, result.Value.Uploaded);
         Assert.Equal(0, result.Value.Failed);
@@ -113,7 +116,8 @@ public sealed class RunCatalogueSyncHandlerTests
 
         Assert.Equal(1, result.Value.Scanned);
         Assert.Equal(1, result.Value.Failed);
-        Assert.Empty(catalogue.Upserts);
+        // The study is upserted once per run, before any patient can reference it.
+        Assert.Equal(["study:study_1"], catalogue.Upserts);
     }
 
     [Fact]
@@ -133,7 +137,8 @@ public sealed class RunCatalogueSyncHandlerTests
         var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
             new RunCatalogueSyncCommand(), CancellationToken.None);
 
-        Assert.Contains("patient:GONE", catalogue.Deletes);
+        // The catalogue only ever saw the pseudonym, so that is the key the delete has to use.
+        Assert.Contains("patient:mmci_patient_GONE", catalogue.Deletes);
         Assert.True(state.Patients["GONE"].IsDeleted);
         Assert.True(result.Value.Deleted >= 1);
     }
@@ -163,7 +168,7 @@ public sealed class RunCatalogueSyncHandlerTests
 
         // Patient, sample and now the sequencing the sample points at.
         Assert.Equal(
-            ["patient:mmci_patient_P1", "sample:mmci_sample_S1", "sequencing:mmci_sample_S1"],
+            ["study:study_1", "patient:mmci_patient_P1", "sample:mmci_sample_S1", "sequencing:mmci_sample_S1"],
             catalogue.Upserts);
         Assert.Equal(0, result.Value.Failed);
         Assert.Equal(SyncStatus.Synced, state.Sequencing["PRED1"].Status);
@@ -183,7 +188,7 @@ public sealed class RunCatalogueSyncHandlerTests
             new RunCatalogueSyncCommand(), CancellationToken.None);
 
         // No sequencing record and no failure: an empty answer is a normal one.
-        Assert.Equal(["patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
+        Assert.Equal(["study:study_1", "patient:mmci_patient_P1", "sample:mmci_sample_S1"], catalogue.Upserts);
         Assert.Equal(0, result.Value.Failed);
         Assert.Empty(state.Sequencing);
     }

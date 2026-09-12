@@ -23,7 +23,8 @@ public sealed class FingerprintSyncPlannerTests
             new PatientId(patientId),
             sequencing is null ? null : new SequencingId(sequencing),
             wsi is null ? null : new WsiId(wsi),
-            new Material { MaterialIdentifier = id }).Value;
+            new Material { MaterialIdentifier = id },
+            new Biospecimen { BiospecimenIdentifier = $"biospecimen_{id}" }).Value;
 
     private static PatientCatalogueData Data(PatientAggregate patient, params SampleAggregate[] samples) =>
         new() { Patient = patient, Samples = samples };
@@ -151,6 +152,100 @@ public sealed class FingerprintSyncPlannerTests
         Assert.True(deletion.State.IsDeleted);
         Assert.Equal(SyncStatus.Deleted, deletion.State.Status);
     }
+
+    /// <summary>
+    /// The sequencing API not answering is not the sequencing rows being withdrawn. Deleting on that
+    /// reading throws published data away over a momentary outage - and once the source APIs sit on
+    /// separate hosts, a momentary outage is a network hiccup rather than a crash.
+    /// </summary>
+    [Fact]
+    public void SequencingIsKeptWhenItsSourceDidNotAnswer()
+    {
+        var existing = ExistingSequencing("PRED1", "S1");
+        var data = new PatientCatalogueData
+        {
+            Patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }),
+            Samples = [Sample("S1", "P1", sequencing: "PRED1")],
+            Sequencings = [],
+            SequencingComplete = false,
+        };
+
+        var ops = _planner.Plan(data, existing);
+
+        Assert.DoesNotContain(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
+    }
+
+    /// <summary>The same absence, but the source did answer: then it really is gone.</summary>
+    [Fact]
+    public void SequencingIsDeletedWhenItsSourceReportedItGone()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
+
+        var ops = _planner.Plan(data, ExistingSequencing("PRED1", "S1"));
+
+        Assert.Single(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
+    }
+
+    /// <summary>
+    /// Consent withdrawn after a previous run published the patient. Skipping would leave their
+    /// demographics and clinical row in the catalogue for good, so the patient is deleted - and last,
+    /// because the catalogue refuses to remove a row another row still references.
+    /// </summary>
+    [Fact]
+    public void PatientWhoLosesConsentIsDeletedAfterTheirChildren()
+    {
+        var data = Data(
+            Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
+            Sample("S1", "P1"));
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState { Id = new PatientId("P1"), SourceFingerprint = "x" },
+            Samples = new Dictionary<SampleId, SampleSyncState>
+            {
+                [new SampleId("S1")] = new SampleSyncState
+                {
+                    Id = new SampleId("S1"),
+                    PatientId = new PatientId("P1"),
+                    SourceFingerprint = "y",
+                },
+            },
+        };
+
+        var ops = _planner.Plan(data, existing);
+
+        var patientOp = Assert.IsType<PatientOperation>(ops[^1]);
+        Assert.Equal(SyncOp.Delete, patientOp.Op);
+        Assert.True(patientOp.State.IsDeleted);
+
+        // The sample goes first, and the patient carries no aggregate to upload.
+        Assert.Equal(SyncOp.Delete, ops.OfType<SampleOperation>().Single().Op);
+        Assert.Null(patientOp.Patient);
+    }
+
+    /// <summary>A patient who was never published has nothing to remove.</summary>
+    [Fact]
+    public void IneligiblePatientWhoWasNeverPublishedIsStillSkipped()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+
+        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(data, PatientSyncStates.Empty())));
+
+        Assert.Equal(SyncOp.Skip, patientOp.Op);
+    }
+
+    private static PatientSyncStates ExistingSequencing(string sequencingId, string sampleId) =>
+        new()
+        {
+            Sequencing = new Dictionary<SequencingId, SequencingSyncState>
+            {
+                [new SequencingId(sequencingId)] = new SequencingSyncState
+                {
+                    Id = new SequencingId(sequencingId),
+                    SampleId = new SampleId(sampleId),
+                    SourceFingerprint = "x",
+                },
+            },
+        };
 
     [Fact]
     public void SequencingAndWsiPlannedWhenPresent()

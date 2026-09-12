@@ -17,18 +17,42 @@ internal sealed class FakeSourceDataGateway : ISourceDataGateway
     /// <summary>What the sequencing API answers with, keyed by predictive number.</summary>
     public Dictionary<string, SequencingDto> Sequencing { get; } = [];
 
-    public Task<IReadOnlyList<PatientDto>> FetchPatientsAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(_patients);
+    /// <summary>
+    /// Sources set to fail, by the names the handler reports them under: "biobank", "sequencing",
+    /// "radiology", "wsi". The value is the error that source answers with, so a test can pick
+    /// between an outage and a bad payload.
+    /// </summary>
+    public Dictionary<string, Error> Failing { get; } = [];
 
-    public Task<IReadOnlyList<ImagingStudyDto>> FetchRadiologyAsync(
+    /// <summary>Marks a source unreachable, as a refused connection or a timeout would.</summary>
+    public void Unreachable(string source) =>
+        Failing[source] = SourceErrors.Unavailable(source, "Connection refused (localhost:9)");
+
+    /// <summary>Marks a source as answering with something unreadable.</summary>
+    public void Unreadable(string source) =>
+        Failing[source] = SourceErrors.Invalid(source, "'x' is an invalid start of a value.");
+
+    public Task<ErrorOr<IReadOnlyList<PatientDto>>> FetchPatientsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Failing.TryGetValue("biobank", out var error)
+            ? (ErrorOr<IReadOnlyList<PatientDto>>)error
+            : ErrorOrFactory.From(_patients));
+
+    public Task<ErrorOr<IReadOnlyList<ImagingStudyDto>>> FetchRadiologyAsync(
         IReadOnlyList<string> accessionNumbers, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<ImagingStudyDto>>([]);
+        Task.FromResult(Failing.TryGetValue("radiology", out var error)
+            ? (ErrorOr<IReadOnlyList<ImagingStudyDto>>)error
+            : ErrorOrFactory.From<IReadOnlyList<ImagingStudyDto>>(Array.Empty<ImagingStudyDto>()));
 
-    public Task<SequencingDto?> FetchSequencingAsync(string predictiveNumber, CancellationToken cancellationToken) =>
-        Task.FromResult(Sequencing.GetValueOrDefault(predictiveNumber));
+    public Task<ErrorOr<SequencingDto?>> FetchSequencingAsync(
+        string predictiveNumber, CancellationToken cancellationToken) =>
+        Task.FromResult(Failing.TryGetValue("sequencing", out var error)
+            ? (ErrorOr<SequencingDto?>)error
+            : ErrorOrFactory.From(Sequencing.GetValueOrDefault(predictiveNumber)));
 
-    public Task<WsiDto?> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
-        Task.FromResult<WsiDto?>(null);
+    public Task<ErrorOr<WsiDto?>> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
+        Task.FromResult(Failing.TryGetValue("wsi", out var error)
+            ? (ErrorOr<WsiDto?>)error
+            : ErrorOrFactory.From<WsiDto?>((WsiDto?)null));
 }
 
 internal sealed class FakeCatalogueGateway : ICatalogueGateway
@@ -36,11 +60,13 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
     public List<string> Upserts { get; } = [];
     public List<string> Deletes { get; } = [];
     public HashSet<string> FailUpsertTypes { get; } = [];
+    public HashSet<string> FailDeleteTypes { get; } = [];
 
     /// <summary>The payloads as they went out, so a test can assert on what the catalogue would see.</summary>
     public List<CataloguePatientPayload> PatientPayloads { get; } = [];
     public List<CatalogueSamplePayload> SamplePayloads { get; } = [];
     public List<CatalogueSequencingPayload> SequencingPayloads { get; } = [];
+    public List<StudyRecord> Studies { get; } = [];
 
     public Task<ErrorOr<string>> UpsertPatientAsync(CataloguePatientPayload payload, CancellationToken ct)
     {
@@ -63,22 +89,28 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
         return Upsert("sequencing", payload.SampleId);
     }
 
-    public Task<ErrorOr<string>> UpsertWsiAsync(WsiAggregate wsi, CancellationToken ct)
+    public Task<ErrorOr<string>> UpsertStudyAsync(StudyRecord study, CancellationToken ct)
     {
-        Upserts.Add($"wsi:{wsi.SampleId.Value}");
-        return Upsert("wsi", wsi.SampleId.Value);
+        Studies.Add(study);
+        Upserts.Add($"study:{study.Identifier}");
+        return Upsert("study", study.Identifier);
     }
 
-    public Task<ErrorOr<string>> UpsertImagingStudyAsync(ImagingStudyAggregate study, CancellationToken ct)
-    {
-        Upserts.Add($"imaging:{study.Id.Value}");
-        return Upsert("imaging", study.Id.Value);
-    }
+    public Task<ErrorOr<Deleted>> DeletePatientAsync(string patientPseudonym, CancellationToken ct) =>
+        Delete("patient", patientPseudonym);
 
-    public Task<ErrorOr<Deleted>> DeleteAsync(string entityType, string entityKey, string? remoteId, CancellationToken ct)
+    public Task<ErrorOr<Deleted>> DeleteSampleAsync(string samplePseudonym, CancellationToken ct) =>
+        Delete("sample", samplePseudonym);
+
+    public Task<ErrorOr<Deleted>> DeleteSequencingAsync(string samplePseudonym, CancellationToken ct) =>
+        Delete("sequencing", samplePseudonym);
+
+    private Task<ErrorOr<Deleted>> Delete(string type, string key)
     {
-        Deletes.Add($"{entityType}:{entityKey}");
-        return Task.FromResult<ErrorOr<Deleted>>(Result.Deleted);
+        Deletes.Add($"{type}:{key}");
+        return FailDeleteTypes.Contains(type)
+            ? Task.FromResult<ErrorOr<Deleted>>(Error.Failure(description: $"{type} delete failed"))
+            : Task.FromResult<ErrorOr<Deleted>>(Result.Deleted);
     }
 
     private Task<ErrorOr<string>> Upsert(string type, string key) =>
@@ -126,13 +158,18 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
         return Task.CompletedTask;
     }
 
-    public Task SoftDeleteChildrenAsync(PatientId parentId, string runId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<SampleId>> SoftDeleteChildrenAsync(
+        PatientId parentId,
+        string runId,
+        CancellationToken cancellationToken)
     {
         var id = parentId.Value;
+        var retired = new List<SampleId>();
         foreach (var sample in Samples.Values.Where(s => s.PatientId.Value == id))
         {
             sample.IsDeleted = true;
             sample.Status = SyncStatus.Deleted;
+            retired.Add(sample.Id);
         }
 
         foreach (var imaging in ImagingStudies.Values.Where(i => i.PatientId.Value == id))
@@ -141,7 +178,7 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
             imaging.Status = SyncStatus.Deleted;
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult<IReadOnlyList<SampleId>>(retired);
     }
 
     public Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(
