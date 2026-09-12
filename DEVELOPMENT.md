@@ -45,10 +45,30 @@ For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 `SEQUENCING_MAPPING_TABLE_PATH` (pseudonymizer mappings), `SEQUENCING_INGEST_CRON`. For local runs
 against `sequencing-db`, set `POSTGRES_PORT=5434`.
 
-**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
-`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`,
-and `PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader
-mints. See [`docs/pseudonymization.md`](docs/pseudonymization.md).
+**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, the source and catalogue URLs, and
+`PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader mints.
+See [`docs/pseudonymization.md`](docs/pseudonymization.md).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BIOBANK_API_URL` | `http://localhost:8001` | |
+| `SEQUENCING_API_URL` | `http://localhost:8002` | matches what `compose.prod.yml` publishes |
+| `RADIOLOGY_API_URL` | *(blank)* | no service yet (#29); blank means never contacted |
+| `WSI_API_URL` | *(blank)* | no service yet (#31); blank means never contacted |
+| `CATALOGUE_API_URL` | `http://localhost:8000` | |
+
+**A blank source URL means "not deployed".** No HTTP client is registered for it and the uploader
+never contacts it - the source simply answers empty. A source that *is* configured but unreachable
+costs the affected patients that source's data, is counted under `source_unavailable` in the run
+summary, and the run carries on. See [`docs/catalogue-api-contract.md`](docs/catalogue-api-contract.md)
+for the catalogue side.
+
+Everything here assumes one machine. Deploying onto the two servers that actually hold the source
+data is [`docs/deployment.md`](docs/deployment.md).
+
+Secrets (notably the catalogue token) go in `.env`, which is git-ignored; copy `.env.example` and
+fill it in. Docker reads it via `env_file`; for a bare `dotnet run`, use
+`dotnet user-secrets --project src/Uploader/Uploader.Host` or export the variables.
 
 ## Migrations (EF Core)
 

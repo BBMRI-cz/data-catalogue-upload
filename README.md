@@ -5,7 +5,7 @@ services it reads from. The solution is [`DataCatalogueUpload.slnx`](DataCatalog
 
 | Service | Projects | What it is |
 |---------|----------|------------|
-| uploader | [`src/Uploader`](src/Uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and upserts it into the data catalogue. |
+| uploader | [`src/Uploader`](src/Uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and saves it into a MOLGENIS EMX2 catalogue. |
 | biobank_api | [`src/BiobankApi`](src/BiobankApi) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
 | sequencing_api | [`src/SequencingApi`](src/SequencingApi) | Source API service for sequencing data (domain model landed; persistence and endpoints land with #55/#58). Same Clean Architecture layering and in-process Quartz ingestion as biobank_api. |
 
@@ -33,12 +33,21 @@ RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
 # trigger ingestion on the running API (also runs weekly via the Quartz schedule)
 curl -X POST http://localhost:8001/admin/ingest
 
+# point the sync job at a catalogue: copy .env.example to .env and fill in CATALOGUE_TOKEN
+cp .env.example .env
+
 # run the sync job (applies its EF migrations on startup, then syncs and prints a JSON summary)
 dotnet run --project src/Uploader/Uploader.Host
 ```
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
-design, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
+design, [`docs/catalogue-api-contract.md`](docs/catalogue-api-contract.md) for what the catalogue
+accepts, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
+
+The commands above run everything on one machine. In production the two source services sit on
+different servers, because each reads a directory only that machine has:
+[`docs/deployment.md`](docs/deployment.md) is the runbook for that, using `compose.biobank.yml` and
+`compose.sequencing.yml`.
 
 ## License
 
