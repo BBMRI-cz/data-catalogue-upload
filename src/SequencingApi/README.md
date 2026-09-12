@@ -165,7 +165,7 @@ Defaults keep the service runnable with no environment set.
 
 ```bash
 # start the database
-docker compose -f compose.prod.yml up -d sequencing-db
+docker compose -f compose.sequencing.yml up -d sequencing-db
 
 # run the API (applies EF migrations on startup when RUN_MIGRATIONS=true)
 RUN_MIGRATIONS=true POSTGRES_PORT=5434 \

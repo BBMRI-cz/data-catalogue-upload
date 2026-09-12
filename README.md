@@ -24,7 +24,8 @@ dotnet build DataCatalogueUpload.slnx
 dotnet test DataCatalogueUpload.slnx
 
 # start both databases
-docker compose -f compose.prod.yml up -d uploader-db biobank-db
+docker compose -f compose.uploader.yml up -d uploader-db
+docker compose -f compose.biobank.yml up -d biobank-db
 
 # run the biobank API (applies its EF migrations on startup when RUN_MIGRATIONS=true)
 RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
@@ -44,10 +45,11 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHI
 design, [`docs/catalogue-api-contract.md`](docs/catalogue-api-contract.md) for what the catalogue
 accepts, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
 
-The commands above run everything on one machine. In production the two source services sit on
-different servers, because each reads a directory only that machine has:
-[`docs/deployment.md`](docs/deployment.md) is the runbook for that, using `compose.biobank.yml` and
-`compose.sequencing.yml`.
+There is one compose file per stack — `compose.biobank.yml`, `compose.sequencing.yml` and
+`compose.uploader.yml` — because the two source services each read a directory that exists on only
+one machine, and a bind mount resolves only on the host running the container. Run the three
+together on one machine, or one per machine.
+[`docs/deployment.md`](docs/deployment.md) is the runbook either way.
 
 ## License
 

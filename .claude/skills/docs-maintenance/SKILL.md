@@ -1,6 +1,6 @@
 ---
 name: docs-maintenance
-description: Audit and update the repository's documentation and Claude Code skills so they stay accurate against the code. Use after an architectural or tooling change (renamed solution/projects, added/removed packages or services, changed env vars, CI, migrations, or layer conventions), or when asked to "update the docs/skills", "check the docs are current", or "the README is out of date". Covers the four root docs (README, DEVELOPMENT, ARCHITECTURE, AGENTS/CLAUDE) and .claude/skills/*.
+description: Audit and update the repository's documentation and Claude Code skills so they stay accurate against the code. Use after an architectural or tooling change (renamed solution/projects, added/removed packages or services, changed env vars, compose files or deployment topology, CI, migrations, or layer conventions), or when asked to "update the docs/skills", "check the docs are current", or "the README is out of date". Covers the four root docs (README, DEVELOPMENT, ARCHITECTURE, AGENTS/CLAUDE), docs/*.md, and .claude/skills/*.
 ---
 
 # Docs & skills maintenance (data-catalogue-upload)
@@ -17,6 +17,9 @@ or command, **open the real thing and confirm it still exists** with that name.
 | `DEVELOPMENT.md` | prerequisites, env vars, EF migration commands, run/test/CI commands |
 | `ARCHITECTURE.md` | the layer diagram, domain services, and the sync flow |
 | `AGENTS.md` | conventions + commands. **`CLAUDE.md` only contains the text `AGENTS.md`** and mirrors it - edit `AGENTS.md`, never duplicate content into `CLAUDE.md`. |
+| `docs/deployment.md` | the compose files, the services in each, the env keys they substitute, and the ports |
+| `docs/catalogue-api-contract.md` | the live EMX2 schema and `Emx2*` classes in `Uploader.Infrastructure/Http/`. **Never name a real token, its claims, or its scope here** - this file ships to production; state the requirement, not the disclosure |
+| `docs/pseudonymization.md` | `CatalogueMapper` + `BiobankMapping`, one row per published catalogue column |
 | `.claude/skills/*/SKILL.md` | each skill's frontmatter `description` and its body |
 
 > The available-skills list the harness shows is built from each skill's frontmatter `description:`. That
@@ -46,6 +49,14 @@ Cross-check each item against the live code/config:
    "FingerprintCalculator" - don't reintroduce names that aren't in the code.
 7. **No Python residue.** No `pytest`, `mypy`, `ruff`, `uv`, `dataclass`, `Protocol`, `apps/`, `alembic`,
    `conftest`, or `.python-version` anywhere in docs or skills.
+8. **Compose topology.** Three files, one stack each: `compose.biobank.yml` (biobank-db, biobank-api),
+   `compose.sequencing.yml` (sequencing-db, sequencing-api), `compose.uploader.yml` (uploader-db, uploader).
+   There is no `compose.prod.yml` - it was removed when the stacks were split, so any doc still naming it is
+   stale. Every service a doc lists must appear in the file it names, and every `${VAR}` those files
+   substitute must appear in `.env.example`.
+9. **Secrets.** No token, key, or credential value in any tracked file, and no description of a real token's
+   claims or privileges either. `.env` must not be tracked; `.env.example` carries key names with empty
+   values for anything secret.
 
 ## How to do it
 
@@ -56,6 +67,18 @@ rg -n "DataCatalogue\.slnx|pytest|mypy| ruff| uv |dataclass|Protocol|apps/|alemb
 
 # a documented type that no longer exists in code
 rg -n "FingerprintCalculator|IBiobankCleaningService" src docs *.md .claude/skills
+
+# a compose file that no longer exists
+rg -n "compose\.prod\.yml" . --glob '!.git'
+
+# every variable the compose files substitute is documented in .env.example
+for v in $(rg -o '\$\{[A-Z_]+' compose.*.yml | cut -d'{' -f2 | sort -u); do
+  rg -q "^$v=" .env.example || echo "missing from .env.example: $v"
+done
+
+# a leaked credential, in the working tree or anywhere in history
+rg -n "eyJ[A-Za-z0-9_-]{20,}" . --glob '!.git'
+git log -p --all | rg -n "eyJ[A-Za-z0-9_-]{20,}"
 ```
 
 For each hit, open the named source file, decide what the code actually does now, and edit the doc/skill in

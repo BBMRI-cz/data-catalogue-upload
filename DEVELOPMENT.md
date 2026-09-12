@@ -20,10 +20,12 @@ dotnet format DataCatalogueUpload.slnx --verify-no-changes   # lint/format check
 
 ## Databases
 
-Each service owns its own PostgreSQL database. Start both with Docker:
+Each service owns its own PostgreSQL database, and each lives in its own compose file so the
+stacks can be deployed on separate machines. Start the two you need:
 
 ```bash
-docker compose -f compose.prod.yml up -d uploader-db biobank-db
+docker compose -f compose.uploader.yml up -d uploader-db
+docker compose -f compose.biobank.yml up -d biobank-db
 ```
 
 - `uploader-db` -> `localhost:5432`, database `data_catalogue_upload`
@@ -52,7 +54,7 @@ See [`docs/pseudonymization.md`](docs/pseudonymization.md).
 | Variable | Default | Notes |
 |---|---|---|
 | `BIOBANK_API_URL` | `http://localhost:8001` | |
-| `SEQUENCING_API_URL` | `http://localhost:8002` | matches what `compose.prod.yml` publishes |
+| `SEQUENCING_API_URL` | `http://localhost:8002` | matches what `compose.sequencing.yml` publishes |
 | `RADIOLOGY_API_URL` | *(blank)* | no service yet (#29); blank means never contacted |
 | `WSI_API_URL` | *(blank)* | no service yet (#31); blank means never contacted |
 | `CATALOGUE_API_URL` | `http://localhost:8000` | |
@@ -128,13 +130,24 @@ dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 
 ## Containers
 
+One compose file per stack. Run them all on one machine, or one per machine — see
+[`docs/deployment.md`](docs/deployment.md).
+
 ```bash
-docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api + sequencing-api
-curl -X POST http://localhost:8001/admin/ingest                 # ingest on demand
+docker compose -f compose.biobank.yml up -d --build       # biobank-db + biobank-api    :8001
+docker compose -f compose.sequencing.yml up -d --build    # sequencing-db + sequencing-api :8002
+docker compose -f compose.uploader.yml up -d uploader-db  # uploader-db                 :5432
+
+curl -X POST http://localhost:8001/admin/ingest           # ingest on demand
+docker compose -f compose.uploader.yml run --rm uploader  # one sync, prints a JSON summary
 ```
 
+The three stacks are three separate Compose projects on three separate networks even on one host, so
+container names do not resolve between them. The uploader addresses the source APIs as
+`host.docker.internal`; `.env.example` covers it.
+
 The Dockerfiles build with the repo root as their context (central package management +
-project references). The uploader is run as a job (host `dotnet run` or its own container image).
+project references). The uploader is a job, not a server, hence `run --rm` rather than `up`.
 
 ## CI
 
