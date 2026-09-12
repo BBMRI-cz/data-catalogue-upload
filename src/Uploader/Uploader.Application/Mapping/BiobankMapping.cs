@@ -3,14 +3,17 @@ namespace Uploader.Application.Mapping;
 /// <summary>
 /// The computed pieces of the biobank -> domain mapping. Everything else is carried verbatim, so this
 /// is the whole of the mapping's logic: the derived clinical identifier, the ICD-10 dot rule and the
-/// age computation, all three ported from the previous production uploader. Catalogue vocabulary
-/// (MOLGENIS lookup strings, nullflavors) is deliberately absent — that belongs to the catalogue
-/// gateway, not here.
+/// age computation, all three ported from the previous production uploader. The catalogue's
+/// controlled terms live next door in <see cref="CatalogueVocabulary"/>, which is where a biobank
+/// code becomes an ontology term.
 /// </summary>
-internal static class BiobankMapping
+public static class BiobankMapping
 {
     /// <summary>The biobank's discriminator for tissue samples.</summary>
     public const string TissueType = "tissue";
+
+    /// <summary>The biobank's discriminator for serum samples.</summary>
+    public const string SerumType = "serum";
 
     /// <summary>The biobank's discriminator for genome samples.</summary>
     public const string GenomeType = "genome";
@@ -34,9 +37,37 @@ internal static class BiobankMapping
             return null;
         }
 
-        return patientId.Contains("patient", StringComparison.Ordinal)
-            ? patientId.Replace("patient", "clinical", StringComparison.Ordinal)
-            : $"clinical_{patientId}";
+        return Derive(patientId, "patient", "clinical");
+    }
+
+    /// <summary>
+    /// Identifier of the biospecimen stored from a sample, derived from the sample id the same way
+    /// the clinical identifier is derived from the patient id. Material and biospecimen are two
+    /// catalogue rows describing one archived sample, so they cannot share a key.
+    /// </summary>
+    public static string? BiospecimenIdentifier(string? sampleId) => Derive(sampleId, "sample", "biospecimen");
+
+    /// <summary>
+    /// Identifier of the patient's consent record, derived from the patient id. The biobank exports
+    /// a boolean, not a signed form, so there is no consent id of its own to carry.
+    /// </summary>
+    public static string? ConsentIdentifier(string? patientId) => Derive(patientId, "patient", "consent");
+
+    /// <summary>
+    /// One derived identifier from another: a pseudonym already reads <c>mmci_&lt;kind&gt;_&lt;uuid&gt;</c>,
+    /// so swapping the kind keeps the two rows recognisably the same sample or person. A raw
+    /// biobank id has no kind in it and just gets the new one as a prefix.
+    /// </summary>
+    private static string? Derive(string? id, string from, string to)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return null;
+        }
+
+        return id.Contains(from, StringComparison.Ordinal)
+            ? id.Replace(from, to, StringComparison.Ordinal)
+            : $"{to}_{id}";
     }
 
     /// <summary>
