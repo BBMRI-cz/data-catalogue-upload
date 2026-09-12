@@ -1,12 +1,10 @@
-# The sequencing half of a two-server deployment: run this on the machine that holds the organised
-# run tree. It carries the uploader too, because the uploader makes one request per sequenced sample
-# and that traffic is many small round trips, while the biobank is one large response that costs
-# bandwidth once rather than latency repeatedly.
+# The sequencing API and its database. Run this on the machine that holds the organised run tree.
 #
-#   docker compose -f compose.sequencing.yml up -d sequencing-db sequencing-api uploader-db
-#   docker compose -f compose.sequencing.yml run --rm uploader
+#   docker compose -f compose.sequencing.yml up -d --build
 #
-# The other half is compose.biobank.yml. See docs/deployment.md for the full runbook.
+# One of three stacks, each deployable on its own machine: compose.biobank.yml, this one, and
+# compose.uploader.yml. Run all three on one host and they still work, as three separate projects.
+# See docs/deployment.md for the full runbook.
 services:
   sequencing-db:
     image: postgres:16
@@ -48,61 +46,14 @@ services:
     depends_on:
       - sequencing-db
     ports:
-      # Loopback by default: the uploader runs on this host, so nothing off-box needs this port.
-      # Give SEQUENCING_BIND a private address only if you move the uploader to the other machine.
+      # Loopback by default. The uploader reaches this API over HTTP, so if it runs on another
+      # machine SEQUENCING_BIND has to name a private address both can see - never 0.0.0.0 and
+      # never a public one. See docs/deployment.md section 5.
       - "${SEQUENCING_BIND:-127.0.0.1}:8002:8002"
     volumes:
       - "${SEQUENCING_RUNS_DIR:-/muni-sc/OrganisedRuns}:/data/organised-runs:ro"
       - "${SEQUENCING_LIBRARIES_DIR:-/muni-sc/Libraries}:/data/libraries:ro"
       - "${SEQUENCING_MAPPING_DIR:-/home/export/pseudonymization_table}:/data/mapping-table:ro"
 
-  uploader-db:
-    image: postgres:16
-    container_name: uploader-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: data_catalogue_upload
-    ports:
-      - "127.0.0.1:5432:5432"
-    volumes:
-      # Holds the pseudonym map. Losing this volume means every patient is re-pseudonymized under a
-      # new identifier and the catalogue fills with duplicates. Back it up before touching it.
-      - uploader_db_data:/var/lib/postgresql/data
-
-  # One-shot, not a server: it runs, prints a JSON summary and exits. Hence restart "no" and
-  # `run --rm` rather than `up`.
-  uploader:
-    build:
-      context: .
-      dockerfile: src/Uploader/Uploader.Host/Dockerfile
-    container_name: uploader
-    restart: "no"
-    # The catalogue token lives here and nowhere else. Copy .env.example to .env and fill it in;
-    # .env is git-ignored.
-    env_file:
-      - .env
-    environment:
-      POSTGRES_HOST: uploader-db
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: data_catalogue_upload
-      # The other machine. No default on purpose: an empty URL means "this source is not deployed",
-      # so a typo here would otherwise produce a quiet run that uploads nobody.
-      BIOBANK_API_URL: "${BIOBANK_API_URL:?set BIOBANK_API_URL in .env to the biobank server}"
-      SEQUENCING_API_URL: http://sequencing-api:8002
-      # Radiology and WSI have no service yet. Blank means the uploader never contacts them, which
-      # is not the same as contacting them and failing - see docs/catalogue-api-contract.md.
-      RADIOLOGY_API_URL: ""
-      WSI_API_URL: ""
-    # Only what runs on this host. Compose talks to the local Docker daemon and cannot wait on a
-    # container elsewhere; an unreachable biobank is reported as an error rather than a crash.
-    depends_on:
-      - uploader-db
-      - sequencing-api
-
 volumes:
   sequencing_db_data:
-  uploader_db_data:
