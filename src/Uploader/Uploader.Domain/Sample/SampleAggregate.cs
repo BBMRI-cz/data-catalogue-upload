@@ -19,15 +19,19 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     public WsiId? WsiId { get; private init; }
     public Material? Material { get; private init; }
 
+    /// <summary>The stored form derived from <see cref="Material"/> - one per sample.</summary>
+    public Biospecimen? Biospecimen { get; private init; }
+
     /// <summary>Fingerprint over the sample's catalogue-relevant content.</summary>
-    public Fingerprint ComputeFingerprint() => Fingerprint.Of(Material);
+    public Fingerprint ComputeFingerprint() => Fingerprint.Of(Material, Biospecimen);
 
     public static ErrorOr<SampleAggregate> Create(
         string? id,
         PatientId patientId,
         SequencingId? sequencingId,
         WsiId? wsiId,
-        Material? material)
+        Material? material,
+        Biospecimen? biospecimen)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -41,6 +45,7 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
             SequencingId = sequencingId,
             WsiId = wsiId,
             Material = material,
+            Biospecimen = biospecimen,
         };
     }
 }
