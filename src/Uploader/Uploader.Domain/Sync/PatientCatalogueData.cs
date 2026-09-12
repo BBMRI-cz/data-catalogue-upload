@@ -14,6 +14,22 @@ public sealed record PatientCatalogueData
     public IReadOnlyList<ImagingStudyAggregate> ImagingStudies { get; init; } = [];
 
     /// <summary>
+    /// Whether the sequencing source answered for this patient. A source that did not answer leaves
+    /// its aggregates out of the lists above, which looks exactly like the rows having been
+    /// withdrawn - and deleting on that reading throws away data over a network blip. The planner
+    /// uses this to tell "gone" apart from "not asked".
+    /// <para>
+    /// Samples need no such flag: they come from the biobank, and a biobank that does not answer
+    /// ends the run rather than yielding an empty patient.
+    /// </para>
+    /// </summary>
+    public bool SequencingComplete { get; init; } = true;
+
+    public bool WsiComplete { get; init; } = true;
+
+    public bool ImagingComplete { get; init; } = true;
+
+    /// <summary>
     /// A patient is only uploaded to the catalogue when they consented and have at least one sample.
     /// The consent half is checked here rather than being left to follow from the biobank refusing to
     /// attach samples to a non-consenting patient — an upload permission deserves its own test.
