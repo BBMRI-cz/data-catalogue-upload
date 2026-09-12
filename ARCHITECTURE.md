@@ -41,8 +41,8 @@ flowchart LR
     SequencingApi --> SyncJob
     WsiApi --> SyncJob
 
-    SyncJob -->|"upsert aggregated patient"| CatalogueApi["Data Catalogue API"]
-    CatalogueApi --> Catalogue[("Data Catalogue")]
+    SyncJob -->|"GraphQL save/delete"| CatalogueApi["MOLGENIS EMX2 GraphQL API"]
+    CatalogueApi --> Catalogue[("FairGenomes schema")]
 ```
 
 In one sentence: for each patient, the sync job reads from all source APIs, aggregates the data into one coherent record, and uploads it into the data catalogue.
@@ -87,7 +87,7 @@ flowchart TD
 | Layer | Path | Responsibility |
 |-------|------|----------------|
 | Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object each aggregate uses for its `ComputeFingerprint()`. No I/O, no framework dependencies. |
-| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. Outbound, `CatalogueMapper` turns aggregates into the FAIR Genomes records under `Dtos/Catalogue/`, substituting a pseudonym for every real identifier - see [`docs/pseudonymization.md`](docs/pseudonymization.md). |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. Outbound, `CatalogueMapper` turns aggregates into the EMX2 rows under `Dtos/Catalogue/`, substituting a pseudonym for every real identifier - see [`docs/pseudonymization.md`](docs/pseudonymization.md). `CatalogueVocabulary` is where a biobank code becomes an ontology term. |
 | Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
 The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`, `IPseudonymMap`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
@@ -120,10 +120,14 @@ flowchart TD
 ```
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
-2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number` - the biobank serves none, so this stays empty until #31), and radiology (by `accession_numbers`, patient-level and sample-level combined). Every source serves its own vocabulary; translating it is the uploader's job, and the values it cannot place yet are carried raw until the catalogue contract fixes them. The sequencing API answers with `samples[] -> runs[]` - a predictive number is not unique and a sample can be resequenced - which the uploader flattens into one FAIR `SamplePreparation` per (sample, run) pair. An unknown predictive number comes back `200` with an empty `samples`: no sequencing record, and not a failure.
+2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number` - the biobank serves none, so this stays empty until #31), and radiology (by `accession_numbers`, patient-level and sample-level combined). Every source serves its own vocabulary; translating it into the catalogue's ontology terms is `CatalogueVocabulary`'s job, and a code with no term that means the same thing is left out rather than guessed at. The sequencing API answers with `samples[] -> runs[]` - a predictive number is not unique and a sample can be resequenced - which the uploader flattens into one FAIR `SamplePreparation` per (sample, run) pair. An unknown predictive number comes back `200` with an empty `samples`: no sequencing record, and not a failure.
 3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
-4. **Execute** the plan against the catalogue API (upsert or delete per entity).
-5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB subtree.
+4. **Execute** the plan against the catalogue's GraphQL API. One aggregate becomes several EMX2
+   rows across several tables - a patient is a `Personal`, an `IndividualConsent` and a `Clinical` -
+   written parents first, because each references the one before.
+5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB
+   subtree. Deletes run child before parent, deepest first: EMX2 refuses to remove a row another row
+   still references, so any other order fails loudly instead of leaving orphans behind.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
 Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient; it is permission, not content, so it stays out of the fingerprint.

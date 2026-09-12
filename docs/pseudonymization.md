@@ -28,49 +28,71 @@ the patient and sample ones, while the sequencing chain carries the pseudonymize
 run tree's folder name — changing `PSEUDONYM_PREFIX` does not touch those. `<run>` is the instrument
 run id, which scopes a resequenced sample's records so the second run cannot claim the first's.
 
+### Study
+
+Configuration, not patient data, and the one table here that carries no pseudonym at all.
+
+| field | type | published value |
+|---|---|---|
+| `identifier` | key | `CATALOGUE_STUDY_ID`, default `mmci_biobank` |
+
 ### Personal
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `PersonalIdentifier` | UniqueID | `mmci_patient_<uuid>` — minted |
+| `personalIdentifier` | key | `mmci_patient_<uuid>` — minted |
+| `participatesInStudy` | → Study | `CATALOGUE_STUDY_ID` |
+
+### IndividualConsent
+
+| field | type | published value |
+|---|---|---|
+| `individualConsentIdentifier` | key | `mmci_consent_<uuid>` — derived from the patient pseudonym |
+| `personConsenting` | → Personal | `mmci_patient_<uuid>` |
+| `belongsToStudy` | → Study | `CATALOGUE_STUDY_ID` |
 
 ### Clinical
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `ClinicalIdentifier` | UniqueID | `mmci_clinical_<uuid>` — derived from the patient pseudonym |
-| `BelongsToPerson` | → Personal | `mmci_patient_<uuid>` |
+| `clinicalIdentifier` | key | `mmci_clinical_<uuid>` — derived from the patient pseudonym |
+| `belongsToPerson` | → Personal | `mmci_patient_<uuid>` |
 
 ### Material
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `MaterialIdentifier` | UniqueID | `mmci_sample_<uuid>` — minted |
-| `CollectedFromPerson` | → Personal | `mmci_patient_<uuid>` |
-| `BelongsToDiagnosis` | → Clinical | `mmci_clinical_<uuid>` — derived the same way as the key it points at |
-| `DerivedFrom` | String, not a reference | **dropped** — see the decisions below |
+| `materialIdentifier` | key | `mmci_sample_<uuid>` — minted |
+| `collectedFromPerson` | → Personal | `mmci_patient_<uuid>` |
+| `belongsToDiagnosis` | → Clinical | `mmci_clinical_<uuid>` — derived the same way as the key it points at |
+
+### Biospecimens
+
+| field | type | published value |
+|---|---|---|
+| `biospecimenIdentifier` | key | `mmci_biospecimen_<uuid>` — derived from the sample pseudonym |
+| `derivedFromMaterial` | → Material | `mmci_sample_<uuid>` |
 
 ### SamplePreparation
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `SampleprepIdentifier` | UniqueID | `mmci_sampleprep_<uuid>_<run>` — from the source |
-| `BelongsToMaterial` | → Material | `mmci_sample_<uuid>` |
+| `sampleprepIdentifier` | key | `mmci_sampleprep_<uuid>_<run>` — from the source |
+| `belongsToBiospecimen` | → Biospecimens | `mmci_biospecimen_<uuid>` — derived, not copied |
 
 ### Sequencing
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `SequencingIdentifier` | UniqueID | `mmci_predictive_<uuid>_<run>` — from the source |
-| `BelongsToSamplePreparation` | → SamplePreparation | `mmci_sampleprep_<uuid>_<run>` |
+| `sequencingIdentifier` | key | `mmci_predictive_<uuid>_<run>` — from the source |
+| `belongsToSamplePreparation` | → SamplePreparation | `mmci_sampleprep_<uuid>_<run>` |
 
 ### Analysis
 
-| field | FAIR type | published value |
+| field | type | published value |
 |---|---|---|
-| `AnalysisIdentifier` | UniqueID | `mmci_analysis_<uuid>_<run>` — from the source |
-| `BelongsToSequencing` | → Sequencing | `mmci_predictive_<uuid>_<run>` |
-| `AbstractDataLocation` | String | paths under `Samples/mmci_predictive_<uuid>/` — already pseudonymous |
+| `analysisIdentifier` | key | `mmci_analysis_<uuid>_<run>` — from the source |
+| `belongsToSequencing` | → Sequencing | `mmci_predictive_<uuid>_<run>` |
 
 ## Decisions
 
@@ -82,8 +104,6 @@ a real id. It was written for this.
 **The sequencing chain needs no work.** `SequencingMapping` derives its three identifiers from the
 sequencing API's `samples[].sample_id`, which *is* the run tree's `mmci_predictive_<uuid>` folder
 name — renamed in place by the pseudonymizer before the data left for SensitiveCloud.
-`Analysis.AbstractDataLocation` is built from those same paths, so it is pseudonymous for the same
-reason.
 
 **The pseudonymizer's mapping files are never read.** `predictive.json` maps pseudonym → real, which
 is the sequencing API's job, not ours. `patients.json` and `samples.json` cover only the sequenced
@@ -95,6 +115,13 @@ cannot be written to.
 graph without anything failing. `Material.BelongsToDiagnosis` is therefore produced by the same
 call that produces `Clinical.ClinicalIdentifier`, not copied from the domain.
 
-**`Material.DerivedFrom` is dropped rather than forwarded.** It references a *different* sample's
-material, so neither this sample's pseudonym nor the real id is the right answer. Nothing sets it
-today; whoever wires it up has to resolve it deliberately.
+**File paths are no longer published at all.** v1 put the analysis output paths in
+`AbstractDataLocation`, and they were pseudonymous because they sat under
+`Samples/mmci_predictive_<uuid>/`. v2 removed both data-location columns, so an analysis output now
+survives only as the format it is stored in. One fewer place for a path to leak from.
+
+**A delete re-derives the keys rather than storing them.** When a patient disappears from the export
+there is no aggregate left to read identifiers off, only the sync state's real ids. The gateway
+resolves the pseudonym again — the map is idempotent — and applies the same derivation rules, so a
+delete addresses exactly the rows the upload published. Nothing is stored twice, and there is no
+second copy to drift.
