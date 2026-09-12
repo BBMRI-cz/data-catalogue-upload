@@ -73,19 +73,32 @@ public sealed class UploaderMapperFieldParityTests
         var personal = patient.Personal!;
         Assert.Equal("P1", personal.PersonalIdentifier);
         Assert.Equal(1980, personal.YearOfBirth);
-        Assert.Equal("male", personal.GenderAtBirth);
 
-        // The biobank records sex, not gender identity.
-        Assert.Null(personal.GenderIdentity);
+        // The biobank's "male" becomes the GSSO term the catalogue's ontology actually holds.
+        Assert.Equal("assigned male at birth", personal.GenderAtBirth);
+        Assert.Equal("Masaryk Memorial Cancer Institute", personal.PrimaryAffiliatedInstitute);
+
+        // Never served: the export is one hospital's archive and says nothing about where the
+        // patient lives, where they were born, their ancestry, or whether they are still alive.
+        Assert.Null(personal.CountryOfResidence);
+        Assert.Null(personal.CountryOfBirth);
+        Assert.Null(personal.Ancestry);
+        Assert.Null(personal.Status);
+        Assert.Null(personal.AgeAtDeath);
 
         var clinical = patient.Clinical!;
         Assert.Equal("clinical_P1", clinical.ClinicalIdentifier);
         Assert.Equal("P1", clinical.BelongsToPerson);
-        Assert.Equal(["C50.4", "C77.7"], clinical.ClinicalDiagnosis);
+        Assert.Equal(["C50.4", "C77.7"], clinical.Diagnosis);
         Assert.Equal(39, clinical.AgeAtDiagnosis);
 
-        // Never served: the export has no onset date.
-        Assert.Null(clinical.AgeOfOnset);
+        // Never served: the export records a diagnosis code and nothing about staging, treatment
+        // or when in the disease course the sample was taken.
+        Assert.Null(clinical.ClinicalTimepoint);
+        Assert.Null(clinical.DiseaseStage);
+        Assert.Null(clinical.MolecularDiagnosisGene);
+        Assert.Null(clinical.TreatmentCategory);
+        Assert.Null(clinical.ResponseToTreatment);
     }
 
     [Fact]
@@ -98,22 +111,40 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("S-T", m.MaterialIdentifier);
         Assert.Equal("P1", m.CollectedFromPerson);
         Assert.Equal(["clinical_P1"], m.BelongsToDiagnosis);
-        Assert.Equal("2020-01-02T03:04:05", m.SamplingTimestamp);
-        Assert.Equal("2020-01-02T04:00:00", m.RegistrationTimestamp);
-        Assert.Equal("1", m.BiospecimenType);
-        Assert.Equal("MOU", m.PhysicalLocation);
 
-        // Not served by the biobank; filling these is the catalogue mapping's job (#24).
-        Assert.Null(m.SamplingProtocol);
-        Assert.Null(m.SamplingProtocolDeviation);
-        Assert.Null(m.ReasonForSamplingProtocolDeviation);
+        // Tissue is dated by when it was cut, and v2 wants a date rather than v1's timestamp.
+        Assert.Equal("2020-01-02", m.SamplingDate);
+
+        // Material code "1" is a malignant tumour: solid tissue, in a tumour state.
+        Assert.Equal("Solid Tissue Specimen", m.MaterialType);
+        Assert.Equal("Tumor", m.PathologicalState);
+
+        // Never served: the export names no anatomical site.
         Assert.Null(m.AnatomicalSource);
-        Assert.Null(m.PathologicalState);
-        Assert.Null(m.StorageConditions);
-        Assert.Null(m.ExpirationDate);
-        Assert.Null(m.PercentageTumorCells);
-        Assert.Null(m.AnalysesPerformed);
-        Assert.Null(m.DerivedFrom);
+    }
+
+    [Fact]
+    public void BiospecimenMapsEveryField()
+    {
+        var dto = FullyPopulatedPatient();
+        var sample = SampleMapper.ToSample(dto.Samples![0], new PatientId("P1"), dto.Biobank).Value;
+
+        var b = sample.Biospecimen!;
+        Assert.Equal("biospecimen_S-T", b.BiospecimenIdentifier);
+        Assert.Equal("S-T", b.DerivedFromMaterial);
+        Assert.Equal("Frozen Tissue", b.BiospecimenForm);
+        Assert.Equal("Masaryk Memorial Cancer Institute", b.ManagingBiobank);
+
+        // Three of five units left on the shelf, so there is something to request.
+        Assert.Equal(3, b.Quantity);
+        Assert.Equal("Available", b.Availability);
+
+        // Never served. StorageConditions is the interesting one: the ontology names a container
+        // and a temperature together ("Cryotube 1-2mL LN") and the export names neither.
+        Assert.Null(b.StorageConditions);
+        Assert.Null(b.PercentageTumorCells);
+        Assert.Null(b.NameOfFixative);
+        Assert.Null(b.EmbeddingMedium);
     }
 
     /// <summary>A run the sequencing API fills in as completely as its sources allow.</summary>
@@ -210,13 +241,13 @@ public sealed class UploaderMapperFieldParityTests
 
         var prep = Assert.Single(sequencing.Preparations);
         Assert.Equal("sampleprep_p0001_R1", prep.SampleprepIdentifier);
-        Assert.Equal("S1", prep.BelongsToMaterial);
+        Assert.Equal("biospecimen_S1", prep.BelongsToBiospecimen);
         Assert.Equal(100, prep.InputAmount);
         Assert.Equal("KitA", prep.LibraryPreparationKit);
         Assert.True(prep.PcrFree);
         Assert.Equal("Enrich", prep.TargetEnrichmentKit);
-        Assert.Equal(["BRCA1", "BRCA2"], prep.FullSequenceGenes);
-        Assert.Null(prep.PartialSequenceGenes);   // no source states a partial set
+        Assert.Equal(["BRCA1", "BRCA2"], prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);   // no source states a partial set
         Assert.False(prep.UmisPresent);
         Assert.Equal(350, prep.IntendedInsertSize);
         Assert.Equal(150, prep.IntendedReadLength);
@@ -225,7 +256,7 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("p0001_R1", run.SequencingIdentifier);
         Assert.Equal("sampleprep_p0001_R1", run.BelongsToSamplePreparation);
         Assert.Equal("2021-05-05", run.SequencingDate);
-        Assert.Equal("Illumina", run.SequencingPlatform);
+        Assert.Equal("Illumina platform", run.SequencingPlatform);
         Assert.Equal("NovaSeq", run.SequencingInstrumentModel);
         Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
         Assert.Equal(30, run.MedianReadDepth);
@@ -242,15 +273,14 @@ public sealed class UploaderMapperFieldParityTests
         var analysis = Assert.Single(run.Analyses);
         Assert.Equal("analysis_p0001_R1", analysis.AnalysisIdentifier);
         Assert.Equal("p0001_R1", analysis.BelongsToSequencing);
-        Assert.Null(analysis.PhysicalDataLocation);   // a deployment constant, not source data
-        Assert.Equal("s3://data.vcf", analysis.AbstractDataLocation);
-        Assert.Equal(["vcf"], analysis.DataFormatsStored);
+        // v2 dropped the data-location columns, so what survives of a file is its format - and it
+        // comes from the closed set of file roles rather than the source's free-text "format",
+        // because only a role can be turned into an ontology term reliably. The run's own FASTQ
+        // reads are not the analysis's files and do not appear here.
+        Assert.Equal(["VCF"], analysis.DataFormatsStored);
         Assert.Null(analysis.AlgorithmsUsed);         // no source
         Assert.Equal("GRCh38", analysis.ReferenceGenomeUsed);
         Assert.Equal("NextGENe", analysis.BioinformaticProtocolUsed);
-        Assert.Null(analysis.BioinformaticProtocolDeviation);
-        Assert.Null(analysis.ReasonForBioinformaticProtocolDeviation);
-        Assert.Null(analysis.WgsGuidelineFollowed);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain;
 using Uploader.Domain.Common;
+using Uploader.Infrastructure.Configuration;
 using Uploader.Infrastructure.Http;
 using Xunit;
 
@@ -30,8 +31,9 @@ public sealed class SequencingFetchTests
         var prepared = Prepared(sequencing, "240104_M02340_0399_LCBRW");
         Assert.Equal("sampleprep_p0001_240104_M02340_0399_LCBRW", prepared.SampleprepIdentifier);
 
-        // The material is the biobank's sample, not the sequencing API's pseudonymized predictive id.
-        Assert.Equal("S-T", prepared.BelongsToMaterial);
+        // The biospecimen is derived from the biobank's sample id, not from the sequencing API's
+        // pseudonymized predictive id.
+        Assert.Equal("biospecimen_S-T", prepared.BelongsToBiospecimen);
 
         Assert.Equal(250, prepared.InputAmount);
         Assert.Equal("KAPA HyperPlus", prepared.LibraryPreparationKit);
@@ -40,14 +42,14 @@ public sealed class SequencingFetchTests
         Assert.True(prepared.UmisPresent);
         Assert.Equal(350, prepared.IntendedInsertSize);
         Assert.Equal(151, prepared.IntendedReadLength);
-        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.FullSequenceGenes);
-        Assert.Null(prepared.PartialSequenceGenes);
+        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.FullySequencedGenes);
+        Assert.Null(prepared.PartiallySequencedGenes);
 
         var run = prepared.Sequencing!;
         Assert.Equal("p0001_240104_M02340_0399_LCBRW", run.SequencingIdentifier);
         Assert.Equal(prepared.SampleprepIdentifier, run.BelongsToSamplePreparation);
         Assert.Equal("2024-01-04", run.SequencingDate);
-        Assert.Equal("Illumina", run.SequencingPlatform);
+        Assert.Equal("Illumina platform", run.SequencingPlatform);
         Assert.Equal("MiSeq", run.SequencingInstrumentModel);
         Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
         Assert.Equal(95.9, run.PercentageQ30);
@@ -95,13 +97,13 @@ public sealed class SequencingFetchTests
         Assert.Equal(run.SequencingIdentifier, analysis.BelongsToSequencing);
         Assert.Equal("NextGENe", analysis.BioinformaticProtocolUsed);
         Assert.Equal("GRCh37", analysis.ReferenceGenomeUsed);
-        Assert.Equal(["txt", "vcf", "pdf", "bam", "bam.bai"], analysis.DataFormatsStored);
-        Assert.Contains(".vcf", analysis.AbstractDataLocation);
+        // The run writes seven files across seven roles; those collapse onto the four EDAM terms
+        // the catalogue's ontology has, with the three report roles all landing on PDF. Sorted,
+        // because the order files arrive in must not change the row's fingerprint.
+        Assert.Equal(["BAI", "BAM", "PDF", "VCF"], analysis.DataFormatsStored);
 
-        // No source states these, so they stay null rather than being invented.
-        Assert.Null(analysis.PhysicalDataLocation);
+        // No source states this, so it stays null rather than being invented.
         Assert.Null(analysis.AlgorithmsUsed);
-        Assert.Null(analysis.WgsGuidelineFollowed);
     }
 
     [Fact]
@@ -113,7 +115,7 @@ public sealed class SequencingFetchTests
         // still built and identified, with the fields the source did not state left null.
         Assert.Equal("sampleprep_p0001_240430_M02340_0412_ABCDE", prepared.SampleprepIdentifier);
         Assert.Null(prepared.LibraryPreparationKit);
-        Assert.Null(prepared.FullSequenceGenes);
+        Assert.Null(prepared.FullySequencedGenes);
         Assert.Empty(prepared.Sequencing!.Analyses);
         Assert.Null(prepared.Sequencing.MedianReadDepth);
     }
@@ -130,10 +132,11 @@ public sealed class SequencingFetchTests
 
     private static async Task<SequencingAggregate> FetchAsync(string recordedBody)
     {
-        var gateway = new HttpSourceDataGateway(RecordedResponse.ClientFactory(recordedBody));
-        var dto = await gateway.FetchSequencingAsync(PredictiveNumber.Value, CancellationToken.None);
+        var gateway = new HttpSourceDataGateway(
+            RecordedResponse.ClientFactory(recordedBody), new UploaderOptions());
+        var fetched = await gateway.FetchSequencingAsync(PredictiveNumber.Value, CancellationToken.None);
 
-        return SequencingMapper.ToSequencing(dto!, PredictiveNumber, BiobankSample).Value;
+        return SequencingMapper.ToSequencing(fetched.Value!, PredictiveNumber, BiobankSample).Value;
     }
 
     private static SamplePreparation Prepared(SequencingAggregate sequencing, string runId) =>

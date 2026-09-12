@@ -15,7 +15,7 @@ namespace Uploader.IntegrationTests;
 /// Deliberately a scan of the whole serialized payload rather than a field-by-field assertion. The
 /// failure this guards against is a field nobody remembered - a new column, a nested value object, a
 /// free-text location that happens to embed an id - so the test has to be blind to which field it is.
-/// It serializes with <see cref="HttpCatalogueGateway.PayloadOptions"/>, the settings the gateway
+/// It serializes with <see cref="Emx2Client.PayloadOptions"/>, the settings the gateway
 /// actually posts with, and runs the real <see cref="PseudonymStore"/> rather than a fake.
 /// </para>
 /// </summary>
@@ -37,6 +37,9 @@ public sealed class CataloguePayloadLeakTests : IDisposable
 
     private IPseudonymMap NewMap() => new PseudonymStore(_db.NewContext(), TimeProvider.System, "mmci");
 
+    /// <summary>The study is configuration, not patient data, so it carries no real identifier.</summary>
+    private const string StudyId = "mmci_biobank";
+
     [Fact]
     public async Task NoRealIdentifierSurvivesIntoAnyPayload()
     {
@@ -48,14 +51,14 @@ public sealed class CataloguePayloadLeakTests : IDisposable
 
         var payloads = new object[]
         {
-            CatalogueMapper.ToPayload(Patient(), patientPseudonym),
+            CatalogueMapper.ToPayload(Patient(), patientPseudonym, StudyId),
             CatalogueMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym),
             CatalogueMapper.ToPayload(Sequencing(), samplePseudonym),
         };
 
         foreach (var payload in payloads)
         {
-            var json = JsonSerializer.Serialize(payload, HttpCatalogueGateway.PayloadOptions);
+            var json = JsonSerializer.Serialize(payload, Emx2Client.PayloadOptions);
 
             foreach (var real in RealIdentifiers)
             {
@@ -78,10 +81,10 @@ public sealed class CataloguePayloadLeakTests : IDisposable
             PseudonymKind.Sample, RealSampleId, CancellationToken.None);
 
         var patientJson = JsonSerializer.Serialize(
-            CatalogueMapper.ToPayload(Patient(), patientPseudonym), HttpCatalogueGateway.PayloadOptions);
+            CatalogueMapper.ToPayload(Patient(), patientPseudonym, StudyId), Emx2Client.PayloadOptions);
         var sampleJson = JsonSerializer.Serialize(
             CatalogueMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym),
-            HttpCatalogueGateway.PayloadOptions);
+            Emx2Client.PayloadOptions);
 
         Assert.Contains(patientPseudonym, patientJson, StringComparison.Ordinal);
         Assert.Contains(samplePseudonym, sampleJson, StringComparison.Ordinal);
@@ -91,14 +94,19 @@ public sealed class CataloguePayloadLeakTests : IDisposable
     private static PatientAggregate Patient() =>
         PatientAggregate.Create(
             RealPatientId,
-            new Personal { PersonalIdentifier = RealPatientId, YearOfBirth = 1948, GenderAtBirth = "female" },
+            new Personal
+            {
+                PersonalIdentifier = RealPatientId,
+                YearOfBirth = 1948,
+                GenderAtBirth = "assigned female at birth",
+            },
             new Clinical
             {
                 // What the inbound mapper derives from the real patient id - it embeds it, which is
                 // exactly the kind of field a field-by-field test forgets.
                 ClinicalIdentifier = $"clinical_{RealPatientId}",
                 BelongsToPerson = RealPatientId,
-                ClinicalDiagnosis = ["C50.4"],
+                Diagnosis = ["C50.4"],
                 AgeAtDiagnosis = 74,
             },
             hasConsent: true).Value;
@@ -114,10 +122,16 @@ public sealed class CataloguePayloadLeakTests : IDisposable
                 MaterialIdentifier = RealSampleId,
                 CollectedFromPerson = RealPatientId,
                 BelongsToDiagnosis = [$"clinical_{RealPatientId}"],
-                DerivedFrom = RealSampleId,
-                SamplingTimestamp = "2022-12-07T07:35:00",
-                BiospecimenType = "SD",
-                PhysicalLocation = "MOU",
+                SamplingDate = "2022-12-07",
+                MaterialType = "Peripheral Blood",
+            },
+            new Biospecimen
+            {
+                // Derived from the real sample id, so it embeds it - exactly the kind of field the
+                // scan below exists to catch.
+                BiospecimenIdentifier = $"biospecimen_{RealSampleId}",
+                DerivedFromMaterial = RealSampleId,
+                BiospecimenForm = "Serum or Plasma",
             }).Value;
 
     private static SequencingAggregate Sequencing() =>
@@ -128,7 +142,7 @@ public sealed class CataloguePayloadLeakTests : IDisposable
                 new SamplePreparation
                 {
                     SampleprepIdentifier = "mmci_sampleprep_2f1c_RUN1",
-                    BelongsToMaterial = RealSampleId,
+                    BelongsToBiospecimen = RealSampleId,
                     Sequencing = new SequencingRun
                     {
                         SequencingIdentifier = "mmci_predictive_2f1c_RUN1",
@@ -139,7 +153,7 @@ public sealed class CataloguePayloadLeakTests : IDisposable
                             {
                                 AnalysisIdentifier = "mmci_analysis_2f1c_RUN1",
                                 BelongsToSequencing = "mmci_predictive_2f1c_RUN1",
-                                AbstractDataLocation = "Samples/mmci_predictive_2f1c/VCF/x.vcf",
+                                DataFormatsStored = ["VCF"],
                             },
                         ],
                     },
