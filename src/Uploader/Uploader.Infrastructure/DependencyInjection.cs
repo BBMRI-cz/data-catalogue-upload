@@ -32,6 +32,8 @@ public static class DependencyInjection
             provider.GetRequiredService<TimeProvider>(),
             options.PseudonymPrefix));
 
+        services.AddSingleton(new CatalogueStudy(options.CatalogueStudyId, options.CatalogueStudyName));
+
         services.AddScoped<ISyncStateRepository, SyncStateRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
 
@@ -39,18 +41,34 @@ public static class DependencyInjection
         AddSourceClient(services, HttpSourceDataGateway.RadiologyClient, options.RadiologyApiUrl);
         AddSourceClient(services, HttpSourceDataGateway.SequencingClient, options.SequencingApiUrl);
         AddSourceClient(services, HttpSourceDataGateway.WsiClient, options.WsiApiUrl);
-        AddSourceClient(services, HttpCatalogueGateway.CatalogueClient, options.CatalogueApiUrl);
+        AddSourceClient(services, Emx2Client.CatalogueClient, options.CatalogueApiUrl);
 
         services.AddSingleton<ISourceDataGateway, HttpSourceDataGateway>();
-        services.AddSingleton<ICatalogueGateway, HttpCatalogueGateway>();
+        services.AddSingleton<Emx2Client>();
+
+        // Scoped, so a run reads the column layout and each ontology once and reuses them for
+        // every row rather than asking again per patient.
+        services.AddScoped<Emx2Schema>();
+        services.AddScoped<ICatalogueGateway, Emx2CatalogueGateway>();
 
         return services;
     }
 
-    private static void AddSourceClient(IServiceCollection services, string name, string baseUrl) =>
+    /// <summary>
+    /// Registers a named client, unless the URL is blank - a source with no URL is not deployed for
+    /// this biobank, so there is nothing to register and nothing will be contacted.
+    /// </summary>
+    private static void AddSourceClient(IServiceCollection services, string name, string baseUrl)
+    {
+        if (!HttpSourceDataGateway.IsConfigured(baseUrl))
+        {
+            return;
+        }
+
         services.AddHttpClient(name, client =>
         {
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = HttpTimeout;
         });
+    }
 }

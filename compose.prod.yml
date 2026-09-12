@@ -97,6 +97,35 @@ services:
       - /muni-sc/Libraries:/data/libraries:ro
       - /home/export/pseudonymization_table:/data/mapping-table:ro
 
+  # --- uploader: the sync job itself. One-shot, not a server: it runs, prints its summary and
+  # exits, so restart is "no" and it is started by hand or by whatever schedules it.
+  uploader:
+    build:
+      context: .
+      dockerfile: src/Uploader/Uploader.Host/Dockerfile
+    container_name: uploader
+    restart: "no"
+    # The catalogue token lives here and nowhere else. Copy .env.example to .env and fill it in;
+    # .env is git-ignored.
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: uploader-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
+      BIOBANK_API_URL: http://biobank-api:8001
+      SEQUENCING_API_URL: http://sequencing-api:8002
+      # Radiology and WSI have no service yet. Blank means the uploader never contacts them, which
+      # is not the same as contacting them and failing - see docs/catalogue-api-contract.md.
+      RADIOLOGY_API_URL: ""
+      WSI_API_URL: ""
+    depends_on:
+      - uploader-db
+      - biobank-api
+      - sequencing-api
+
 volumes:
   uploader_db_data:
   biobank_db_data:
