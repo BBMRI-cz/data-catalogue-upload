@@ -33,6 +33,7 @@ internal sealed class SyncRunRepository : ISyncRunRepository
         run.DeletedCount = result.Deleted;
         run.SkippedCount = result.Skipped;
         run.FailedCount = result.Failed;
+        run.SourceUnavailableCount = result.SourceUnavailable;
 
         await _context.SaveChangesAsync(cancellationToken);
     }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Uploader.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Uploader.Infrastructure.Persistence;
 namespace Uploader.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(UploaderDbContext))]
-    partial class UploaderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260908103945_AddSourceUnavailableCount")]
+    partial class AddSourceUnavailableCount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
