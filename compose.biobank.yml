@@ -1,0 +1,51 @@
+# The biobank half of a two-server deployment: run this on the machine that holds the patient XML
+# export. A Docker bind mount only resolves on the host running the container, so the service has to
+# live where its data does — that is the whole reason the deployment is split.
+#
+#   docker compose -f compose.biobank.yml up -d
+#
+# The other half is compose.sequencing.yml. See docs/deployment.md for the full runbook.
+services:
+  biobank-db:
+    image: postgres:16
+    container_name: biobank-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
+    # Loopback only. Nothing outside this host has any business reaching the database directly.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - biobank_db_data:/var/lib/postgresql/data
+
+  biobank-api:
+    build:
+      context: .
+      dockerfile: src/BiobankApi/BiobankApi.Web/Dockerfile
+    container_name: biobank-api
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: biobank-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
+      ASPNETCORE_URLS: http://+:8001
+      RUN_MIGRATIONS: "true"
+      # Patient XML the parser ingests (weekly Quartz job + POST /admin/ingest).
+      BIOBANK_XML_EXPORT_PATH: /data/exports
+    depends_on:
+      - biobank-db
+    ports:
+      # This API has no authentication, and /patients serves real patient identifiers, birth years,
+      # sex and diagnoses. Publishing it on 0.0.0.0 puts that on every interface the host has, so
+      # BIOBANK_BIND names the one address the uploader's machine reaches it on — a private or VPN
+      # address, never a public one. Loopback by default, which is the safe thing to get wrong.
+      - "${BIOBANK_BIND:-127.0.0.1}:8001:8001"
+    volumes:
+      - "${BIOBANK_XML_EXPORT_DIR:-/home/mou/patient_data}:/data/exports:ro"
+
+volumes:
+  biobank_db_data:

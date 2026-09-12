@@ -1,0 +1,108 @@
+# The sequencing half of a two-server deployment: run this on the machine that holds the organised
+# run tree. It carries the uploader too, because the uploader makes one request per sequenced sample
+# and that traffic is many small round trips, while the biobank is one large response that costs
+# bandwidth once rather than latency repeatedly.
+#
+#   docker compose -f compose.sequencing.yml up -d sequencing-db sequencing-api uploader-db
+#   docker compose -f compose.sequencing.yml run --rm uploader
+#
+# The other half is compose.biobank.yml. See docs/deployment.md for the full runbook.
+services:
+  sequencing-db:
+    image: postgres:16
+    container_name: sequencing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - sequencing_db_data:/var/lib/postgresql/data
+
+  sequencing-api:
+    build:
+      context: .
+      dockerfile: src/SequencingApi/SequencingApi.Web/Dockerfile
+    container_name: sequencing-api
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: sequencing-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+      ASPNETCORE_URLS: http://+:8002
+      RUN_MIGRATIONS: "true"
+      # The organised run tree, the libraries table, and the pseudonymizer's mappings. All read-only:
+      # this service only ever reads them (weekly Quartz job + POST /admin/ingest).
+      SEQUENCING_DATA_PATH: /data/organised-runs
+      SEQUENCING_LIBRARIES_PATH: /data/libraries
+      SEQUENCING_MAPPING_TABLE_PATH: /data/mapping-table
+      # Required, not optional: the source trees above are NFSv3 mounts whose lock manager never
+      # answers, and .NET's FileStream takes an advisory flock() on every open to emulate Windows
+      # share semantics. Without this the ingest blocks on the first file it reads and never
+      # returns — no timeout, no error, and the weekly Quartz job hangs a worker thread for good.
+      DOTNET_SYSTEM_IO_DISABLEFILELOCKING: "1"
+    depends_on:
+      - sequencing-db
+    ports:
+      # Loopback by default: the uploader runs on this host, so nothing off-box needs this port.
+      # Give SEQUENCING_BIND a private address only if you move the uploader to the other machine.
+      - "${SEQUENCING_BIND:-127.0.0.1}:8002:8002"
+    volumes:
+      - "${SEQUENCING_RUNS_DIR:-/muni-sc/OrganisedRuns}:/data/organised-runs:ro"
+      - "${SEQUENCING_LIBRARIES_DIR:-/muni-sc/Libraries}:/data/libraries:ro"
+      - "${SEQUENCING_MAPPING_DIR:-/home/export/pseudonymization_table}:/data/mapping-table:ro"
+
+  uploader-db:
+    image: postgres:16
+    container_name: uploader-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Holds the pseudonym map. Losing this volume means every patient is re-pseudonymized under a
+      # new identifier and the catalogue fills with duplicates. Back it up before touching it.
+      - uploader_db_data:/var/lib/postgresql/data
+
+  # One-shot, not a server: it runs, prints a JSON summary and exits. Hence restart "no" and
+  # `run --rm` rather than `up`.
+  uploader:
+    build:
+      context: .
+      dockerfile: src/Uploader/Uploader.Host/Dockerfile
+    container_name: uploader
+    restart: "no"
+    # The catalogue token lives here and nowhere else. Copy .env.example to .env and fill it in;
+    # .env is git-ignored.
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: uploader-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
+      # The other machine. No default on purpose: an empty URL means "this source is not deployed",
+      # so a typo here would otherwise produce a quiet run that uploads nobody.
+      BIOBANK_API_URL: "${BIOBANK_API_URL:?set BIOBANK_API_URL in .env to the biobank server}"
+      SEQUENCING_API_URL: http://sequencing-api:8002
+      # Radiology and WSI have no service yet. Blank means the uploader never contacts them, which
+      # is not the same as contacting them and failing - see docs/catalogue-api-contract.md.
+      RADIOLOGY_API_URL: ""
+      WSI_API_URL: ""
+    # Only what runs on this host. Compose talks to the local Docker daemon and cannot wait on a
+    # container elsewhere; an unreachable biobank is reported as an error rather than a crash.
+    depends_on:
+      - uploader-db
+      - sequencing-api
+
+volumes:
+  sequencing_db_data:
+  uploader_db_data:
