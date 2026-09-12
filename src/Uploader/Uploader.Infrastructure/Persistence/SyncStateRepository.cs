@@ -108,7 +108,10 @@ internal sealed class SyncStateRepository : ISyncStateRepository
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SoftDeleteChildrenAsync(PatientId parentId, string runId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SampleId>> SoftDeleteChildrenAsync(
+        PatientId parentId,
+        string runId,
+        CancellationToken cancellationToken)
     {
         var id = parentId.Value;
         var now = _timeProvider.GetUtcNow();
@@ -132,6 +135,7 @@ internal sealed class SyncStateRepository : ISyncStateRepository
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        return [.. samples.Select(state => new SampleId(state.Id))];
     }
 
     public async Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(

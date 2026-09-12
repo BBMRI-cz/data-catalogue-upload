@@ -27,19 +27,25 @@ public sealed class RunCatalogueSyncCommandResult
     public int Deleted { get; set; }
     public int Skipped { get; set; }
     public int Failed { get; set; }
+
+    /// <summary>
+    /// Times a configured source could not be reached. Kept apart from <see cref="Failed"/> so the
+    /// summary says whether to chase an outage or fix a payload. A source with no URL is not
+    /// deployed and never counted here - it is not contacted at all.
+    /// </summary>
+    public int SourceUnavailable { get; set; }
 }
 
 internal sealed class RunCatalogueSyncCommandHandler
     : ICommandHandler<RunCatalogueSyncCommand, ErrorOr<RunCatalogueSyncCommandResult>>
 {
-    private const string DeleteEntityType = "patient";
-
     private readonly ISourceDataGateway _sourceGateway;
     private readonly ICatalogueGateway _catalogueGateway;
     private readonly ISyncStateRepository _stateRepository;
     private readonly ISyncRunRepository _runRepository;
     private readonly ISyncPlanner _planner;
     private readonly IPseudonymMap _pseudonyms;
+    private readonly CatalogueStudy _study;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<RunCatalogueSyncCommandHandler> _logger;
 
@@ -50,6 +56,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         ISyncRunRepository runRepository,
         ISyncPlanner planner,
         IPseudonymMap pseudonyms,
+        CatalogueStudy study,
         TimeProvider timeProvider,
         ILogger<RunCatalogueSyncCommandHandler> logger)
     {
@@ -59,6 +66,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         _runRepository = runRepository;
         _planner = planner;
         _pseudonyms = pseudonyms;
+        _study = study;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -70,17 +78,38 @@ internal sealed class RunCatalogueSyncCommandHandler
         var runId = Guid.NewGuid().ToString();
         var result = new RunCatalogueSyncCommandResult(runId);
 
-        var rawPatients = await _sourceGateway.FetchPatientsAsync(cancellationToken);
+        // Personal references the study, so it has to exist before the first patient does.
+        var study = await _catalogueGateway.UpsertStudyAsync(
+            new StudyRecord { Identifier = _study.Identifier, Name = _study.Name }, cancellationToken);
+        if (study.IsError)
+        {
+            result.Failed++;
+            _logger.LogError("Cannot publish the study: {Error}", study.Errors[0].Description);
+            await _runRepository.FinishAsync(result, cancellationToken);
+            return study.Errors;
+        }
+
+        var fetched = await _sourceGateway.FetchPatientsAsync(cancellationToken);
+        if (fetched.IsError)
+        {
+            // Without the biobank there is no run to have: every patient comes from it. Record the
+            // run so the outage is visible in sync_run, then report rather than throw.
+            Record(result, fetched.Errors[0]);
+            _logger.LogError("Cannot list patients: {Error}", fetched.Errors[0].Description);
+            await _runRepository.FinishAsync(result, cancellationToken);
+            return fetched.Errors;
+        }
+
         var seenPatientIds = new HashSet<PatientId>();
 
-        foreach (var rawPatient in rawPatients)
+        foreach (var rawPatient in fetched.Value)
         {
             result.Scanned++;
 
             ErrorOr<PatientCatalogueData> built;
             try
             {
-                built = await BuildPatientDataAsync(rawPatient, cancellationToken);
+                built = await BuildPatientDataAsync(rawPatient, result, cancellationToken);
             }
             catch (JsonException exception)
             {
@@ -153,8 +182,18 @@ internal sealed class RunCatalogueSyncCommandHandler
 
         if (operation.Op == SyncOp.Delete)
         {
-            // Soft delete: the planner already marked the state deleted; DB only.
-            result.Deleted++;
+            var removed = await DeleteAsync(operation, pseudonyms, cancellationToken);
+            if (removed.IsError)
+            {
+                result.Failed++;
+                operation.State.Status = SyncStatus.Failed;
+                operation.State.LastError = removed.Errors[0].Description;
+            }
+            else
+            {
+                result.Deleted++;
+            }
+
             await _stateRepository.SaveAsync(operation.State, cancellationToken);
             return;
         }
@@ -186,7 +225,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         operation switch
         {
             PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(
-                CatalogueMapper.ToPayload(patient, pseudonyms.Patient), cancellationToken),
+                CatalogueMapper.ToPayload(patient, pseudonyms.Patient, _study.Identifier), cancellationToken),
 
             SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(
                 CatalogueMapper.ToPayload(sample, pseudonyms.Sample(sample.Id), pseudonyms.Patient),
@@ -208,6 +247,36 @@ internal sealed class RunCatalogueSyncCommandHandler
             _ => throw new InvalidOperationException($"Unsupported operation for upsert: {operation.GetType().Name}"),
         };
 
+    /// <summary>
+    /// Removes one aggregate's rows from the catalogue. The planner already ordered the operations
+    /// child before parent, so each of these only has to remove its own tables.
+    /// <para>
+    /// WSI and imaging studies were never uploaded - the upsert refuses them - so there is nothing
+    /// of theirs in the catalogue to delete, and their state is retired locally alone. The same is
+    /// true of a patient who was never published: <c>DeletePatientAsync</c> removes rows that are
+    /// not there, which the catalogue accepts.
+    /// </para>
+    /// </summary>
+    private Task<ErrorOr<Deleted>> DeleteAsync(
+        SyncOperation operation,
+        PatientPseudonyms pseudonyms,
+        CancellationToken cancellationToken) =>
+        operation switch
+        {
+            // Reached when a patient stops being eligible - consent withdrawn, or the last sample
+            // gone. The planner ordered this after the patient's own children, so their rows are
+            // already out and nothing references the ones removed here.
+            PatientOperation => _catalogueGateway.DeletePatientAsync(pseudonyms.Patient, cancellationToken),
+
+            SampleOperation sample => _catalogueGateway.DeleteSampleAsync(
+                pseudonyms.Sample(sample.SampleState.Id), cancellationToken),
+
+            SequencingOperation sequencing => _catalogueGateway.DeleteSequencingAsync(
+                pseudonyms.Sample(sequencing.SequencingState.SampleId), cancellationToken),
+
+            _ => Task.FromResult<ErrorOr<Deleted>>(Result.Deleted),
+        };
+
     private async Task DeleteMissingPatientsAsync(
         ISet<PatientId> seenPatientIds,
         string runId,
@@ -219,24 +288,82 @@ internal sealed class RunCatalogueSyncCommandHandler
 
         foreach (var state in missing)
         {
-            var deleted = await _catalogueGateway.DeleteAsync(
-                DeleteEntityType, state.Id.Value, state.CatalogueRemoteId, cancellationToken);
-            if (!deleted.IsError)
+            // Deepest first: the catalogue refuses to delete a patient while a sample still
+            // references it, and a sample while its sequencing still does. Getting this wrong is
+            // what used to leave samples and sequencing behind as orphans.
+            var samples = await _stateRepository.SoftDeleteChildrenAsync(state.Id, runId, cancellationToken);
+            var patientPseudonym = await _pseudonyms.PseudonymizeAsync(
+                PseudonymKind.Patient, state.Id.Value, cancellationToken);
+
+            var removed = true;
+            foreach (var sampleId in samples)
             {
-                result.Deleted++;
+                // Resolved rather than read from stored state: the map is idempotent, so this
+                // returns the same pseudonym the upload published.
+                var samplePseudonym = await _pseudonyms.PseudonymizeAsync(
+                    PseudonymKind.Sample, sampleId.Value, cancellationToken);
+
+                removed &= Count(
+                    await _catalogueGateway.DeleteSequencingAsync(samplePseudonym, cancellationToken), result);
+                removed &= Count(
+                    await _catalogueGateway.DeleteSampleAsync(samplePseudonym, cancellationToken), result);
+            }
+
+            if (removed)
+            {
+                Count(await _catalogueGateway.DeletePatientAsync(patientPseudonym, cancellationToken), result);
             }
             else
             {
-                result.Failed++;
+                // Deleting the patient now would only fail on the sample rows still referencing it,
+                // and reporting that second failure would say nothing the first did not.
+                _logger.LogWarning(
+                    "Leaving patient {PatientId} in the catalogue: its samples could not be removed",
+                    state.Id.Value);
             }
-
-            // Children are soft-deleted in the DB only, no gateway calls.
-            await _stateRepository.SoftDeleteChildrenAsync(state.Id, runId, cancellationToken);
         }
+    }
+
+    /// <summary>Counts one catalogue delete, and says whether it worked.</summary>
+    private static bool Count(ErrorOr<Deleted> deleted, RunCatalogueSyncCommandResult result)
+    {
+        if (deleted.IsError)
+        {
+            result.Failed++;
+            return false;
+        }
+
+        result.Deleted++;
+        return true;
+    }
+
+    /// <summary>
+    /// Counts a source failure against the right column: an unreachable source is an outage, and
+    /// anything else is bad data.
+    /// </summary>
+    private static void Record(RunCatalogueSyncCommandResult result, Error error)
+    {
+        if (error.Code == SourceErrors.UnavailableCode)
+        {
+            result.SourceUnavailable++;
+        }
+        else
+        {
+            result.Failed++;
+        }
+    }
+
+    /// <summary>Counts and logs one patient losing one source, then lets the run carry on.</summary>
+    private void Report(RunCatalogueSyncCommandResult result, string source, string? patientId, Error error)
+    {
+        Record(result, error);
+        _logger.LogWarning(
+            "Patient {PatientId} loses its {Source} data: {Error}", patientId, source, error.Description);
     }
 
     private async Task<ErrorOr<PatientCatalogueData>> BuildPatientDataAsync(
         PatientDto rawPatient,
+        RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
     {
         var patientResult = PatientMapper.ToPatient(rawPatient);
@@ -249,6 +376,13 @@ internal sealed class RunCatalogueSyncCommandHandler
         var samples = new List<SampleAggregate>();
         var sequencings = new List<SequencingAggregate>();
         var wsis = new List<WsiAggregate>();
+
+        // A source that did not answer told us nothing. Without these the empty list below would
+        // read as "these rows were withdrawn", and the planner would delete what a previous run
+        // published over a momentary outage.
+        var sequencingComplete = true;
+        var wsiComplete = true;
+        var imagingComplete = true;
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
@@ -263,11 +397,18 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             if (sample.SequencingId is { } sequencingId)
             {
-                var sequencingDto = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
+                var fetched = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
+
+                // A source this patient cannot reach costs the patient that source, not the run.
+                if (fetched.IsError)
+                {
+                    Report(result, "sequencing", rawPatient.PatientId, fetched.Errors[0]);
+                    sequencingComplete = false;
+                }
 
                 // A predictive number the sequencing API does not know answers 200 with an empty
                 // sample list. That is a normal answer, not a failure: no aggregate, no counter moved.
-                if (sequencingDto is { Samples.Count: > 0 })
+                else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
                 {
                     var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
                     if (sequencingResult.IsError)
@@ -281,8 +422,13 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             if (sample.WsiId is { } wsiId)
             {
-                var wsiDto = await _sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
-                if (wsiDto is not null)
+                var fetched = await _sourceGateway.FetchWsiAsync(wsiId.Value, cancellationToken);
+                if (fetched.IsError)
+                {
+                    Report(result, "wsi", rawPatient.PatientId, fetched.Errors[0]);
+                    wsiComplete = false;
+                }
+                else if (fetched.Value is { } wsiDto)
                 {
                     var wsiResult = WsiMapper.ToWsi(wsiDto, wsiId, sample.Id);
                     if (wsiResult.IsError)
@@ -302,15 +448,24 @@ internal sealed class RunCatalogueSyncCommandHandler
             .ToList();
 
         var studies = new List<ImagingStudyAggregate>();
-        foreach (var studyDto in await _sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken))
+        var radiology = await _sourceGateway.FetchRadiologyAsync(accessionNumbers, cancellationToken);
+        if (radiology.IsError)
         {
-            var studyResult = ImagingStudyMapper.ToImagingStudy(studyDto, patient.Id);
-            if (studyResult.IsError)
+            Report(result, "radiology", rawPatient.PatientId, radiology.Errors[0]);
+            imagingComplete = false;
+        }
+        else
+        {
+            foreach (var studyDto in radiology.Value)
             {
-                return studyResult.Errors;
-            }
+                var studyResult = ImagingStudyMapper.ToImagingStudy(studyDto, patient.Id);
+                if (studyResult.IsError)
+                {
+                    return studyResult.Errors;
+                }
 
-            studies.Add(studyResult.Value);
+                studies.Add(studyResult.Value);
+            }
         }
 
         return new PatientCatalogueData
@@ -320,6 +475,9 @@ internal sealed class RunCatalogueSyncCommandHandler
             Sequencings = sequencings,
             Wsis = wsis,
             ImagingStudies = studies,
+            SequencingComplete = sequencingComplete,
+            WsiComplete = wsiComplete,
+            ImagingComplete = imagingComplete,
         };
     }
 }
