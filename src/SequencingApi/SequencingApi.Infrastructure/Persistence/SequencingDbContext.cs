@@ -61,7 +61,9 @@ public sealed class SequencingDbContext : DbContext
             builder.HasIndex(sample => sample.IdScheme);
 
             // The uploader's only entry point is by predictive number, so this lookup is the hot path.
-            // Not unique: two samples can carry the same one, and most carry none at all.
+            // Not unique: two samples can carry the same one, and most carry none at all. The key is
+            // what a lookup compares; the raw number stays indexed for the ones that have no key.
+            builder.HasIndex(sample => sample.PredictiveKey);
             builder.HasIndex(sample => sample.PredictiveNumber);
 
             builder.HasMany(sample => sample.RunSamples)

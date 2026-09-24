@@ -28,6 +28,7 @@ internal static class SampleMapper
             ExternalId = externalId,
             IdScheme = sample.IdScheme,
             PredictiveNumber = sample.PredictiveNumber,
+            PredictiveKey = sample.PredictiveKey,
             RunSamples = [.. sample.RunSamples.Select(runSample => ToEntity(runSample, externalId))],
         };
     }

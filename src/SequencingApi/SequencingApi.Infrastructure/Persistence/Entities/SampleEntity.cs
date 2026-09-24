@@ -13,5 +13,8 @@ public class SampleEntity
     public string IdScheme { get; set; } = default!;
     public string? PredictiveNumber { get; set; }
 
+    /// <summary>Derived from <see cref="PredictiveNumber"/> on save; stored only so the lookup can use an index.</summary>
+    public string? PredictiveKey { get; set; }
+
     public List<RunSampleEntity> RunSamples { get; set; } = [];
 }
