@@ -74,7 +74,14 @@ curl -s http://127.0.0.1:8001/health
 curl -X POST http://127.0.0.1:8001/admin/ingest
 ```
 
-The ingest reports how many patients it parsed and stored. Confirm real data is being served:
+The ingest reports how many patients it parsed and stored.
+
+**Never prune the export directory.** Each weekly file lists only the last ~60 days of a patient's
+samples, so the API merges every file a patient ever had
+([`docs/patient-data-report.md`](patient-data-report.md#how-a-patients-files-relate)). Deleting old
+files to free space silently deletes their samples on the next ingest.
+
+Confirm real data is being served:
 
 ```bash
 curl -s http://127.0.0.1:8001/patients | head -c 400
