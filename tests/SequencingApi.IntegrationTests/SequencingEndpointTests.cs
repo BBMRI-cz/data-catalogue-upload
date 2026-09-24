@@ -101,6 +101,18 @@ public sealed class SequencingEndpointTests : IClassFixture<IngestedSequencingHo
         Assert.Equal("variant_calling", analysis.AnalysisType);
     }
 
+    [Theory]
+    [InlineData("2021%2F4")]
+    [InlineData("2021_4_DNA")]
+    public async Task FindsTheSampleWhateverFormThePredictiveNumberIsAskedIn(string predictiveNumber)
+    {
+        // The mapping table holds 4-21; the patient API writes the same number as 2021/4, and that is
+        // the form the uploader asks with.
+        var body = await Get("/sequencing?predictive_number=" + predictiveNumber);
+
+        Assert.Equal("p0001", Assert.Single(body.Samples).SampleId);
+    }
+
     [Fact]
     public async Task AnUnknownPredictiveNumberIsAnEmptyAnswerRatherThanANotFound()
     {

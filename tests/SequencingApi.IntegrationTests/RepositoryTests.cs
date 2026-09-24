@@ -106,6 +106,29 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Theory]
+    [InlineData("2029/5678")]
+    [InlineData("2029_5678_DNA")]
+    [InlineData("5678-29")]
+    public async Task GetSamplesByPredictiveNumberMatchesAnyWrittenFormOfTheNumber(string predictiveNumber)
+    {
+        // The uploader asks with the biobank's form and the source stored its own: the join is on the
+        // number, not on how it was typed.
+        await using var context = _db.NewContext();
+        await new SqlSampleRepository(context).SaveSamplesAsync(
+            [
+                SequencingFixtures.FullSample(),
+                SampleAggregate.Create("mmci_predictive_0003", idScheme: "mmci_predictive", predictiveNumber: "5678-29").Value,
+            ],
+            CancellationToken.None);
+
+        await using var readContext = _db.NewContext();
+        var loaded = await new SqlSampleRepository(readContext)
+            .GetSamplesByPredictiveNumberAsync(predictiveNumber, CancellationToken.None);
+
+        Assert.Equal("mmci_predictive_0003", Assert.Single(loaded).Id.Value);
+    }
+
+    [Theory]
     [InlineData("patient-0000")]
     [InlineData("")]
     [InlineData("   ")]

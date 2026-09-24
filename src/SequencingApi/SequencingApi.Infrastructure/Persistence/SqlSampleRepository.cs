@@ -40,8 +40,13 @@ internal sealed class SqlSampleRepository : ISampleRepository
             return [];
         }
 
+        // Compared on the canonical key, so the biobank's 2029/5678 finds the sample sheet's
+        // 2029_5678_DNA. The raw comparison stays for a number with no recognisable form, and for a row
+        // saved before its key was stored.
+        var key = Normalize.PredictiveKey(predictiveNumber);
+        var trimmed = predictiveNumber.Trim();
         var entities = await WithSubtree()
-            .Where(sample => sample.PredictiveNumber == predictiveNumber)
+            .Where(sample => (key != null && sample.PredictiveKey == key) || sample.PredictiveNumber == trimmed)
             .OrderBy(sample => sample.ExternalId)
             .ToListAsync(cancellationToken);
 

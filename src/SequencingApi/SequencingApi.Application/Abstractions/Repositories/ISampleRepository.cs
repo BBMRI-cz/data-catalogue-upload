@@ -49,6 +49,8 @@ public interface ISampleRepository
     /// A list, not a single sample: <see cref="SampleAggregate.PredictiveNumber"/> is not unique —
     /// the same subject can be sampled more than once, and nothing in the source guarantees one row.
     /// Samples with no predictive number are never matched, including when the argument is blank.
+    /// The comparison is on <see cref="SampleAggregate.PredictiveKey"/>, so any written form of the same
+    /// number matches; a number with no recognisable form has to match exactly.
     /// </remarks>
     Task<IReadOnlyList<SampleAggregate>> GetSamplesByPredictiveNumberAsync(
         string predictiveNumber,
