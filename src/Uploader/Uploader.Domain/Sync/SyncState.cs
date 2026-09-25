@@ -35,6 +35,13 @@ public interface ISyncState
     string? LastError { get; set; }
     string RunId { get; set; }
 
+    /// <summary>
+    /// Whether the catalogue may hold rows for this entity: an upsert succeeded (it has a
+    /// <see cref="CatalogueRemoteId"/>), or one was attempted and failed part-way, possibly after
+    /// writing some rows. An entity that was only ever skipped has nothing in the catalogue to remove.
+    /// </summary>
+    bool WasPublished { get; }
+
     /// <summary>Return a same-typed copy of this state (including its key fields).</summary>
     ISyncState Clone();
 }
@@ -54,6 +61,8 @@ public abstract class SyncState<TId> : Entity<TId>, ISyncState
     public DateTimeOffset? LastSyncedAt { get; set; }
     public string? LastError { get; set; }
     public string RunId { get; set; } = string.Empty;
+
+    public bool WasPublished => CatalogueRemoteId is not null || Status == SyncStatus.Failed;
 
     public abstract ISyncState Clone();
 

@@ -29,18 +29,18 @@ public sealed class UploaderMapperTests
             biobank: "MOU").Value;
 
         Assert.Equal("P1", patient.Personal!.PersonalIdentifier);
-        Assert.Equal("male", patient.Personal.GenderAtBirth);
+        Assert.Equal("assigned male at birth", patient.Personal.GenderAtBirth);
         Assert.Equal(1980, patient.Personal.YearOfBirth);
         Assert.True(patient.HasConsent);
-        Assert.Equal(["C50.4", "C51"], patient.Clinical!.ClinicalDiagnosis);
+        Assert.Equal(["C50.4", "C51"], patient.Clinical!.Diagnosis);
         Assert.Equal("clinical_P1", patient.Clinical.ClinicalIdentifier);
         Assert.Equal("S1", sample.Material!.MaterialIdentifier);
-        Assert.Equal("1", sample.Material.BiospecimenType);
-        Assert.Equal("MOU", sample.Material.PhysicalLocation);
+        Assert.Equal("Solid Tissue Specimen", sample.Material.MaterialType);
+        Assert.Equal("Masaryk Memorial Cancer Institute", sample.Biospecimen!.ManagingBiobank);
     }
 
     [Fact]
-    public void TissueTakesCutAndFreezeTimesWhileOthersTakeTheTakingDate()
+    public void TissueIsDatedByItsCutWhileOthersAreDatedByTheirTakingDate()
     {
         var tissue = SampleMapper.ToSample(
             new SampleDto
@@ -57,10 +57,10 @@ public sealed class UploaderMapperTests
             new SampleDto { SampleId = "S2", Type = "serum", TakingDate = new DateTime(2021, 5, 6, 7, 8, 9) },
             new PatientId("P1")).Value;
 
-        Assert.Equal("2020-01-02T03:04:05", tissue.Material!.SamplingTimestamp);
-        Assert.Equal("2020-01-02T04:00:00", tissue.Material.RegistrationTimestamp);
-        Assert.Equal("2021-05-06T07:08:09", serum.Material!.SamplingTimestamp);
-        Assert.Equal("2021-05-06T07:08:09", serum.Material.RegistrationTimestamp);
+        // v2 keeps one date where v1 had a sampling and a registration timestamp, so the freeze
+        // time has nowhere left to go.
+        Assert.Equal("2020-01-02", tissue.Material!.SamplingDate);
+        Assert.Equal("2021-05-06", serum.Material!.SamplingDate);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class UploaderMapperTests
         }).Value;
 
         // Duplicates collapse and the order is fixed, so the fingerprint doesn't move with the payload.
-        Assert.Equal(["C50.4", "C77.7"], patient.Clinical!.ClinicalDiagnosis);
+        Assert.Equal(["C50.4", "C77.7"], patient.Clinical!.Diagnosis);
     }
 
     [Fact]

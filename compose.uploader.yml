@@ -1,0 +1,67 @@
+# The sync job and its database. Run this wherever you want the upload to happen — it reads no
+# files, so unlike the two source stacks it is not tied to any machine.
+#
+#   docker compose -f compose.uploader.yml up -d uploader-db
+#   docker compose -f compose.uploader.yml run --rm uploader
+#
+# One of three stacks, each deployable on its own machine: compose.biobank.yml,
+# compose.sequencing.yml, and this one. See docs/deployment.md for the full runbook.
+#
+# Both source APIs are addressed over HTTP from .env, so this stack does not care whether they are
+# on this host or another one. Running all three stacks on one machine still gives three separate
+# Compose projects on three separate networks, so container names do not resolve between them —
+# use host.docker.internal, which the extra_hosts entry below provides.
+services:
+  uploader-db:
+    image: postgres:16
+    container_name: uploader-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Holds the pseudonym map. Losing this volume means every patient is re-pseudonymized under a
+      # new identifier and the catalogue fills with duplicates. Back it up before touching it.
+      - uploader_db_data:/var/lib/postgresql/data
+
+  # One-shot, not a server: it runs, prints a JSON summary and exits. Hence restart "no" and
+  # `run --rm` rather than `up`.
+  uploader:
+    build:
+      context: .
+      dockerfile: src/Uploader/Uploader.Host/Dockerfile
+    container_name: uploader
+    restart: "no"
+    # The catalogue token lives here and nowhere else. Copy .env.example to .env and fill it in;
+    # .env is git-ignored.
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: uploader-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: data_catalogue_upload
+      # Both required, with no default on purpose: an empty URL means "this source is not deployed",
+      # so a typo would otherwise produce a quiet run that uploads nobody rather than an error.
+      BIOBANK_API_URL: "${BIOBANK_API_URL:?set BIOBANK_API_URL in .env}"
+      SEQUENCING_API_URL: "${SEQUENCING_API_URL:?set SEQUENCING_API_URL in .env}"
+      # Radiology and WSI have no service yet. Blank means the uploader never contacts them, which
+      # is not the same as contacting them and failing - see docs/catalogue-api-contract.md.
+      RADIOLOGY_API_URL: ""
+      WSI_API_URL: ""
+    # Lets the URLs above say host.docker.internal when a source stack runs on this same machine.
+    # Harmless when they do not.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Only what this stack owns. Compose talks to the local Docker daemon and cannot wait on a
+    # container in another project or on another host; an unreachable source is reported as an
+    # error rather than a crash.
+    depends_on:
+      - uploader-db
+
+volumes:
+  uploader_db_data:

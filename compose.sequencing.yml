@@ -1,0 +1,59 @@
+# The sequencing API and its database. Run this on the machine that holds the organised run tree.
+#
+#   docker compose -f compose.sequencing.yml up -d --build
+#
+# One of three stacks, each deployable on its own machine: compose.biobank.yml, this one, and
+# compose.uploader.yml. Run all three on one host and they still work, as three separate projects.
+# See docs/deployment.md for the full runbook.
+services:
+  sequencing-db:
+    image: postgres:16
+    container_name: sequencing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - sequencing_db_data:/var/lib/postgresql/data
+
+  sequencing-api:
+    build:
+      context: .
+      dockerfile: src/SequencingApi/SequencingApi.Web/Dockerfile
+    container_name: sequencing-api
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: sequencing-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+      ASPNETCORE_URLS: http://+:8002
+      RUN_MIGRATIONS: "true"
+      # The organised run tree, the libraries table, and the pseudonymizer's mappings. All read-only:
+      # this service only ever reads them (weekly Quartz job + POST /admin/ingest).
+      SEQUENCING_DATA_PATH: /data/organised-runs
+      SEQUENCING_LIBRARIES_PATH: /data/libraries
+      SEQUENCING_MAPPING_TABLE_PATH: /data/mapping-table
+      # Required, not optional: the source trees above are NFSv3 mounts whose lock manager never
+      # answers, and .NET's FileStream takes an advisory flock() on every open to emulate Windows
+      # share semantics. Without this the ingest blocks on the first file it reads and never
+      # returns — no timeout, no error, and the weekly Quartz job hangs a worker thread for good.
+      DOTNET_SYSTEM_IO_DISABLEFILELOCKING: "1"
+    depends_on:
+      - sequencing-db
+    ports:
+      # Loopback by default. The uploader reaches this API over HTTP, so if it runs on another
+      # machine SEQUENCING_BIND has to name a private address both can see - never 0.0.0.0 and
+      # never a public one. See docs/deployment.md section 5.
+      - "${SEQUENCING_BIND:-127.0.0.1}:8002:8002"
+    volumes:
+      - "${SEQUENCING_RUNS_DIR:-/muni-sc/OrganisedRuns}:/data/organised-runs:ro"
+      - "${SEQUENCING_LIBRARIES_DIR:-/muni-sc/Libraries}:/data/libraries:ro"
+      - "${SEQUENCING_MAPPING_DIR:-/home/export/pseudonymization_table}:/data/mapping-table:ro"
+
+volumes:
+  sequencing_db_data:

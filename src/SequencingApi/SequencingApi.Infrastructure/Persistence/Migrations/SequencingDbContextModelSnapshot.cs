@@ -215,12 +215,17 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PredictiveKey")
+                        .HasColumnType("text");
+
                     b.Property<string>("PredictiveNumber")
                         .HasColumnType("text");
 
                     b.HasKey("ExternalId");
 
                     b.HasIndex("IdScheme");
+
+                    b.HasIndex("PredictiveKey");
 
                     b.HasIndex("PredictiveNumber");
 

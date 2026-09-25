@@ -13,8 +13,8 @@ namespace Uploader.Application.Mapping;
 /// <para>
 /// <b>Served but deliberately dropped</b>, because FAIR Genomes has no field for them and the
 /// catalogue consumes none: the run-sample's <c>files</c> (the FASTQ reads — FAIR has no file
-/// inventory anywhere in the preparation -> sequencing -> analysis chain; only analysis outputs
-/// survive, as <see cref="Analysis.AbstractDataLocation"/> and
+/// inventory anywhere in the preparation -> sequencing -> analysis chain, and v2 removed even the
+/// data-location columns v1 had, so an analysis output survives only as its format in
 /// <see cref="Analysis.DataFormatsStored"/>), every panel field but <c>genes</c> (<c>panel_id</c>,
 /// <c>name</c>, <c>abbreviation</c>, <c>vendor</c>, <c>catalogue_code</c>, <c>target_regions_ref</c>),
 /// <c>sample_type</c>, <c>analysis_type</c>, <c>id_scheme</c>, <c>sample_index</c>,
@@ -23,11 +23,15 @@ namespace Uploader.Application.Mapping;
 /// <see cref="SequencingRun.OtherQualityMetrics"/>, see <see cref="SequencingMapping"/>.
 /// </para>
 /// <para>
-/// <b>FAIR fields left null</b> for want of a source: <c>PartialSequenceGenes</c> (the panel's genes
-/// are its full-coverage set), <c>ObservedInsertSize</c>, <c>PercentageTr20</c>,
-/// <c>PhysicalDataLocation</c>, <c>AlgorithmsUsed</c>, and the protocol-deviation trio. Catalogue
-/// vocabulary (MOLGENIS lookup strings, nullflavors) is absent by design — that belongs to the
-/// catalogue gateway, not here.
+/// <b>FAIR fields left null</b> for want of a source: <c>PartiallySequencedGenes</c> (the panel's
+/// genes are its full-coverage set), <c>ObservedInsertSize</c>, <c>PercentageTr20</c> and
+/// <c>AlgorithmsUsed</c>.
+/// </para>
+/// <para>
+/// <b>Ontology columns carried raw</b>: the kits, the instrument model and the assay-derived
+/// method are the source's own strings, because there is no code list to translate them from the
+/// way there is for a material code. The gateway checks each against the live ontology and drops
+/// the ones that are not terms, which costs a column rather than the row.
 /// </para>
 /// </summary>
 public static class SequencingMapper
@@ -58,10 +62,10 @@ public static class SequencingMapper
         {
             SampleprepIdentifier = preparationId,
 
-            // The biobank's material, not the sequencing API's sample id: that one is the
-            // pseudonymized predictive number, and FAIR points a preparation at the material it came
-            // from.
-            BelongsToMaterial = sampleId.Value,
+            // The biobank's stored biospecimen, not the sequencing API's sample id: that one is the
+            // pseudonymized predictive number. v2 points a preparation at the biospecimen rather
+            // than the material, and the id is derived so it cannot drift from the row it names.
+            BelongsToBiospecimen = BiobankMapping.BiospecimenIdentifier(sampleId.Value),
             InputAmount = library?.InputAmount,
             LibraryPreparationKit = library?.LibraryPrepKit,
             PcrFree = library?.PcrFree,
@@ -69,8 +73,8 @@ public static class SequencingMapper
 
             // The panel's gene list is its full-coverage set — the source column spells that out
             // ("Genes (*all coding regions covered)"), so there is no partial set to separate.
-            FullSequenceGenes = library?.Panel?.Genes,
-            PartialSequenceGenes = null,
+            FullySequencedGenes = library?.Panel?.Genes,
+            PartiallySequencedGenes = null,
             UmisPresent = library?.UmiPresent,
             IntendedInsertSize = library?.IntendedInsertSize,
             IntendedReadLength = library?.IntendedReadLength,
@@ -94,7 +98,7 @@ public static class SequencingMapper
             SequencingIdentifier = sequencingId,
             BelongsToSamplePreparation = preparationId,
             SequencingDate = run.RunDate,
-            SequencingPlatform = run.Platform,
+            SequencingPlatform = CatalogueVocabulary.SequencingPlatform(run.Platform),
             SequencingInstrumentModel = run.InstrumentModel,
 
             // The sample sheet's assay is the closest the source comes to naming a method; the
@@ -145,36 +149,19 @@ public static class SequencingMapper
     {
         var files = dto.Files ?? [];
 
+        // The role says what a file is for and is a closed set; the source's own `format` is free
+        // text. Only the role can be turned into an ontology term reliably, so it is what the
+        // format list is built from.
+        var formats = CatalogueVocabulary.DataFormats(files.Select(file => file.Role));
+
         return new Analysis
         {
             AnalysisIdentifier = analysisId,
             BelongsToSequencing = sequencingId,
-            PhysicalDataLocation = null,
-            AbstractDataLocation = Joined(files.Select(file => file.Path)),
-            DataFormatsStored = Distinct(files.Select(file => file.Format)),
+            DataFormatsStored = formats.Count == 0 ? null : formats,
             AlgorithmsUsed = null,
-            ReferenceGenomeUsed = dto.ReferenceGenome,
+            ReferenceGenomeUsed = CatalogueVocabulary.ReferenceGenome(dto.ReferenceGenome),
             BioinformaticProtocolUsed = dto.PipelineName,
-            BioinformaticProtocolDeviation = null,
-            ReasonForBioinformaticProtocolDeviation = null,
-            WgsGuidelineFollowed = null,
         };
-    }
-
-    private static string? Joined(IEnumerable<string?> values)
-    {
-        var stated = string.Join(" ", values.Where(value => !string.IsNullOrWhiteSpace(value)));
-        return string.IsNullOrEmpty(stated) ? null : stated;
-    }
-
-    private static IReadOnlyList<string>? Distinct(IEnumerable<string?> values)
-    {
-        var stated = values
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        return stated.Count == 0 ? null : stated;
     }
 }

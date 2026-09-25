@@ -54,14 +54,18 @@ public void Create_RejectsBirthYearOutOfRange()
 
 **The planner.** `FingerprintSyncPlannerTests` drives `FingerprintSyncPlanner.Plan(data, existing)` and
 asserts the `SyncOp` per entity: no prior -> CREATE, unchanged fingerprint -> SKIP, changed -> UPDATE,
-soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE. Build the prior state and assert the returned
+soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE, prior without a catalogue id -> CREATE,
+failed prior -> UPDATE, and an ineligible patient never published -> no operations at all. A prior that
+means "already uploaded" needs `Status = Synced` **and** a `CatalogueRemoteId`. Build the prior state and assert the returned
 operations.
 
 **XML parsing.** `XmlPatientReaderTests` (unit) feeds inline `XElement.Parse(...)` patient XML and asserts the
 mapped `PatientAggregate` per schema category, plus whole-patient-atomic failure (`result.IsError`).
 `XmlExportParserTests` (integration) runs `XmlExportParser` over the dummy `*.xml` files in `TestData/Exports`
 (copied to the test output) and asserts valid patients parse, invalid/malformed files are reported as
-`ExportParseError`s, and a missing directory yields an empty result.
+`ExportParseError`s, and a missing or empty directory is an error. The merge cases (a patient's samples
+surviving later files, newer listings replacing older rows, newest consent winning) write one patient's
+successive weekly files to a temp dir through the `ParseFiles` helper instead.
 
 **FluentValidation validators.** When a request gains an `AbstractValidator<TRequest>`, unit-test it directly -
 `new TRequestValidator().Validate(request)` then assert `result.IsValid` / inspect `result.Errors` with plain

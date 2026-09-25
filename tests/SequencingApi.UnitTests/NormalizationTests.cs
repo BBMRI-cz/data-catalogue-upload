@@ -33,6 +33,47 @@ public sealed class NormalizationTests
             .Create("mmci_predictive_1", "mmci_predictive", predictiveNumber: "   ")
             .Value.PredictiveNumber);
 
+    // --- predictive key: every party writes the same number its own way --------------
+
+    [Theory]
+    [InlineData("2029/5678")]      // the biobank
+    [InlineData("2029_5678")]      // a MiSeq sample sheet
+    [InlineData("2029-5678")]
+    [InlineData("2029_5678_DNA")]  // a NextSeq sample sheet marks the nucleic acid
+    [InlineData("2029_5678_rna")]
+    [InlineData("DNA_2029_5678")]
+    [InlineData("5678-29")]        // an older MiSeq sheet puts the year last
+    [InlineData("5678-29_DNA")]
+    [InlineData("29-5678")]
+    [InlineData("29_5678")]
+    [InlineData("  2029/5678  ")]
+    public void SamplePredictiveKeyIsTheSameForEveryWrittenFormOfTheNumber(string predictiveNumber) =>
+        Assert.Equal("2029-5678", SampleWithPredictiveNumber(predictiveNumber).PredictiveKey);
+
+    [Theory]
+    [InlineData("2022/0846")]
+    [InlineData("846-22")]
+    public void SamplePredictiveKeyDropsLeadingZeros(string predictiveNumber) =>
+        Assert.Equal("2022-846", SampleWithPredictiveNumber(predictiveNumber).PredictiveKey);
+
+    [Fact]
+    public void SamplePredictiveKeyReadsTheYearFirstWhenBothHalvesAreTwoDigits() =>
+        // Ambiguous on its face; the pseudonymizer that produced these numbers read it this way.
+        Assert.Equal("2012-19", SampleWithPredictiveNumber("12-19").PredictiveKey);
+
+    [Theory]
+    [InlineData("patient-4711")]
+    [InlineData("mmci_predictive_00000000-0000-4000-8000-000000000000")]
+    [InlineData("ST12-23")]
+    [InlineData("2022_control1")]
+    [InlineData("123")]
+    [InlineData("   ")]
+    public void SamplePredictiveKeyIsNullWithoutARecognisableForm(string predictiveNumber) =>
+        Assert.Null(SampleWithPredictiveNumber(predictiveNumber).PredictiveKey);
+
+    private static SampleAggregate SampleWithPredictiveNumber(string predictiveNumber) =>
+        SampleAggregate.Create("mmci_predictive_1", "mmci_predictive", predictiveNumber: predictiveNumber).Value;
+
     // --- run id is the de-duplication key, so both sides must canonicalise identically
 
     [Theory]

@@ -1,0 +1,964 @@
+---
+name: Biobank Biosample and Data Integration Metadata Schema
+description: The Biobank Biosample and Data Integration Metadata Schema extends the MOLGENIS FAIR Genomes framework to standardise how biobank catalogues describe biological samples and their associated large-scale datasets. It links donor profiles, consent, and biospecimen records directly to multi-omics and imaging data using established ontologies. This structured approach facilitates seamless sample discovery, data harmonisation, and metadata exchange across biobank networks.
+version: 1.1
+releaseType: SNAPSHOT
+date: 2026-10-15
+lookupGlobalOptions: lookups/NullFlavors.txt
+authors:
+    - name: Radoslava Kacová
+      email: radoslava.kacova@mou.cz
+      orcid: 0009-0008-1429-6988
+    - name: K. Joeri van der Velde
+      email: k.j.van.der.velde@umcg.nl
+      orcid: 0000-0002-0934-8375
+    - name: Morris A. Swertz
+      email: m.a.swertz@umcg.nl
+      orcid: 0000-0002-0979-3401
+copyright:
+      holder: University Medical Center Groningen
+      years: 2026
+license:
+      name: Attribution 4.0 International (CC BY 4.0)
+      url: https://creativecommons.org/licenses/by/4.0/
+technical:
+      artDecorId: 2.16.840.1.113883.2.4.3.11.60.120
+      ttlLocation: https://fairgenomes.github.io/fairgenomes-semantic-model/generated/ontology/
+      gitLocation: https://github.com/fairgenomes/fairgenomes-semantic-model
+modules:
+    - name: Study
+      description: A research study, trial, or project context under which biological samples and associated datasets are collected, grouped, and managed for specific research objectives.
+      ontology: NCIT:C63536 [http://purl.obolibrary.org/obo/NCIT_C63536]
+      elements:
+          - name: Identifier
+            description: A unique character string or persistent identifier that unambiguously distinguishes this study.
+            ontology: OMIABIS:0000006 [http://purl.obolibrary.org/obo/OMIABIS_0000006]
+            broadMatch: SIO:000729 [http://semanticscience.org/resource/SIO_000729], IAO:0000577 [http://purl.obolibrary.org/obo/IAO_0000577]
+            values: UniqueID
+          - name: Name
+            description: The official title, full name, or public label designating this study or research project.
+            ontology: OMIABIS:0000037 [http://purl.obolibrary.org/obo/OMIABIS_0000037]
+            exactMatch: OBI:0001622 [http://purl.obolibrary.org/obo/OBI_0001622]
+            broadMatch: SIO:000185 [https://semanticscience.org/resource/SIO_000185]
+            values: String
+          - name: Description
+            description: A narrative summary outlining the scientific background, main objectives, and overall scope of the study.
+            ontology: OMIABIS:0000036 [http://purl.obolibrary.org/obo/OMIABIS_0000036]
+            exactMatch: OBI:0001615 [http://purl.obolibrary.org/obo/OBI_0001615]
+            broadMatch: SIO:000136 [https://semanticscience.org/resource/SIO_000136]
+            values: Text
+          - name: Inclusion criteria
+            description: The primary medical, demographic, or genetic eligibility criteria required for a participant to be enrolled in this study.
+            ontology: OBI:0500027 [http://purl.obolibrary.org/obo/OBI_0500027]
+            values: LookupMany [lookups/InclusionCriteria.txt], ofType [http://purl.obolibrary.org/obo/OBI_0500027]
+          - name: Principal investigator
+            description: The primary scientific leader, lead researcher, or designated contact person responsible for the design, execution, and integrity of the study.
+            ontology: OMIABIS:0000100 [http://purl.obolibrary.org/obo/OMIABIS_0000100]
+            broadMatch: SIO:000881 [https://semanticscience.org/resource/SIO_000881], OBI:0000202 [http://purl.obolibrary.org/obo/OBI_0000202]
+            values: String
+          - name: Contact information
+            description: An email address for the purpose of contacting the study contact person.
+            ontology: OMIABIS:0000035 [http://purl.obolibrary.org/obo/OMIABIS_0000035]
+            values: String
+          - name: Study design
+            description: The methodological framework and operational protocol specification describing how subjects, biospecimens, and data are structured and collected (e.g. cohort, case-control, longitudinal, cross-sectional).
+            ontology: OBI:0500000 [http://purl.obolibrary.org/obo/OBI_0500000]
+            values: Text
+          - name: Start date
+            description: The date on which this study began.
+            ontology: NCIT:C69208 [http://purl.obolibrary.org/obo/NCIT_C69208]
+            broadMatch: SIO:000031 [https://semanticscience.org/resource/SIO_000031], IAO:0000582 [http://purl.obolibrary.org/obo/IAO_0000582]
+            values: Date
+          - name: Completion date
+            description: The date on which all study protocols are finalized, participant follow-ups conclude, or the primary research objectives are fully met.
+            ontology: NCIT:C142702 [http://purl.obolibrary.org/obo/NCIT_C142702]
+            broadMatch: IAO:0000582 [http://purl.obolibrary.org/obo/IAO_0000582]
+            relatedMatch: SIO:001083 [https://semanticscience.org/resource/SIO_001083], SIO:001314 [https://semanticscience.org/resource/SIO_001314]
+            values: Date
+    - name: Personal
+      description: Demographic, phenotypic, and baseline characteristics of an individual study participant or patient from whom biological materials and associated research data are collected.
+      ontology: NCIT:C90492 [http://purl.obolibrary.org/obo/NCIT_C90492]
+      relationWith:
+          - module: Study
+            relation: RO:0000056 [http://purl.obolibrary.org/obo/RO_0000056]
+          - module: Individual consent
+            relation: ICO:0000005 [http://purl.obolibrary.org/obo/ICO_0000005]
+      elements:
+          - name: Personal identifier
+            description: A unique pseudonymised code or persistent subject identifier assigned to an individual within the study or biobank repository.
+            ontology: NCIT:C164337 [http://purl.obolibrary.org/obo/NCIT_C164337]
+            values: UniqueID
+            #- name: Gender identity
+            #description: The self-identified gender of the individual, reflecting their internal sense of gender role and identity.
+            #ontology: MESH:D005783 [http://purl.bioontology.org/ontology/MESH/D005783]
+            #values: LookupOne [lookups/GenderIdentity.txt], ofType [http://purl.bioontology.org/ontology/MESH/D005783]
+          - name: Gender at birth
+            description: The gender or biological sex assigned to the individual at birth, typically documented in medical records or official birth certificates.
+            ontology: GSSO:009418 [http://purl.obolibrary.org/obo/GSSO_009418]
+            values: LookupOne [lookups/GenderAtBirth.txt], ofType [http://purl.obolibrary.org/obo/GSSO_009418]
+            #- name: Genotypic sex
+            #description: The chromosomal and genetic sex profile of an individual determined by the composition of sex chromosomes (e.g. XX, XY).
+            #ontology: PATO:0020000 [http://purl.obolibrary.org/obo/PATO_0020000]
+            #values: LookupOne [lookups/GenotypicSex.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C168871]
+          - name: Country of residence
+            description: The sovereign country where the individual primarily resides at the time of study enrolment or sample collection.
+            ontology: NCIT:C224826 [http://purl.obolibrary.org/obo/NCIT_C224826]
+            values: LookupOne [lookups/Countries.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0001830]
+          - name: Ancestry
+            description: The genetic or geographic ancestral background of an individual, evaluated using ancestry-informative genomic markers or population categories.
+            ontology: NCIT:C176763 [http://purl.obolibrary.org/obo/NCIT_C176763]
+            values: LookupMany [lookups/Ancestry.txt], ofType [http://purl.obolibrary.org/obo/HANCESTRO_0004]
+          - name: Country of birth
+            description: The country in which the individual was born.
+            ontology: GENEPIO:0001094 [http://purl.obolibrary.org/obo/GENEPIO_0001094]
+            values: LookupOne [lookups/Countries.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0001830]
+          - name: Year of birth
+            description: The year in which the individual person was born.
+            ontology: NCIT:C83164 [http://purl.obolibrary.org/obo/NCIT_C83164]
+            values: Integer
+            unit: NCIT:C159612 [http://purl.obolibrary.org/obo/NCIT_C159612]
+          - name: Status
+            description: The most recent vital or clinical follow-up status of the individual recorded by the biobank or registry (e.g. alive, deceased, lost to follow-up).
+            ontology: NCIT:C166244 [http://purl.obolibrary.org/obo/NCIT_C166244]
+            values: LookupOne [lookups/PersonalStatus.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C19332]
+          - name: Age at death
+            description: In the event of participant decease, the calculated age of the individual at the time of death, measured in completed years.
+            ontology: NCIT:C135383 [http://purl.obolibrary.org/obo/NCIT_C135383]
+            values: Integer
+            unit: UO:0000036 [http://purl.obolibrary.org/obo/UO_0000036]
+            #- name: Consanguinity
+            #description: Indication of biological relatedness between the biological parents (second cousins or closer), relevant for genetic and hereditary analysis.
+            #ontology: OMIT:0004546 [http://purl.obolibrary.org/obo/OMIT_0004546]
+            #values: Boolean
+          - name: Primary affiliated institute
+            description: The primary healthcare facility, clinical centre, or biobank institution responsible for the medical management or enrolment of the individual.
+            ontology: NCIT:C25412 [http://purl.obolibrary.org/obo/NCIT_C25412]
+            values: LookupOne [lookups/Institutes.txt], ofType [http://semanticscience.org/resource/SIO_000688]
+            #- name: Resources in other institutes
+            #description: External clinical centres, hospitals, or biobanks known to store complementary biological materials or clinical datasets for this individual.
+            #ontology: NCIT:C19012 [http://purl.obolibrary.org/obo/NCIT_C19012]
+            #values: LookupMany [lookups/Institutes.txt], ofType [http://semanticscience.org/resource/SIO_000688]
+          - name: Participates in study
+            description: Reference to the study or studies in which this person participates.
+            ontology: RO:0000056 [http://purl.obolibrary.org/obo/RO_0000056]
+            values: ReferenceMany [Study]
+    - name: Leaflet and consent form
+      description: Specification and metadata of the informative leaflet and blank informed consent template version approved for a study or biobank collection.
+      ontology: NCIT:C16468 [http://purl.obolibrary.org/obo/NCIT_C16468]
+      elements:
+        #- name: Leaflet title
+        #description: The official title or document heading of the patient information leaflet.
+        #ontology: DC:title [http://purl.org/dc/terms/title]
+        #values: String
+        #- name: Leaflet date
+        #description: The publication or official release date of this information leaflet version.
+        #ontology: DC:date [http://purl.org/dc/terms/date]
+        #values: Date
+        #- name: Leaflet version
+        #description: The formal version number or revision code designating this information leaflet.
+        #ontology: DC:hasVersion [http://purl.org/dc/terms/hasVersion]
+        #values: String
+          - name: Consent form identifier
+            description: A unique persistent identifier, DOI, or resolvable URL unambiguously identifying this specific consent template and leaflet pair.
+            ontology: DC:identifier [http://purl.org/dc/terms/identifier]
+            values: UniqueID
+          - name: Consent form title
+            description: The formal document title of the informed consent form template.
+            ontology: DC:title [http://purl.org/dc/terms/title]
+            values: String
+            #- name: Consent form accepted date
+            #description: The date on which this consent form template was formally approved by the competent ethics committee or institutional review board.
+            #ontology: DC:dateAccepted [http://purl.org/dc/terms/dateAccepted]
+            #values: Date
+            #- name: Consent form valid until
+            #description: The expiry date or end of regulatory validity for enrolling new participants using this consent template version.
+            #ontology: DC:valid [http://purl.org/dc/terms/valid]
+            #values: Date
+          - name: Consent form creator
+            description: The authoritative biobank institution, hospital, or governance board that authored and issued this consent form.
+            ontology: DC:creator [http://purl.org/dc/terms/creator]
+            values: LookupMany [lookups/Institutes.txt], ofType [http://semanticscience.org/resource/SIO_000688]
+          - name: Consent form version
+            description: The formal version number, release tag, or revision identifier of this consent form template.
+            ontology: DC:hasVersion [http://purl.org/dc/terms/hasVersion]
+            values: String
+    - name: Individual consent
+      description: Record of a signed informed consent given by an individual or legal guardian, specifying data and sample use permissions, restrictions, and validity periods.
+      ontology: NCIT:C16735 [http://purl.obolibrary.org/obo/NCIT_C16735]
+      relationWith:
+          - module: Leaflet and consent form
+            relation: IAO:0021007 [http://purl.obolibrary.org/obo/IAO_0021007]
+          - module: Study
+            relation: IAO:0000136 [http://purl.obolibrary.org/obo/IAO_0000136]
+      elements:
+          - name: Individual consent identifier
+            description: A unique proper name or character sequence that identifies this particular signed individual consent.
+            ontology: ICO:0000044 [http://purl.obolibrary.org/obo/ICO_0000044]
+            values: UniqueID
+          - name: Person consenting
+            description: Reference to the person (i.e. subject) to whom this individual consent applies.
+            ontology: SIO:000132 [http://semanticscience.org/resource/SIO_000132]
+            values: ReferenceOne [Personal]
+          - name: Consent form used
+            description: Link to the specific approved template version in the Leaflet and consent form module used during signing.
+            ontology: DC:conformsTo [http://purl.org/dc/terms/conformsTo]
+            values: ReferenceOne [Leaflet and consent form]
+          - name: Belongs to study
+            description: Reference to the study for which this individual consent permits data and sample use.
+            ontology: IAO:0000136 [http://purl.obolibrary.org/obo/IAO_0000136]
+            values: ReferenceOne [Study]
+          - name: Collected by
+            description: The healthcare facility, clinical ward, or biobank site where the informed consent was administered and obtained.
+            ontology: NCIT:C45262 [http://purl.obolibrary.org/obo/NCIT_C45262]
+            values: LookupOne [lookups/Institutes.txt], ofType [http://semanticscience.org/resource/SIO_000688]
+          - name: Signing date
+            description: A date specification that designates when this individual consent form was signed.
+            ontology: ICO:0000036 [http://purl.obolibrary.org/obo/ICO_0000036]
+            values: Date
+            #- name: Valid from
+            #description: Starting date of the validity of this individual consent.
+            #ontology: DC:valid [http://purl.org/dc/terms/valid]
+            #values: Date
+          - name: Valid until
+            description: The expiry date or termination date of the consent, such as upon participant withdrawal or completion of a time-limited study protocol.
+            ontology: DC:valid [http://purl.org/dc/terms/valid]
+            values: Date
+          - name: Represented by
+            description: An individual who is authorized under applicable State or local law to consent on behalf of a child or incapable person to general medical care including participation in clinical research.
+            ontology: NCIT:C142600 [http://purl.obolibrary.org/obo/NCIT_C142600]
+            values:  LookupOne_NoGlobals [lookups/RepresentedBy.txt], ofType [http://purl.obolibrary.org/obo/BFO_0000023]
+          - name: Data use permissions
+            description: The primary consented permission and intended scope governing the secondary research use of datasets and biological specimens.
+            ontology: DUO:0000001 [http://purl.obolibrary.org/obo/DUO_0000001]
+            values: LookupOne_NoGlobals [lookups/DataUsePermissions.txt], ofType [http://purl.obolibrary.org/obo/DUO_0000001]
+          - name: Data use modifiers
+            description: Data use modifiers indicate additional conditions for use. For instance, a dataset is restricted to investigations into specific diseases or performed at specific geographical locations.
+            ontology: DUO:0000017 [http://purl.obolibrary.org/obo/DUO_0000017]
+            values: LookupMany_NoGlobals [lookups/DataUseModifiers.txt], ofType [http://purl.obolibrary.org/obo/DUO_0000017]
+            #- name: Data use specification
+            #description: Further specification of applied data use permissions and modifiers. For example, a list of countries in case of geographic restrictions or a list of diseases when restricted to disease-specific research.
+            #ontology: SIO:000090 [http://semanticscience.org/resource/SIO_000090]
+            #values: Text
+          - name: Allow recontacting
+            description: Indication of whether the participant has consented to be re-contacted by the biobank or clinical team for study updates, further sample donations, or actionable secondary health findings.
+            ontology: NCIT:C25737 [http://purl.obolibrary.org/obo/NCIT_C25737]
+            values: LookupMany_NoGlobals [lookups/Recontacting.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C176244]
+    - name: Clinical
+      description: Clinical observations, diagnoses, disease staging, and longitudinal treatment responses recorded for a patient across specific disease encounters or study timepoints.
+      ontology: NCIT:C25398 [http://purl.obolibrary.org/obo/NCIT_C25398]
+      relationWith:
+          - module: Personal
+            relation: SIO:000332 [http://semanticscience.org/resource/SIO_000332]
+      elements:
+          - name: Clinical identifier
+            description: A unique proper name or character sequence that identifies this particular clinical examination.
+            ontology: NCIT:C87853 [http://purl.obolibrary.org/obo/NCIT_C87853]
+            values: UniqueID
+          - name: Belongs to person
+            description: Reference to the person whom this clinical information is about.
+            ontology: IAO:0000136 [http://purl.obolibrary.org/obo/IAO_0000136]
+            values: ReferenceOne [Personal]
+          - name: Diagnosis
+            description: Main clinical diagnosis coded using ICD-10, ORPHA, or SNOMED CT.
+            ontology: NCIT:C15607 [http://purl.obolibrary.org/obo/NCIT_C15607]
+            values: LookupMany [lookups/Diseases.txt], ofType [http://edamontology.org/data_3667] #Note that lookup type EDAM:data_2800 would best match the default Orpha codes, but EDAM:data_3667 was chosen to allow alternative disease coding systems (e.g. ICD or SNOMED).
+          - name: Age at diagnosis
+            description: Age of the patient in years at the time of disease diagnosis.
+            ontology: SNOMEDCT:423493009 [http://purl.bioontology.org/ontology/SNOMEDCT/423493009]
+            values: Integer
+            unit: UO:0000036 [http://purl.obolibrary.org/obo/UO_0000036]
+          - name: Clinical timepoint
+            description: Relative timepoint or clinical phase of this encounter relative to diagnosis or baseline (e.g. Baseline, Post-treatment, Relapse, Day 0, Month 3).
+            ontology: NCIT:C68568 [http://purl.obolibrary.org/obo/NCIT_C68568]
+            values: LookupOne [lookups/Timepoints.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C25213]
+          - name: Disease stage
+            description: Broad categorisation of disease progression at the time of data or sample collection (e.g. Stage I-IV, Early/Advanced, Primary/Metastatic).
+            ontology: OBI:0000278 [http://purl.obolibrary.org/obo/OBI_0000278]
+            values: LookupMany [lookups/DiseaseStages.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C16899]
+          - name: Molecular diagnosis gene
+            description: Causal gene(s) bearing a confirmed pathogenic or clinically significant variant associated with the patient's diagnosis or response to treatment (e.g. BRCA1, EGFR, KRAS). Do not list all tested panel genes here.
+            ontology: NCIT:C20826 [http://purl.obolibrary.org/obo/NCIT_C20826]
+            values: LookupMany [lookups/Genes.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C16612]
+          - name: Treatment category
+            description: High-level classification of therapies applied to the patient (e.g. Chemotherapy, Radiotherapy, Immunotherapy, Surgery, Naive/Untreated).
+            ontology: NCIT:C49236 [http://purl.obolibrary.org/obo/NCIT_C49236]
+            values: LookupMany [lookups/TreatmentCategory.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C49236]
+          - name: Response to treatment
+            description: The patients' response to the applied treatment regimen.
+            ontology: SNOMEDCT:182985004 [http://purl.bioontology.org/ontology/SNOMEDCT/182985004]
+            values: LookupMany [lookups/TreatmentResponse.txt], ofType [http://purl.bioontology.org/ontology/SNOMEDCT/182985004]
+    - name: Material
+      description: Primary biological material obtained directly from a donor or patient through a collection procedure (e.g. biopsy, surgery, blood draw), defining the original anatomical source, sampling timestamp, and pathological state.
+      ontology: NCIT:C43376 [http://purl.obolibrary.org/obo/NCIT_C43376]
+      relationWith:
+          - module: Personal
+            relation: HSO:0000242 [http://purl.obolibrary.org/obo/HSO_0000242]
+          - module: Clinical
+            relation: RO:0000056 [http://purl.obolibrary.org/obo/RO_0000056]
+      elements:
+          - name: Material identifier
+            description: A unique proper name or character sequence that identifies this particular material.
+            ontology: NCIT:C93400 [http://purl.obolibrary.org/obo/NCIT_C93400]
+            values: UniqueID
+          - name: Collected from person
+            description: Reference to the person from whom this material was collected.
+            ontology: SIO:000244 [http://semanticscience.org/resource/SIO_000244]
+            values: ReferenceOne [Personal]
+          - name: Belongs to diagnosis
+            description: Reference to a diagnosis c.q. clinical examination of which this material may be a part of. There can be multiple diagnoses when a non-tumor material is reused as reference.
+            ontology: SIO:000068 [http://semanticscience.org/resource/SIO_000068]
+            values: ReferenceMany [Clinical]
+          - name: Sampling date
+            description: The date that a sample was collected or obtained.
+            ontology: NCIT:C164024 [http://purl.obolibrary.org/obo/NCIT_C164024]
+            values: Date
+            #- name: Sampling protocol
+            #description: Documentation or standard operating procedure (SOP) describing how the biological specimen was excised, aspirated, or collected.
+            #ontology: EFO:0005518 [http://www.ebi.ac.uk/efo/EFO_0005518]
+            #values: Text
+            #- name: Sampling protocol deviation
+            #description: A variation from processes or procedures defined in the sampling protocol. Deviations usually do not preclude the overall evaluability of subject data for either efficacy or safety, and are often acknowledged and accepted in advance by the sponsor.
+            #ontology: NCIT:C50996 [http://purl.obolibrary.org/obo/NCIT_C50996]
+            #values: String
+            #- name: Reason for sampling protocol deviation
+            #description: The rationale for why a deviation from the sampling protocol has occurred.
+            #ontology: NCIT:C93529 [http://purl.obolibrary.org/obo/NCIT_C93529]
+            #values: String
+          - name: Material type
+            description: The broad biological nature of the collected substance prior to processing (e.g. whole blood, solid tissue, bone marrow, saliva, urine).
+            ontology: NCIT:C70713 [http://purl.obolibrary.org/obo/NCIT_C70713]
+            values: LookupOne [lookups/BiospecimenTypes.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C70699]
+          - name: Anatomical source
+            description: The specific organ, anatomical site, or bodily structure of the individual from which the biological material was procured.
+            ontology: NCIT:C13717 [http://purl.obolibrary.org/obo/NCIT_C13717]
+            values: LookupOne [lookups/AnatomicalSources.txt], ofType [http://purl.obolibrary.org/obo/UBERON_0001062]
+          - name: Pathological state
+            description: The histological or pathological condition of the procured biological specimen or biofluid (e.g. malignant, benign, non-involved control, premalignant).
+            ontology: NCIT:C28257 [http://purl.obolibrary.org/obo/NCIT_C28257]
+            values: LookupOne [lookups/PathologicalState.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C164617]
+    - name: Biospecimens
+      description: A specific physical unit, aliquot, or processed preparation derived from primary material (e.g. FFPE block, frozen tissue section, biofluid aliquot) managed in biobank storage under defined preservation and fixation conditions.
+      ontology: NCIT:C70699 [http://purl.obolibrary.org/obo/NCIT_C70699]
+      relationWith:
+        - module: Material
+          relation: RO:0001000 [http://purl.obolibrary.org/obo/RO_0001000]
+      elements:
+        - name: Biospecimen identifier
+          description: A unique proper name or character sequence that identifies this particular biospecimen.
+          ontology: NCIT:C93400 [http://purl.obolibrary.org/obo/NCIT_C93400]
+          values: UniqueID
+        - name: Derived from material
+          description: Identifies the parent biological Material entity from which this biospecimen directly or indirectly originates, either as a physical portion (aliquot) or as a derived fraction (e.g., extracted DNA, serum, tissue section).
+          ontology: RO:0001000 [http://purl.obolibrary.org/obo/RO_0001000]
+          values: ReferenceOne [Material]
+        - name: Biospecimen Form
+          description: The specific physical form, fraction, or analyte derived from the parent material (e.g., extracted genomic DNA, total RNA, serum, cell lysate, or FFPE section) prepared for downstream analysis or sequencing.
+          ontology: NCIT:C70713 [http://purl.obolibrary.org/obo/NCIT_C70713]
+          values: LookupOne [lookups/BiospecimenTypes.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C173496]
+        - name: Percentage tumor cells
+          description: The percentage of tumor cells compared to total cells present in this material.
+          ontology: NCIT:C123556 [http://purl.obolibrary.org/obo/NCIT_C123556]
+          values: Decimal
+        - name: Quantity
+          description: The total count or number of available physical units, aliquots, blocks, or slides representing this specific biospecimen instance.
+          ontology: NCIT:C25256 [http://purl.obolibrary.org/obo/NCIT_C25256]
+          values: Integer
+        - name: Storage conditions
+          description: The environmental temperature and preservation parameter under which the biospecimen is maintained in the repository.
+          ontology: NCIT:C96145 [http://purl.obolibrary.org/obo/NCIT_C96145]
+          values: LookupOne [lookups/StorageConditions.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C96145]
+          #- name: Expiration date
+          #description: The date beyond which this material is no longer regarded as fit for use.
+          #ontology: NCIT:C164516 [http://purl.obolibrary.org/obo/NCIT_C164516]
+          #values: Date
+        - name: Managing biobank
+          description: The organization or facility that owns, manages, and physically stores this biospecimen or slide, maintaining custody and responsibility for its storage conditions and associated data.
+          ontology: NCIT:C48800 [http://purl.obolibrary.org/obo/NCIT_C48800]
+          values: LookupOne [lookups/Institutes.txt], ofType [http://hdl.handle.net/21.12110/1.BE90-1C99-5787]
+        - name: Availability
+          description: The current operational or inventory status indicating whether the biospecimen is available for research, reserved, depleted, or destroyed.
+          ontology: NCIT:C25429 [http://purl.obolibrary.org/obo/NCIT_C25429]
+          values: LookupOne [lookups/BiospecimenAvailability.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C25429]
+        - name: Name of fixative
+          description: The name of the compound that preserves tissues and cells for microscopic study.
+          ontology: NCIT:C128948 [http://purl.obolibrary.org/obo/NCIT_C128948]
+          values: LookupOne [lookups/Fixatives.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C498]
+        - name: Embedding medium
+          description: A material that infiltrates and supports a specimen and preserves its shape and structure for sectioning and microscopy.
+          ontology: NCIT:C113307 [http://purl.obolibrary.org/obo/NCIT_C113307]
+          values: LookupOne [lookups/Embeddings.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C113307]
+    - name: Imaging study
+      description: A diagnostic, clinical, or research imaging procedure comprising one or more imaging series (e.g. radiological scans such as CT/MRI or digital pathology whole slide images) acquired for a subject within a common clinical or study context.
+      ontology: REPRODUCEME:ImagingStudy [https://w3id.org/reproduceme#ImagingStudy]
+      relationWith:
+        - module: Imaging Series
+          relation: BFO:0000051 [http://purl.obolibrary.org/obo/BFO_0000051]
+        - module: Clinical
+          relation: RO:0000056 [http://purl.obolibrary.org/obo/RO_0000056]
+      elements:
+        - name: Imaging study identifier
+          description: The user- or equipment-generated identifier of an instance of a study entity.
+          ontology: NCIT:C164493 [http://purl.obolibrary.org/obo/NCIT_C164493]
+          values: UniqueID
+        - name: Belongs to person
+          description: Reference to the person whom this imaging study is about.
+          ontology: NCIT:C164337 [http://purl.obolibrary.org/obo/NCIT_C164337]
+          values: ReferenceOne [Personal]
+        - name: Belongs to diagnosis
+          description: Reference to the specific clinical examination, diagnosis, or disease timepoint during which this imaging study was indicated or evaluated.
+          ontology: SIO:000068 [http://semanticscience.org/resource/SIO_000068]
+          values: ReferenceMany [Clinical]
+        - name: Study date
+          description: The date on which a study began.
+          ontology: NCIT:C69208 [http://purl.obolibrary.org/obo/NCIT_C69208]
+          values: Date
+        - name: Imaging procedure
+          description: An imaging procedure as defined by SNOMED CT, representing a specific diagnostic or acquisition procedure (e.g., 'CT of breast', 'MRI of head', or 'Whole Slide Imaging'), rather than the general modality or technique alone. The general modality or technique (e.g., 'CT', 'MR', 'SM') is captured separately in the 'Imaging modality' field.
+          ontology: NCIT:C17369 [http://purl.obolibrary.org/obo/NCIT_C17369]
+          values: LookupOne [lookups/ImagingProcedure.txt], ofType [http://snomed.info/id/15220000]
+        - name: Reason for imaging procedure
+          description: The clinical or research rationale for performing the imaging procedure. This field captures why the procedure was indicated for the patient, such as screening, diagnosis, treatment planning, or research purposes. It should express the intent or medical reason, not the technical details of the procedure itself.
+          ontology: NCIT:C69216 [http://purl.obolibrary.org/obo/NCIT_C69216]
+          values: LookupMany [lookups/ReasonForImagingProcedure.txt], ofType [http://snomed.info/id/138875005]
+        - name: Series count
+          description: The total number of image series contained within this imaging study.
+          ontology: NCIT:C164492 [http://purl.obolibrary.org/obo/NCIT_C164492]
+          values: Integer
+        - name: Images count
+          description: The total number of individual image instances or frames comprising this imaging study.
+          ontology: NCIT:C164540 [http://purl.obolibrary.org/obo/NCIT_C164540]
+          values: Integer
+        - name: Affiliated institution
+          description: The organisation or institution responsible for performing the imaging study.
+          ontology: NCIT:C25412 [http://purl.obolibrary.org/obo/NCIT_C25412]
+          values: LookupOne [lookups/Institutes.txt], ofType [http://semanticscience.org/resource/SIO_000688]
+    - name: Slide preparation assay
+      description: A laboratory protocol for preparing, sectioning, and staining biological specimens on glass slides (e.g. histological, special staining, or immunohistochemistry assays) prior to whole slide imaging or microscopic evaluation.
+      ontology: OBI:0000070 [http://purl.obolibrary.org/obo/OBI_0000070]
+      relationWith:
+        - module: Biospecimens
+          relation: OBI:0000293 [http://purl.obolibrary.org/obo/OBI_0000293]
+        - module: Imaging study
+          relation: SIO:000248 [http://semanticscience.org/resource/SIO_000248]
+      elements:
+        - name: Assay identifier
+          description: An assay identifier is an identifier that identifies some assay (analysis).
+          ontology: AFR:0001979 [http://purl.allotrope.org/ontologies/result#AFR_0001979]
+          values: UniqueID
+        - name: Assay type
+          description: The specific type of laboratory test or analytical procedure performed on a bio-specimen mounted on a glass slide. It defines the staining or labeling technique applied to the specimen to reveal specific structural, molecular, or cellular features.
+          ontology: NCIT:C189101 [http://purl.obolibrary.org/obo/NCIT_C189101]
+          values: LookupOne [lookups/AssayType.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C23043]
+        - name: Belongs to biospecimen
+          description: Reference to the biospecimen (e.g. FFPE block, slide) that was the physical input to this slide preparation assay.
+          ontology: OBI:0000293 [http://purl.obolibrary.org/obo/OBI_0000293]
+          values: ReferenceOne [Biospecimens]
+        - name: Precedes the study
+          description: Reference to the subsequent imaging study or digital whole-slide scanning event for which this prepared slide serves as the direct physical input.
+          ontology: SIO:000248 [http://semanticscience.org/resource/SIO_000248]
+          values: ReferenceOne [Imaging study]
+        - name: Biomarker type
+          description: A classification of the type of biomolecule or biological component that the assay targets, labels, or detects. It characterizes whether the biomarker is, for example, a protein, nucleic acid, carbohydrate, lipid, or inorganic substance.
+          ontology: NCIT:C201359 [http://purl.obolibrary.org/obo/NCIT_C201359]
+          values: LookupOne [lookups/BiomarkerType.txt], ofType [http://purl.obolibrary.org/obo/OPMI_0000452]
+        - name: Section thickness
+          description: A measurement of the thickness of a sectioned slice (of tissue or mineral or other substance), expressed in micrometers (µm).
+          ontology: NCIT:C176286 [http://purl.obolibrary.org/obo/NCIT_C176286]
+          values: Integer
+        - name: Biomarker spatial localization
+          description: The subcellular or structural location within a tissue or cell where the biomarker is expressed or detected.
+          ontology: GO:0051641 [http://purl.obolibrary.org/obo/GO_0051641]
+          values: LookupOne [lookups/BiomarkerSpatialLocalization.txt], ofType [http://purl.obolibrary.org/obo/GO_0110165]
+        - name: Pathogen type
+          description: Identification of the specific type of pathogen among the listed categories e.g. 'Virus','Viroid','Bacterium'...
+          ontology: EVORAO:pathogenType [https://w3id.org/evorao/pathogenType]
+          values: LookupOne [lookups/PathogenType.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C80324]
+        - name: Dye name
+          description: The neutral or synthetic colored substance used for staining specific tissues or cellular components.
+          ontology: SNOMED:703857004 [http://snomed.info/id/703857004] #staining technique in general
+          values: LookupOne [lookups/StainTechniques.txt], ofType [http://snomed.info/id/703857004]
+        - name: Counter labeling
+          description: The counter-labeling technique used to highlight specific cellular or tissue structures, serving as a complementary method to the primary labeling for analysis
+          ontology: SNOMED:703857004 [http://snomed.info/id/703857004] #staining technique in general
+          values: LookupOne [lookups/StainTechniques.txt], ofType [http://snomed.info/id/703857004]
+          #- name: Special stain technique
+          #description: The method of a special staining technique performed to visualize a selected tissue type or tissue element, a cell type, or a pathogen, except for the H&E method
+          #ontology: SNOMED:703857004 [http://snomed.info/id/703857004] #staining technique in general
+          #values: LookupOne [lookups/StainTechniques.txt], ofType [http://snomed.info/id/703857004]
+        - name: Antibody name
+          description: The vendor-stated name of an antibody used to detect and visualize the presence of an antigen.
+          ontology: XCO:0000194 [http://purl.obolibrary.org/obo/XCO_0000194]
+          values: LookupOne [lookups/AntibodyName.txt], ofType [http://purl.obolibrary.org/obo/XCO_0000194]
+        - name: Antibody identifier
+          description: The distinct ID for an antibody used in an assay.
+          ontology: XCO:0000194 [http://purl.obolibrary.org/obo/XCO_0000194]
+          values: LookupOne [lookups/AntibodyIdentifier.txt], ofType [http://purl.obolibrary.org/obo/XCO_0000194]
+    - name: Sample preparation
+      description: The pre-analytical laboratory procedure used to extract, isolate, and prepare nucleic acids into sequencing libraries, including target enrichment, molecular barcoding, and library quality control.
+      ontology: OBI:0001902 [http://purl.obolibrary.org/obo/OBI_0001902]
+      relationWith:
+        - module: Biospecimens
+          relation: OBI:0000293 [http://purl.obolibrary.org/obo/OBI_0000293]
+      elements:
+          - name: Sampleprep identifier
+            description: A unique proper name or character sequence that identifies this particular sample preparation.
+            ontology: NCIT:C132299 [http://purl.obolibrary.org/obo/NCIT_C132299]
+            values: UniqueID
+          - name: Belongs to biospecimen
+            description: Reference to the source biospecimen from which this sample was prepared.
+            ontology: OBI:0000293 [http://purl.obolibrary.org/obo/OBI_0000293]
+            values: ReferenceOne [Biospecimens]
+          - name: Input amount
+            description: Amount of input material in nanogram (ng).
+            ontology: AFRL:0000010 [http://purl.allotrope.org/ontologies/role#AFRL_0000010]
+            values: Integer
+            unit: UO:0000024 [http://purl.obolibrary.org/obo/UO_0000024]
+          - name: Library preparation kit
+            description: Pre-filled, ready-to-use reagent cartridges intented to improve chemistry, cluster density and read length as well as improve quality (Q) scores for this sample. Reagent components are encoded to interact with the sequencing system to validate compatibility with user-defined applications.
+            ontology: GENEPIO:0000085 [http://purl.obolibrary.org/obo/GENEPIO_0000085]
+            values: LookupOne [lookups/NGSKits.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0000081]
+          - name: PCR free
+            description: Indicates whether a polymerase chain reaction (PCR) was used to prepare this sample. PCR is a method for amplifying a DNA base sequence using multiple rounds of heat denaturation of the DNA and annealing of oligonucleotide primers complementary to flanking regions in the presence of a heat-stable polymerase.
+            ontology: NCIT:C17003 [http://purl.obolibrary.org/obo/NCIT_C17003]
+            values: Boolean
+          - name: Target enrichment kit
+            description: Indicates which target enrichment kit was used to prepare this sample. Target enrichment is a pre-sequencing DNA preparation step where DNA sequences are either directly amplified (amplicon or multiplex PCR-based) or captured (hybrid capture-based) in order to only focus on specific regions of a genome or DNA sample.
+            ontology: NCIT:C154307 [http://purl.obolibrary.org/obo/NCIT_C154307]
+            values: LookupOne [lookups/NGSKits.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0000081]
+          - name: Fully sequenced genes
+            description: List of genes where the entire coding sequence (all exons) was targeted and sequenced.
+            ontology: NCIT:C16612 [http://purl.obolibrary.org/obo/NCIT_C16612]
+            values: LookupMany [lookups/Genes.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C16612]
+          - name: Partially sequenced genes
+            description: List of genes where only specific regions or hotspots (selected exons/codons) were targeted and sequenced.
+            ontology: NCIT:C16612 [http://purl.obolibrary.org/obo/NCIT_C16612]
+            values: LookupMany [lookups/Genes.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C16612]
+          - name: UMIs present
+            description: Indicates whether any unique molecular identifiers (UMIs) are present. An UMI barcode is a short nucleotide sequence that is used to identify reads originating from an individual mRNA molecule.
+            ontology: EFO:0010199 [http://www.ebi.ac.uk/efo/EFO_0010199]
+            values: Boolean
+          - name: Intended insert size
+            description: In paired-end sequencing, the DNA between the adapter sequences is the insert. The length of this sequence is known as the insert size, not to be confused with the inner distance between reads. So, fragment length equals read adapter length (2x) plus insert size, and insert size equals read lenght (2x) plus inner distance.
+            ontology: FG:0000001 [https://w3id.org/fair-genomes/resource/FG_0000001]
+            values: Integer
+          - name: Intended read length
+            description: The number of nucleotides intended to be ordered from each side of a nucleic acid fragment obtained after the completion of a sequencing process.
+            ontology: NCIT:C153362 [http://purl.obolibrary.org/obo/NCIT_C153362]
+            values: Integer
+    - name: Sequencing
+      description: Technical execution and instrument run parameters of a high-throughput sequencing assay, including sequencer platform, read metrics, coverage depth, and sequencing quality control statistics.
+      ontology: EDAM:topic_3168 [http://edamontology.org/topic_3168]
+      relationWith:
+          - module: Sample preparation
+            relation: SIO:001220 [http://semanticscience.org/resource/SIO_001220]
+      elements:
+          - name: Sequencing identifier
+            description: A unique proper name or character sequence that identifies this particular nucleic acid sequencing assay.
+            ontology: NCIT:C171337 [http://purl.obolibrary.org/obo/NCIT_C171337]
+            values: UniqueID
+          - name: Belongs to sample preparation
+            description: Reference to the prepared sample, i.e. the source that was sequenced.
+            ontology: NCIT:C25683 [http://purl.obolibrary.org/obo/NCIT_C25683]
+            values: ReferenceOne [Sample preparation]
+          - name: Sequencing date
+            description: Date on which this sequencing assay was performed.
+            ontology: GENEPIO:0000069 [http://purl.obolibrary.org/obo/GENEPIO_0000069]
+            values: Date
+          - name: Sequencing platform
+            description: The used sequencing platform (i.e. brand, name of a company that produces sequencer equipment).
+            ontology: GENEPIO:0000071 [http://purl.obolibrary.org/obo/GENEPIO_0000071]
+            values: LookupOne [lookups/SequencingPlatform.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0000071]
+          - name: Sequencing instrument model
+            description: The used product name and model number of a manufacturer's genomic (dna) sequencer.
+            ontology: GENEPIO:0001921 [http://purl.obolibrary.org/obo/GENEPIO_0001921]
+            values: LookupOne [lookups/SequencingInstrumentModels.txt], ofType [http://purl.obolibrary.org/obo/GENEPIO_0001921]
+          - name: Sequencing method
+            description: Method used to determine the order of bases in a nucleic acid sequence.
+            ontology: FIX:0000704 [http://purl.obolibrary.org/obo/FIX_0000704]
+            values: LookupOne [lookups/SequencingMethods.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C17565]
+          - name: Median read depth
+            description: The median number of times a particular locus (site, nucleotide, amplicon, region) was sequenced.
+            ontology: NCIT:C155320 [http://purl.obolibrary.org/obo/NCIT_C155320]
+            values: Integer
+          - name: Observed read length
+            description: The number of nucleotides successfully ordered from each side of a nucleic acid fragment obtained after the completion of a sequencing process.
+            ontology: NCIT:C153362 [http://purl.obolibrary.org/obo/NCIT_C153362]
+            values: Integer
+          - name: Observed insert size
+            description: In paired-end sequencing, the DNA between the adapter sequences is the insert. The length of this sequence is known as the insert size, not to be confused with the inner distance between reads. So, fragment length equals read adapter length (2x) plus insert size, and insert size equals read lenght (2x) plus inner distance.
+            ontology: FG:0000002 [https://w3id.org/fair-genomes/resource/FG_0000002]
+            values: Integer
+          - name: Percentage Q30
+            description: Percentage of reads with a Phred quality score over 30, which indicates less than a 1/1000 chance that the base was called incorrectly.
+            ontology: GENEPIO:0000089 [http://purl.obolibrary.org/obo/GENEPIO_0000089]
+            values: Decimal
+          - name: Percentage TR20
+            description: Percentage of the target sequence on which 20 or more unique reads were successfully mapped.
+            ontology: FG:0000003 [https://w3id.org/fair-genomes/resource/FG_0000003]
+            values: Decimal
+          - name: Other quality metrics
+            description: Other NGS quality control metrics, including but not limited to (i) sequencer metrics such as yield, error rate, density (K/mm2), cluster PF (%) and phas/prephas (%), (ii) alignment metrics such as QM insert size, GC content, QM duplicated reads (%), QM error rate, uniformity/evenness of coverage and maternal cell contamination, and (iii) variant call metrics such as number of SNVs/CNVs/SVs called, number of missense/nonsense variants, common variants (%), unique variants (%), gender match and trio inheritance check.
+            ontology: EDAM:data_3914 [http://edamontology.org/data_3914]
+            values: Text
+    - name: Analysis
+      description: Computational and bioinformatic processing workflows applied to primary sequencing data, including reference genome alignment, variant calling algorithms, standard pipeline guidelines, and stored output file formats.
+      ontology: EDAM:operation_2945 [http://edamontology.org/operation_2945]
+      relationWith:
+          - module: Sequencing
+            relation: SIO:000253 [http://semanticscience.org/resource/SIO_000253]
+      elements:
+          - name: Analysis identifier
+            description: A unique proper name or character sequence that identifies this particular analysis.
+            ontology: AFR:0001979 [http://purl.allotrope.org/ontologies/result#AFR_0001979]
+            values: UniqueID
+          - name: Belongs to sequencing
+            description: Reference to the sequencing that was performed, i.e. the source on which this analysis was based.
+            ontology: NCIT:C25683 [http://purl.obolibrary.org/obo/NCIT_C25683]
+            values: ReferenceOne [Sequencing]
+          - name: Data formats stored
+            description: Which data file formats (i.e. defined ways or layouts of representing and structuring data in a computer file, blob, string, message, or elsewhere) are stored and potentially available.
+            ontology: NCIT:C142494 [http://purl.obolibrary.org/obo/NCIT_C142494]
+            values: LookupMany [lookups/DataFormats.txt], ofType [http://edamontology.org/format_1915]
+          - name: Algorithms used
+            description: Any used problem-solving procedures implemented in software to be executed by a computer.
+            ontology: NCIT:C16275 [http://purl.obolibrary.org/obo/NCIT_C16275]
+            values: Text
+          - name: Reference genome used
+            description: The specific build of the human genome used as reference for sequence alignment and variant calling.
+            ontology: EDAM:data_2340 [http://edamontology.org/data_2340]
+            values: LookupOne [lookups/GenomeAccessions.txt], ofType [http://edamontology.org/data_2787]
+          - name: Bioinformatic protocol used
+            description: A human-readable collection of information about about how a scientific experiment or analysis was carried out that results in a specific set of data or results used for further analysis or to test a specific hypothesis.
+            ontology: EDAM:data_2531 [http://edamontology.org/data_2531]
+            values: Text
+            #- name: Bioinformatic protocol deviation
+            #description: A variation from processes or procedures defined in the bioinformatic protocol. Deviations usually do not preclude the overall evaluability of subject data for either efficacy or safety, and are often acknowledged and accepted in advance by the sponsor.
+            #ontology: NCIT:C50996 [http://purl.obolibrary.org/obo/NCIT_C50996]
+            #values: String
+            #- name: Reason for bioinformatic protocol deviation
+            #description: The rationale for why a deviation from the bioinformatic protocol has occurred.
+            #ontology: NCIT:C93529 [http://purl.obolibrary.org/obo/NCIT_C93529]
+            #values: String
+            #- name: WGS guideline followed
+            #description: Any followed systematic statement of policy rules or principles. Guidelines may be developed by government agencies at any level, institutions, professional societies, governing boards, or by convening expert panels.
+            #ontology: NCIT:C17564 [http://purl.obolibrary.org/obo/NCIT_C17564]
+            #values: String
+    - name: Imaging series
+      description: Common metadata and technical characteristics for a coherent series of biomedical image instances acquired using a single equipment, coordinate frame, and imaging modality within an imaging study.
+      ontology: NCIT:C69225 [http://purl.obolibrary.org/obo/NCIT_C69225]
+      relationWith:
+        - module: Computed tomography (CT)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+        - module: Magnetic resonance (MR)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+        - module: Whole slide imaging (WSI)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+        - module: Digital radiography (DX)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+        - module: Digital mammography (MG)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+        - module: Ultrasound imaging (US)
+          relation: RO:0000053 [http://purl.obolibrary.org/obo/RO_0000053]
+      elements:
+        - name: Series instance identifier
+          description: A unique identifier for series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+        - name: Belongs to imaging study
+          description: Parent study context.
+          ontology: NCIT:C164493 [http://purl.obolibrary.org/obo/NCIT_C164493]
+          values: ReferenceOne [Imaging study]
+        - name: Images count
+          description: The total number of discrete image instances, slices, or frames contained within this imaging series.
+          ontology: NCIT:C164540 [http://purl.obolibrary.org/obo/NCIT_C164540]
+          values: Integer
+        - name: Imaging modality
+          description: Any technology or method that aids in the visualization of any biological process, cell, tissue or organ for use in screening, diagnosis, surgical procedures or therapy.
+          ontology: NCIT:C17369 [http://purl.obolibrary.org/obo/NCIT_C17369]
+          values: LookupOne [lookups/Modality.txt], ofType [http://purl.bioontology.org/ontology/SNOMEDCT/360037004]
+        - name: Series date
+          description: The date on which a series began.
+          ontology: NCIT:C68616 [http://purl.obolibrary.org/obo/NCIT_C68616]
+          values: Date
+        - name: Body region
+          description: The specific anatomical region, body part, or organ targeted by this imaging series.
+          ontology: NCIT:C12680 [http://purl.obolibrary.org/obo/NCIT_C12680]
+          values: LookupOne [lookups/AnatomicFocus.txt], ofType [http://snomed.info/id/52530000]
+        - name: Laterality
+          description: The side of the body or paired organ being examined (e.g. Left, Right, Bilateral, Unilateral).
+          ontology: NCIT:C25185 [http://purl.obolibrary.org/obo/NCIT_C25185]
+          values: LookupOne [lookups/Laterality.txt], ofType [http://snomed.info/id/106233006]
+        - name: Imaging device
+          description: A device for producing a representation or picture, usually of a part of the body, to aid in diagnosis and evaluation.
+          ontology: NCIT:C19747 [http://purl.obolibrary.org/obo/NCIT_C19747]
+          values: LookupOne [lookups/ImagingDevice.txt], ofType [http://snomed.info/id/314789007]
+        - name: Manufacturer of imaging device
+          description: A person, enterprise, or entity that produces imaging device.
+          ontology: NCIT:C25392 [http://purl.obolibrary.org/obo/NCIT_C25392]
+          values: LookupOne [lookups/ManufacturerOfID.txt], ofType [http://purl.obolibrary.org/obo/OBI_0000835]
+        - name: Software version
+          description: A form or variant of software; one of a sequence of copies of a software program, each incorporating new modifications.
+          ontology: NCIT:C111093 [http://purl.obolibrary.org/obo/NCIT_C111093]
+          values: LookupOne [lookups/ImagingDeviceSoftwareVersion.txt], ofType [http://snomed.info/id/706687001]
+        - name: Color space
+          description: The photometric interpretation of pixel data that defines the type of colour or greyscale encoding used in the image (e.g., MONOCHROME2, RGB, YBR_FULL). Corresponds to DICOM tag (0028,0004).
+          ontology: NCIT:C37927 [http://purl.obolibrary.org/obo/NCIT_C37927]
+          values: LookupOne [lookups/ColorSpace.txt], ofType [https://w3id.org/valuesets/ColorSpaceEnum]
+        - name: Pixel spacing
+          description: Physical distance between the centres of adjacent pixels in the image space, specified as row and column spacing. Expressed in millimetres (mm) according to DICOM attribute (0028,0030).
+          ontology: NCIT:C45786 [http://purl.obolibrary.org/obo/NCIT_C45786]
+          values: Decimal
+        - name: Image type
+          description: A classification of the image based on the imaging modality and acquisition characteristics. It specifies the type of image produced during the scan (e.g., T1-weighted MRI, T2-weighted MRI, CT attenuation image, PET uptake image).
+          ontology: NCIT:C69268 [http://purl.obolibrary.org/obo/NCIT_C69268]
+          values: LookupOne [lookups/ImageType.txt], ofType [http://snomed.info/id/363679005]
+        - name: File format
+          description: The digital format used to encode and store an imaging file.
+          ontology: MS:1001459 [http://purl.obolibrary.org/obo/MS_1001459]
+          values: LookupOne [lookups/FileFormat.txt], ofType [http://purl.obolibrary.org/obo/MS_1001459]
+        - name: File size
+          description: The size of the file in MB.
+          ontology: NCIT:C171192 [http://purl.obolibrary.org/obo/NCIT_C171192]
+          values: Integer
+        - name: Image width
+          description: Number of pixels in one row of the image, corresponding to the DICOM attribute Columns (0028,0011).
+          ontology: AFO:0002468 [http://purl.allotrope.org/ontologies/result#AFR_0002468]
+          values: Integer
+        - name: Image height
+          description: Number of pixels in one column of the image, corresponding to the DICOM attribute Rows (0028,0010).
+          ontology: AFO:0002467 [http://purl.allotrope.org/ontologies/result#AFR_0002467]
+          values: Integer
+        - name: Image depth
+          description: The number of distinct image planes captured during acquisition. For WSI, this represents the number of focal planes (Z-stack levels). For CT, MRI, and PET, it corresponds to the number of cross-sectional slices or frames. For DX and MG, this value is typically 1 (a single 2D projection).
+          ontology: NCIT:C69267 [http://purl.obolibrary.org/obo/NCIT_C69267]
+          values: Integer
+        - name: Number of channels
+          description: The number of distinct data channels stored in each pixel of the image. Channels may represent color components (e.g., RGB), grayscale intensity, or modality-specific signal dimensions.
+          ontology: REPRODUCEME:SamplesPerPixel [https://w3id.org/reproduceme#SamplesPerPixel]
+          values: Integer
+        - name: Channel resolution
+          description: The number of bits used to represent the stored value of each pixel channel. In DICOM, this corresponds to tag (0028,0101).
+          ontology: REPRODUCEME:SignificantBits [https://w3id.org/reproduceme#SignificantBits]
+          values: Integer
+        - name: Compression method
+          description: Indicates whether the image was lossy-compressed and which method was used, based on DICOM tags (0028,2110) and (0028,2114).
+          ontology: NCIT:C64347 [http://purl.obolibrary.org/obo/NCIT_C64347]
+          values: String
+        - name: Annotations available
+          description: Indicates whether annotation data associated with the image (e.g., regions of interest, labels, markup, or segmentation overlays) are present and accessible.
+          ontology: NCIT:C44272 [http://purl.obolibrary.org/obo/NCIT_C44272]
+          values: Boolean
+    - name: Whole slide imaging (WSI)
+      description: Modality-specific series metadata for high-resolution digital pathology whole slide images, capturing optical scanning modes, lens magnification, illumination parameters, and focal z-stacking.
+      ontology: NCIT:C165215 [http://purl.obolibrary.org/obo/NCIT_C165215]
+      subclassOf: ImagingSeries
+      elements:
+        - name: WSI identifier
+          description: A unique identifier for WSI series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+        - name: Z_stacking
+          description: A digital image processing method which combines multiple images taken at different focal distances to create a composite image with a greater depth of field than is possible for a single image.
+          ontology: NCIT:C182016 [http://purl.obolibrary.org/obo/NCIT_C182016]
+          values: LookupOne [lookups/Zstacking.txt], ofType [http://purl.obolibrary.org/obo/NCIT_C182016]
+        - name: Objective lens magnification
+          description: The objective lens magnification used for the acquisition of whole slide images, expressed as a dimensionless optical magnification factor (e.g., 10×, 20×, 40×). This refers only to the lens magnification and not the final stored image encoded by the spatial resolution attribute.
+          ontology: AFO:0002226 [http://purl.allotrope.org/ontologies/result#AFR_0002226]
+          values: Integer
+        - name: Illumination method
+          description: The method of optical illumination used to illuminate the specimen during scanning (e.g., brightfield, darkfield, fluorescence, phase contrast).
+          ontology: FBBI:00000268 [http://purl.obolibrary.org/obo/FBbi_00000268]
+          values: LookupOne [lookups/IlluminationMethods.txt], ofType [http://purl.obolibrary.org/obo/FBbi_00000268]
+        - name: Illumination wavelength
+          description: Nominal wavelength of the illuminator expressed in nanometres (nm).
+          ontology: SNOMED-CT:246522008 [http://snomed.info/id/246522008]
+          values: Integer
+        - name: Scanning operation mode
+          description: The scanning procedure used to digitize a glass slide. This attribute does not describe the capabilities of the scanner used for digitization.
+          ontology: SNOMED-CT:246363001 [http://snomed.info/id/246363001]
+          values: LookupOne [lookups/ScanningOperationMode.txt], ofType [http://snomed.info/id/246363001]
+        - name: Tissue scan area
+          description: The area of the tissue region that was scanned, expressed in square millimetres (mm²).
+          ontology: AFO:0003804 [http://purl.allotrope.org/ontologies/process#AFP_0003804]
+          values: Integer
+        - name: Number of focal planes
+          description: Number of focal planes along the vertical z-axis used for multiple and extended z-stacking methods.
+          ontology: NCIT:C102516 [http://purl.obolibrary.org/obo/NCIT_C102516]
+          values: Integer
+        - name: Distance between focal planes
+          description: Distance between acquisition focal planes given in micrometers (µm).
+          ontology: AFO:0000032 [http://purl.allotrope.org/ontologies/quality#AFQ_0000032]
+          values: Decimal
+        - name: Pyramid levels
+          description: The number of specific resolution levels of an image pyramid.
+          ontology: AFO:0001619 [http://purl.allotrope.org/ontologies/result#AFR_0001619]
+          values: Integer
+        - name: Colour (ICC) profile
+          description: A standardised colour profile defined by the International Color Consortium (ICC) that specifies how colours in an image should be interpreted to ensure consistent colour rendering across devices (e.g. sRGB or Gray Gamma 1.8/2.2, GSDF).
+          ontology: REPRODUCEME:PhotometricInterpretation [https://w3id.org/reproduceme#PhotometricInterpretation]
+          values: String
+          #- name: Preview available
+          #description: Indicates whether a preview image is available in the image file. A preview image captures the entire area of the container, typically at a lower resolution. It is not meant to be an algorithmically downsampled version of the high-resolution scan.
+          #ontology: NMR:1000011 [http://nmrML.org/nmrCV#NMR:1000011]
+          #values: Boolean
+          #- name: Label available
+          #description: Indicates if a label image is available in the image file.
+          #ontology: NMR:1000011 [http://nmrML.org/nmrCV#NMR:1000011]
+          #values: Boolean
+        - name: Assay identifier
+          description: An assay identifier is an identifier that identifies some assay (analysis).
+          ontology: AFR:0001979 [http://purl.allotrope.org/ontologies/result#AFR_0001979]
+          values: ReferenceOne [Slide preparation assay]
+        - name: Compression quality label
+          description: A vendor-specific indicator describing the applied level or strength of lossy compression (e.g., quality level or percentage), not defined in DICOM but used in some WSI formats to express perceived compression quality.
+          ontology: AFO:0002843 [http://purl.allotrope.org/ontologies/process#AFP_0002843]
+          values: String
+    - name: Computed tomography (CT)
+      description: Modality-specific series metadata for computed tomography acquisitions, capturing X-ray tube exposure parameters, spiral pitch, reconstruction convolution kernels, and slice geometry.
+      ontology: NCIT:C17204 [http://purl.obolibrary.org/obo/NCIT_C17204]
+      subclassOf: ImagingSeries
+      elements:
+        - name: CT identifier
+          description: A unique identifier for CT series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+        - name: Tube voltage (kVp)
+          description: The peak accelerating voltage applied in an X-ray tube between the cathode and anode, corresponding to DICOM tag (0018,0060).
+          ontology: NCIT:C48432 [http://purl.obolibrary.org/obo/NCIT_C48432]
+          values: Integer
+        - name: X_Ray tube current (mA)
+          description: The value of the electrical current applied to an X-ray tube (DICOM tag (0018,1151)).
+          ontology: NCIT:C69233 [http://purl.obolibrary.org/obo/NCIT_C69233]
+          values: Integer
+        - name: Exposure time (ms)
+          description: The cumulative time a subject was exposed to X-rays during image acquisition. Corresponds to DICOM tag (0018,1150).
+          ontology: NCIT:C69233 [http://purl.obolibrary.org/obo/NCIT_C69233] #treba najst vhodnu ontologiu
+          values: Integer
+        - name: Spiral pitch factor
+          description: Ratio of the distance that the table moves during a complete revolution of the source around the gantry orbit, to the width of the total collimation over the area of active x-ray detection (DICOM tag (0018,9311)).
+          ontology: NCIT:C164623 [http://purl.obolibrary.org/obo/NCIT_C164623]
+          values: Decimal
+        - name: Filter type
+          description: Specifies the type of X-ray beam–shaping filter used during image acquisition (e.g., body, head, bowtie, wedge). Corresponds to DICOM tag (0018,1160).
+          ontology: REPRODUCEME:FilterType [https://w3id.org/reproduceme#FilterType]
+          values: String
+        - name: Convolution kernel
+          description: An algorithm used to reconstruct imaging data. Convolution kernels can be used to filter images to smooth them and reduce noise or to enhance edges or other image features. Corresponds to DICOM tag (0018,1210).
+          ontology: NCIT:C41832 [http://purl.obolibrary.org/obo/NCIT_C41832]
+          values: String
+        - name: Field of view
+          description: The physical size of the anatomical region covered in the reconstructed image, expressed in millimetres. Corresponds to DICOM tag (0018,9317).
+          ontology: NCIT:C74298 [http://purl.obolibrary.org/obo/NCIT_C74298]
+          values: Decimal
+        - name: Slice thickness
+          description: The dimension between two surfaces of an imaging plane, specified in millimetres (mm). Corresponds to DICOM tag (0018,0050).
+          ontology: NCIT:C106534 [http://purl.obolibrary.org/obo/NCIT_C106534]
+          values: Decimal
+        - name: Imaging injection
+          description: Administration of CT contrast medium using an injector device. Corresponds to DICOM tag (0018,1040).
+          ontology: OBI:0000426 [http://purl.obolibrary.org/obo/OBI_0000426]
+          values: String
+        - name: Z_axis spacing
+          description: The physical spacing between adjacent CT image slices along the Z-axis, representing the voxel dimension in the slice-selection direction. Expressed in millimetres (mm). Corresponds to DICOM tag (0018,0088).
+          ontology: NCIT:C156499 [http://purl.obolibrary.org/obo/NCIT_C156499]
+          values: Decimal
+    - name: Magnetic resonance (MR)
+      description: Modality-specific series metadata for magnetic resonance imaging acquisitions, capturing static magnetic field strength, radiofrequency pulse sequence timing (TR/TE), flip angle, and receive coil configurations.
+      ontology: NCIT:C16809 [http://purl.obolibrary.org/obo/NCIT_C16809]
+      subclassOf: ImagingSeries
+      elements:
+        - name: MR identifier
+          description: A unique identifier for MR series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+        - name: Sequence name
+          description: The literal identifier for the pulse sequence. Corresponds to DICOM tag (0018,0024).
+          ontology: NCIT:C164586 [http://purl.obolibrary.org/obo/NCIT_C164586]
+          values: String
+        - name: Magnetic field strength
+          description: A measurement of the strength of the static magnetic field (B₀) generated by an MRI system, expressed in units of Tesla (T). Corresponds to DICOM tag (0018,0087).
+          ontology: NCIT:C156494 [http://purl.obolibrary.org/obo/NCIT_C156494]
+          values: Decimal
+          #- name: MR acquisition type
+          #description: Specifies the dimensional nature of an MR data acquisition (2D, 3D, or multi-slice). Corresponds to DICOM tag (0018,0023).
+          #ontology: FG:0000787 [https://w3id.org/fair-genomes/resource/0000787] #ontology does not work
+          #values: String
+        - name: Repetition time
+          description: The amount of time in milliseconds (ms) between successive pulse sequences applied to the same slice. Corresponds to DICOM tag (0018,0080).
+          ontology: NCIT:C82330 [http://purl.obolibrary.org/obo/NCIT_C82330]
+          values: Decimal
+        - name: Echo time
+          description: The time in milliseconds between the application of the excitation pulse and the recording of the peak echo signal. Corresponds to DICOM tag (0018,0081).
+          ontology: NCIT:C82331 [http://purl.obolibrary.org/obo/NCIT_C82331]
+          values: Decimal
+        - name: Imaging frequency
+          description: The Larmor resonance frequency used during MR data acquisition, determined by the strength of the static magnetic field (B₀) and expressed in megahertz (MHz). Corresponds to DICOM tag (0018,0084).
+          ontology: UO:0000105 [http://purl.obolibrary.org/obo/UO_0000105] #bad ontology - unit
+          values: Decimal
+        - name: Flip angle
+          description: In magnetic resonance imaging, the angle by which the net magnetization vector is rotated away from the main magnetic field (B₀) by an applied radiofrequency pulse. It is expressed in degrees (°). Corresponds to DICOM tag (0018,1314).
+          ontology: UO:0000122 [http://purl.obolibrary.org/obo/UO_0000122] #bad ontology - unit
+          values: Integer
+        - name: Inversion time
+          description: The time between the inversion and excitation pulses in an inversion recovery pulse sequence, expressed in milliseconds (ms). Corresponds to DICOM tag (0018,0082).
+          ontology: NCIT:C116124 [http://purl.obolibrary.org/obo/NCIT_C116124]
+          values: Integer
+        - name: Receive coil name
+          description: The designated name of the radiofrequency (RF) receive coil used during MR acquisition, identifying the specific hardware component that detects the MR signal. Corresponds to DICOM tag (0018,1250).
+          ontology: RADLEX:RID10830 [http://www.radlex.org/RID/RID10830]
+          values: String
+        - name: Field of view
+          description: The physical size of the anatomical region covered in the reconstructed image, expressed in millimetres.
+          ontology: NCIT:C74298 [http://purl.obolibrary.org/obo/NCIT_C74298]
+          values: Decimal
+        - name: Slice thickness
+          description: The dimension between two surfaces of an imaging plane, specified in millimetres (mm). Corresponds to DICOM tag (0018,0050).
+          ontology: NCIT:C106534 [http://purl.obolibrary.org/obo/NCIT_C106534]
+          values: Decimal
+        - name: Imaging injection
+          description: Administration of MR contrast medium using an injector device. Corresponds to DICOM tag (0018,0010).
+          ontology: OBI:0000426 [http://purl.obolibrary.org/obo/OBI_0000426]
+          values: String
+    - name: Digital radiography (DX)
+      description: Modality-specific series metadata for projection digital radiography acquisitions, capturing patient orientation, X-ray tube potential, and exposure settings.
+      ontology: NCIT:C18001 [http://purl.obolibrary.org/obo/NCIT_C18001]
+      subclassOf: ImagingSeries
+      elements:
+        - name: DX identifier
+          description: A unique identifier for DX series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+        - name: Patient orientation
+          description: Orientation of patient relative to imaging device. Corresponds to DICOM tag (0020,0020).
+          ontology: RADLEX:RID10461 [http://www.radlex.org/RID/RID10461]
+          values: LookupOne [lookups/PatientOrientation.txt], ofType [http://www.radlex.org/RID/RID10461]
+        - name: Tube voltage (kVp)
+          description: The peak accelerating voltage applied in an X-ray tube between the cathode and anode, corresponding to DICOM tag (0018,0060).
+          ontology: NCIT:C48432 [http://purl.obolibrary.org/obo/NCIT_C48432]
+          values: Integer
+        - name: Exposure time (ms)
+          description: The cumulative time a subject was exposed to X-rays during image acquisition. Corresponds to DICOM tag (0018,1150).
+          ontology: NCIT:C69233 [http://purl.obolibrary.org/obo/NCIT_C69233]
+          values: Integer
+        - name: Exposure (mAs)
+          description: The exposure expressed in mAs, for example calculated from Exposure Time and X-Ray Tube Current.
+          ontology: NCIT:C17941 [http://purl.obolibrary.org/obo/NCIT_C17941] #treba najst vhodnu ontologiu
+          values: Integer
+    - name: Digital mammography (MG)
+      description: Modality-specific series metadata for digital mammography acquisitions, capturing dedicated breast examination projections and associated radiographic parameters.
+      ontology: NCIT:C18467 [http://purl.obolibrary.org/obo/NCIT_C18467]
+      subclassOf: ImagingSeries
+      elements:
+        - name: MG identifier
+          description: A unique identifier for MG series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID
+    - name: Ultrasound Imaging (US)
+      description: Modality-specific series metadata for diagnostic ultrasonography acquisitions, capturing acoustic imaging parameters, anatomical focus, and real-time scanning geometry.
+      ontology: NCIT:C19337 [http://purl.obolibrary.org/obo/NCIT_C19337]
+      subclassOf: ImagingSeries
+      elements:
+        - name: US identifier
+          description: A unique identifier for US series of images.
+          ontology: NCIT:C69219 [http://purl.obolibrary.org/obo/NCIT_C69219]
+          values: UniqueID

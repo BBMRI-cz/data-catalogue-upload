@@ -68,8 +68,8 @@ public sealed class SequencingMapperTests
         var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
 
         // The source's gene list is the panel's full-coverage set; nothing states a partial one.
-        Assert.Equal(["BRCA1", "TP53"], prep.FullSequenceGenes);
-        Assert.Null(prep.PartialSequenceGenes);
+        Assert.Equal(["BRCA1", "TP53"], prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);
     }
 
     [Theory]
@@ -138,7 +138,7 @@ public sealed class SequencingMapperTests
     }
 
     [Fact]
-    public void AnalysisFilesBecomeLocationAndFormats()
+    public void AnalysisFilesBecomeTheFormatsTheyAreStoredIn()
     {
         var run = Run("R1") with
         {
@@ -161,15 +161,16 @@ public sealed class SequencingMapperTests
             Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations)
                 .Sequencing!.Analyses);
 
-        Assert.Equal("/a.vcf /b.vcf /c.bam", analysis.AbstractDataLocation);
-        Assert.Equal(["vcf", "bam"], analysis.DataFormatsStored);
+        // v2 has nowhere to put a file path, so a file survives only as its format - and both vcf
+        // roles are the same format, so three files become two terms.
+        Assert.Equal(["BAM", "VCF"], analysis.DataFormatsStored);
     }
 
     [Fact]
     public void RunSampleFilesAreDropped()
     {
         // FAIR Genomes has no file inventory on the preparation or the sequencing, so the reads
-        // themselves go nowhere. Only analysis outputs survive, and only as a location and formats.
+        // themselves go nowhere. Only analysis outputs survive, and only as the formats they are in.
         var run = Run("R1") with
         {
             Files =
@@ -228,11 +229,11 @@ public sealed class SequencingMapperTests
         // The preparation still exists and is identified — the run happened, the library table just did
         // not resolve.
         Assert.Equal("sampleprep_p0001_R1", prep.SampleprepIdentifier);
-        Assert.Equal("S1", prep.BelongsToMaterial);
+        Assert.Equal("biospecimen_S1", prep.BelongsToBiospecimen);
         Assert.Null(prep.InputAmount);
         Assert.Null(prep.LibraryPreparationKit);
         Assert.Null(prep.TargetEnrichmentKit);
-        Assert.Null(prep.FullSequenceGenes);
+        Assert.Null(prep.FullySequencedGenes);
         Assert.Null(prep.UmisPresent);
     }
 

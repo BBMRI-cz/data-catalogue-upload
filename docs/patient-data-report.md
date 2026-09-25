@@ -21,7 +21,7 @@
 
 | Dataset | File count | Disk size |
 |---|---|---|
-| `patient_data/` (full) | 892,997 | 3.5 GB |
+| `patient_data/` (full) | 892,995 `.XML` + 2 zero-byte `.XMLgf` | 3.5 GB |
 | `patient_data_filtered/` | 534,775 | 2.1 GB |
 | Excluded (full minus filtered) | 358,222 | ~1.4 GB |
 
@@ -47,7 +47,7 @@ Examples:
 | Patient sequence | 6-digit zero-padded within batch, separated by `-` |
 | Extension | `.XML` (uppercase) |
 
-There are **169 unique export batches** spanning from **2022-09-25 to 2026-03-08**.
+There are **167 export batches** spanning from **2022-09-25 to 2026-03-08** (recounted 2026-09-24).
 
 ---
 
@@ -77,7 +77,7 @@ Patient declined consent. No data beyond demographics.
 
 #### Category 2 — empty LTS + STS
 
-Diagnostic sample taken and recorded, but nothing archived in the biobank for research. `<STS>` (Short-Term Storage) records that a specimen was processed for diagnosis — it is consumed during that process, not kept. `<LTS/>` is empty because no research sample was collected that visit.
+Diagnostic sample taken and recorded, but nothing archived in the biobank for research. `<STS>` (Short-Term Storage) records that a specimen was processed for diagnosis — it is consumed during that process, not kept. `<LTS/>` is empty because the patient has no research sample from the last ~60 days — not necessarily none at all (see [How a patient's files relate](#how-a-patients-files-relate)).
 
 ```xml
 <patient biobank="MOU" consent="true" id="247" month="--02" sex="female"
@@ -140,6 +140,35 @@ Samples actually archived in the biobank for future research.
 ### Filtering logic
 
 `patient_data_filtered/` excludes all files where `consent="false"` or where the patient has only an empty `<LTS/>` and no `<STS>` — i.e., files with no clinically actionable data.
+
+### How a patient's files relate
+
+Measured 2026-09-24 over every file in `patient_data/`. A patient gets a file in most weekly batches,
+and the files are **neither full snapshots nor per-visit deltas**:
+
+- **The patient header is a snapshot.** `consent`, `sex`, birth date and the patient-level
+  `<AccessionNumbers>` describe the patient as of that export; the accession list is cumulative.
+- **`<LTS>` and `<STS>` are a rolling ~60-day window.** A sample first appears a median of 13 days after
+  collection and last appears a median of 61 days after (95th percentile 69); diagnostic specimens drop
+  out 53–62 days after collection. Nothing is removed from the biobank: 99% of samples that age out still
+  had tubes available the last time they were listed.
+- **Consequence:** a patient's newest file holds their whole sample history for only 2,667 of the 6,338
+  patients who ever had a sample. `biobank_api` therefore merges all of a patient's files
+  (`PatientExportHistory`): header from the newest file, samples keyed on element + `sampleId` with the
+  newer listing replacing all of that sample's older rows, specimens keyed on `sampleId`, and a newest
+  `consent="false"` clearing them. Merged, the export holds about 19,900 sample rows and 949 distinct
+  predictive numbers; the newest files alone hold 8,051 and 151.
+- **The merge needs the whole archive.** Deleting old files deletes their samples from the API on the next
+  ingest. A window export also cannot express a deletion: a sample destroyed after leaving the window
+  stays listed.
+- **Between re-listings, values are only filled in:** a predictive number first appears (728×) or a
+  second one is added (327×), `biopsy` goes from `-` to a number (6,786×), diagnosis and morphology get
+  filled. 6 predictive numbers were removed in a later file; the merge honours that as a correction.
+- **`predictive_number` and `<STS>` stop after the 2024-08-11 export.** In the 72 exports since, every
+  `predictive_number` is `-` and no file has `<STS>`, and volume drops from ~35k to ~2k files a month.
+  No sample collected from 2024-07 onwards carries a predictive number. This is on the producer's side.
+- Oddities: 5 zero-byte `.XML` files (reported as parse errors), 12 `<cell>` elements under `<LTS>` that the
+  API does not read (none carries a predictive number), and 4 samples dated before 2022.
 
 ---
 

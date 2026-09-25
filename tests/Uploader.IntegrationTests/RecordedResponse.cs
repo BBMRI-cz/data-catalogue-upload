@@ -22,23 +22,61 @@ internal static class RecordedResponse
     public static string Json(string fileName) =>
         File.ReadAllText(Path.Join(AppContext.BaseDirectory, "TestData", fileName));
 
-    public static IHttpClientFactory ClientFactory(string json) => new StubHttpClientFactory(json);
+    public static IHttpClientFactory ClientFactory(string json) =>
+        new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        });
+
+    /// <summary>A source that answers every request with <paramref name="status"/>.</summary>
+    public static IHttpClientFactory FailingWith(HttpStatusCode status) =>
+        new StubHttpClientFactory(_ => new HttpResponseMessage(status));
+
+    /// <summary>A source that answers 200 with a body no deserializer can read.</summary>
+    public static IHttpClientFactory Unreadable() =>
+        new StubHttpClientFactory(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("not json at all", Encoding.UTF8, "application/json"),
+        });
+
+    /// <summary>
+    /// A factory that records every request it is asked for, so a test can prove a source that is
+    /// not configured was never contacted rather than merely answering empty.
+    /// </summary>
+    public static CountingClientFactory Counting() => new();
+
+    internal sealed class CountingClientFactory : IHttpClientFactory
+    {
+        public int Requests { get; private set; }
+
+        public HttpClient CreateClient(string name) =>
+            new(new StubHandler(_ =>
+            {
+                Requests++;
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]", Encoding.UTF8, "application/json"),
+                };
+            }))
+            { BaseAddress = new Uri("http://source.test") };
+    }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
-        private readonly string _json;
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
 
-        public StubHttpClientFactory(string json) => _json = json;
+        public StubHttpClientFactory(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
+            _respond = respond;
 
         public HttpClient CreateClient(string name) =>
-            new(new StubHandler(_json)) { BaseAddress = new Uri("http://source.test") };
+            new(new StubHandler(_respond)) { BaseAddress = new Uri("http://source.test") };
     }
 
     private sealed class StubHandler : HttpMessageHandler
     {
-        private readonly string _json;
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
 
-        public StubHandler(string json) => _json = json;
+        public StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) => _respond = respond;
 
         // The response is owned by whoever sent the request, as with any handler: HttpClient hands it
         // to the caller, and HttpSourceDataGateway disposes it. Disposing it here would close the
@@ -46,9 +84,6 @@ internal static class RecordedResponse
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(_json, Encoding.UTF8, "application/json"),
-            });
+            Task.FromResult(_respond(request));
     }
 }

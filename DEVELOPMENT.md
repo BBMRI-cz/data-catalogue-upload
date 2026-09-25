@@ -20,10 +20,12 @@ dotnet format DataCatalogueUpload.slnx --verify-no-changes   # lint/format check
 
 ## Databases
 
-Each service owns its own PostgreSQL database. Start both with Docker:
+Each service owns its own PostgreSQL database, and each lives in its own compose file so the
+stacks can be deployed on separate machines. Start the two you need:
 
 ```bash
-docker compose -f compose.prod.yml up -d uploader-db biobank-db
+docker compose -f compose.uploader.yml up -d uploader-db
+docker compose -f compose.biobank.yml up -d biobank-db
 ```
 
 - `uploader-db` -> `localhost:5432`, database `data_catalogue_upload`
@@ -45,10 +47,30 @@ For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 `SEQUENCING_MAPPING_TABLE_PATH` (pseudonymizer mappings), `SEQUENCING_INGEST_CRON`. For local runs
 against `sequencing-db`, set `POSTGRES_PORT=5434`.
 
-**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT` plus the five API URLs
-`BIOBANK_API_URL`, `RADIOLOGY_API_URL`, `SEQUENCING_API_URL`, `WSI_API_URL`, `CATALOGUE_API_URL`,
-and `PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader
-mints. See [`docs/pseudonymization.md`](docs/pseudonymization.md).
+**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, the source and catalogue URLs, and
+`PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader mints.
+See [`docs/pseudonymization.md`](docs/pseudonymization.md).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BIOBANK_API_URL` | `http://localhost:8001` | |
+| `SEQUENCING_API_URL` | `http://localhost:8002` | matches what `compose.sequencing.yml` publishes |
+| `RADIOLOGY_API_URL` | *(blank)* | no service yet (#29); blank means never contacted |
+| `WSI_API_URL` | *(blank)* | no service yet (#31); blank means never contacted |
+| `CATALOGUE_API_URL` | `http://localhost:8000` | |
+
+**A blank source URL means "not deployed".** No HTTP client is registered for it and the uploader
+never contacts it - the source simply answers empty. A source that *is* configured but unreachable
+costs the affected patients that source's data, is counted under `source_unavailable` in the run
+summary, and the run carries on. See [`docs/catalogue-api-contract.md`](docs/catalogue-api-contract.md)
+for the catalogue side.
+
+Everything here assumes one machine. Deploying onto the two servers that actually hold the source
+data is [`docs/deployment.md`](docs/deployment.md).
+
+Secrets (notably the catalogue token) go in `.env`, which is git-ignored; copy `.env.example` and
+fill it in. Docker reads it via `env_file`; for a bare `dotnet run`, use
+`dotnet user-secrets --project src/Uploader/Uploader.Host` or export the variables.
 
 ## Migrations (EF Core)
 
@@ -108,13 +130,24 @@ dotnet test tests/Uploader.UnitTests/Uploader.UnitTests.csproj  # one project
 
 ## Containers
 
+One compose file per stack. Run them all on one machine, or one per machine — see
+[`docs/deployment.md`](docs/deployment.md).
+
 ```bash
-docker compose -f compose.prod.yml up -d --build                # dbs + biobank-api + sequencing-api
-curl -X POST http://localhost:8001/admin/ingest                 # ingest on demand
+docker compose -f compose.biobank.yml up -d --build       # biobank-db + biobank-api    :8001
+docker compose -f compose.sequencing.yml up -d --build    # sequencing-db + sequencing-api :8002
+docker compose -f compose.uploader.yml up -d uploader-db  # uploader-db                 :5432
+
+curl -X POST http://localhost:8001/admin/ingest           # ingest on demand
+docker compose -f compose.uploader.yml run --rm uploader  # one sync, prints a JSON summary
 ```
 
+The three stacks are three separate Compose projects on three separate networks even on one host, so
+container names do not resolve between them. The uploader addresses the source APIs as
+`host.docker.internal`; `.env.example` covers it.
+
 The Dockerfiles build with the repo root as their context (central package management +
-project references). The uploader is run as a job (host `dotnet run` or its own container image).
+project references). The uploader is a job, not a server, hence `run --rm` rather than `up`.
 
 ## CI
 

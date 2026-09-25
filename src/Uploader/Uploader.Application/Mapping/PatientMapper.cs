@@ -24,17 +24,20 @@ public static class PatientMapper
     {
         PersonalIdentifier = dto.PatientId,
         YearOfBirth = dto.BirthYear,
-        GenderAtBirth = dto.Sex,
-        GenderIdentity = null,
+        GenderAtBirth = CatalogueVocabulary.GenderAtBirth(dto.Sex),
+        PrimaryAffiliatedInstitute = CatalogueVocabulary.Institute(dto.Biobank),
     };
 
     private static Clinical ToClinical(PatientDto dto) => new()
     {
         ClinicalIdentifier = BiobankMapping.ClinicalIdentifier(dto.PatientId),
         BelongsToPerson = dto.PatientId,
-        ClinicalDiagnosis = Diagnoses(dto),
+
+        // The catalogue's Diagnosis ontology is Orphanet and these are ICD-10, so nothing here can
+        // reference a term today. Kept because the codes are what a crosswalk would start from, and
+        // because they belong in the fingerprint: a patient whose diagnoses change has changed.
+        Diagnosis = Diagnoses(dto),
         AgeAtDiagnosis = BiobankMapping.AgeInYears(dto.BirthYear, dto.BirthMonth, EarliestEvent(dto)),
-        AgeOfOnset = null,
     };
 
     /// <summary>

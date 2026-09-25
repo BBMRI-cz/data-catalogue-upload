@@ -102,6 +102,7 @@ decoding. Value decoding in general (decimal commas, Czech booleans, dates, Wind
 | `Id` | **the folder name** | `Samples/<pseudonymized predictive number>` | [`SequencingDataSource`] |
 | `IdScheme` | **constant** | `"mmci_predictive"` | [`SequencingDataSource`] |
 | `PredictiveNumber` | `predictive.json` | `predictive[]`, match `pseudo_number` → take `predictive_number`. Unmatched is null and normal | [`MappingTableReader`], [`MappingTable`] |
+| `PredictiveKey` | **derived** | `PredictiveNumber` in canonical `year-number` form: `2029/5678`, `2029_5678_DNA`, `5678-29` and `29-5678` all become `2029-5678`. Null when unrecognisable. Stored and indexed; it is what `GET /sequencing` matches on | `Normalize.PredictiveKey` |
 | `RunSamples` | the folder tree | one per run folder containing this sample id | [`SequencingDataSource`] |
 | `HasAnalysis` | *derived* | any run-sample has an analysis | domain |
 

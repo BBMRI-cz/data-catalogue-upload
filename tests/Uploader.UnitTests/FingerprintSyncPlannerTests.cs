@@ -23,7 +23,8 @@ public sealed class FingerprintSyncPlannerTests
             new PatientId(patientId),
             sequencing is null ? null : new SequencingId(sequencing),
             wsi is null ? null : new WsiId(wsi),
-            new Material { MaterialIdentifier = id }).Value;
+            new Material { MaterialIdentifier = id },
+            new Biospecimen { BiospecimenIdentifier = $"biospecimen_{id}" }).Value;
 
     private static PatientCatalogueData Data(PatientAggregate patient, params SampleAggregate[] samples) =>
         new() { Patient = patient, Samples = samples };
@@ -41,28 +42,22 @@ public sealed class FingerprintSyncPlannerTests
     }
 
     [Fact]
-    public void PatientWithoutSamplesIsSkipped()
+    public void PatientWithoutSamplesPlansNothing()
     {
         var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }));
 
-        var ops = _planner.Plan(data, PatientSyncStates.Empty());
-
-        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(ops));
-        Assert.Equal(SyncOp.Skip, patientOp.Op);
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
     }
 
     [Fact]
-    public void PatientWithoutConsentIsSkippedEvenWithSamples()
+    public void PatientWithoutConsentPlansNothingEvenWithSamples()
     {
         var data = Data(
             Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
             Sample("S1", "P1"));
 
-        var ops = _planner.Plan(data, PatientSyncStates.Empty());
-
-        // The sample is not planned at all, and the patient itself is never uploaded.
-        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(ops));
-        Assert.Equal(SyncOp.Skip, patientOp.Op);
+        // Neither the patient nor the sample is planned, so nothing is uploaded and no state is kept.
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
     }
 
     [Fact]
@@ -77,6 +72,7 @@ public sealed class FingerprintSyncPlannerTests
                 Id = new PatientId("P1"),
                 SourceFingerprint = patient.ComputeFingerprint().Value,
                 Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
             },
         };
 
@@ -98,6 +94,7 @@ public sealed class FingerprintSyncPlannerTests
                 Id = new PatientId("P1"),
                 SourceFingerprint = "stale-fingerprint",
                 Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
             },
         };
 
@@ -151,6 +148,218 @@ public sealed class FingerprintSyncPlannerTests
         Assert.True(deletion.State.IsDeleted);
         Assert.Equal(SyncStatus.Deleted, deletion.State.Status);
     }
+
+    /// <summary>
+    /// The sequencing API not answering is not the sequencing rows being withdrawn. Deleting on that
+    /// reading throws published data away over a momentary outage - and once the source APIs sit on
+    /// separate hosts, a momentary outage is a network hiccup rather than a crash.
+    /// </summary>
+    [Fact]
+    public void SequencingIsKeptWhenItsSourceDidNotAnswer()
+    {
+        var existing = ExistingSequencing("PRED1", "S1");
+        var data = new PatientCatalogueData
+        {
+            Patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }),
+            Samples = [Sample("S1", "P1", sequencing: "PRED1")],
+            Sequencings = [],
+            SequencingComplete = false,
+        };
+
+        var ops = _planner.Plan(data, existing);
+
+        Assert.DoesNotContain(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
+    }
+
+    /// <summary>The same absence, but the source did answer: then it really is gone.</summary>
+    [Fact]
+    public void SequencingIsDeletedWhenItsSourceReportedItGone()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
+
+        var ops = _planner.Plan(data, ExistingSequencing("PRED1", "S1"));
+
+        Assert.Single(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
+    }
+
+    /// <summary>
+    /// Consent withdrawn after a previous run published the patient. Skipping would leave their
+    /// demographics and clinical row in the catalogue for good, so the patient is deleted - and last,
+    /// because the catalogue refuses to remove a row another row still references.
+    /// </summary>
+    [Fact]
+    public void PatientWhoLosesConsentIsDeletedAfterTheirChildren()
+    {
+        var data = Data(
+            Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
+            Sample("S1", "P1"));
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = "x",
+                Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
+            },
+            Samples = new Dictionary<SampleId, SampleSyncState>
+            {
+                [new SampleId("S1")] = new SampleSyncState
+                {
+                    Id = new SampleId("S1"),
+                    PatientId = new PatientId("P1"),
+                    SourceFingerprint = "y",
+                    Status = SyncStatus.Synced,
+                    CatalogueRemoteId = "remote-S1",
+                },
+            },
+        };
+
+        var ops = _planner.Plan(data, existing);
+
+        var patientOp = Assert.IsType<PatientOperation>(ops[^1]);
+        Assert.Equal(SyncOp.Delete, patientOp.Op);
+        Assert.True(patientOp.State.IsDeleted);
+
+        // The sample goes first, and the patient carries no aggregate to upload.
+        Assert.Equal(SyncOp.Delete, ops.OfType<SampleOperation>().Single().Op);
+        Assert.Null(patientOp.Patient);
+    }
+
+    /// <summary>A patient who was never published has nothing to remove.</summary>
+    [Fact]
+    public void IneligiblePatientWhoWasNeverPublishedPlansNothing()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
+    }
+
+    /// <summary>
+    /// The state an earlier version stored for every skipped patient: a fingerprint, but nothing in
+    /// the catalogue. Reading that as "published" is what deleted 34,280 patients who never were.
+    /// </summary>
+    [Fact]
+    public void IneligiblePatientWithAStoredSkipFromAnEarlierRunPlansNothing()
+    {
+        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false);
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = patient.ComputeFingerprint().Value,
+                Status = SyncStatus.Pending,
+            },
+        };
+
+        Assert.Empty(_planner.Plan(Data(patient), existing));
+    }
+
+    [Fact]
+    public void WithdrawnPatientAlreadyDeletedIsNotDeletedAgain()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = "x",
+                Status = SyncStatus.Deleted,
+                IsDeleted = true,
+                CatalogueRemoteId = "remote-P1",
+            },
+        };
+
+        Assert.Empty(_planner.Plan(data, existing));
+    }
+
+    /// <summary>A failed upsert may have written some rows before it stopped, so they are removed.</summary>
+    [Fact]
+    public void IneligiblePatientAfterAFailedUpsertIsDeleted()
+    {
+        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState { Id = new PatientId("P1"), SourceFingerprint = "x", Status = SyncStatus.Failed },
+        };
+
+        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(data, existing)));
+
+        Assert.Equal(SyncOp.Delete, patientOp.Op);
+    }
+
+    /// <summary>
+    /// A stored fingerprint without a catalogue id describes nothing the catalogue holds, so a
+    /// matching fingerprint must not turn the first real upload into a skip.
+    /// </summary>
+    [Fact]
+    public void PatientNeverWrittenIsCreatedEvenWhenTheFingerprintMatches()
+    {
+        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = patient.ComputeFingerprint().Value,
+                Status = SyncStatus.Pending,
+            },
+        };
+
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(Data(patient, Sample("S1", "P1")), existing)[0]);
+
+        Assert.Equal(SyncOp.Create, patientOp.Op);
+    }
+
+    /// <summary>The fingerprint is stored before the upsert, so after a failure it already matches.</summary>
+    [Fact]
+    public void FailedUploadIsRetriedEvenWhenUnchanged()
+    {
+        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var sample = Sample("S1", "P1");
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = patient.ComputeFingerprint().Value,
+                Status = SyncStatus.Failed,
+                CatalogueRemoteId = "remote-P1",
+            },
+            Samples = new Dictionary<SampleId, SampleSyncState>
+            {
+                [new SampleId("S1")] = new SampleSyncState
+                {
+                    Id = new SampleId("S1"),
+                    PatientId = new PatientId("P1"),
+                    SourceFingerprint = sample.ComputeFingerprint().Value,
+                    Status = SyncStatus.Failed,
+                    CatalogueRemoteId = "remote-S1",
+                },
+            },
+        };
+
+        var ops = _planner.Plan(Data(patient, sample), existing);
+
+        Assert.Equal(SyncOp.Update, Assert.IsType<PatientOperation>(ops[0]).Op);
+        Assert.Equal(SyncOp.Update, ops.OfType<SampleOperation>().Single().Op);
+    }
+
+    private static PatientSyncStates ExistingSequencing(string sequencingId, string sampleId) =>
+        new()
+        {
+            Sequencing = new Dictionary<SequencingId, SequencingSyncState>
+            {
+                [new SequencingId(sequencingId)] = new SequencingSyncState
+                {
+                    Id = new SequencingId(sequencingId),
+                    SampleId = new SampleId(sampleId),
+                    SourceFingerprint = "x",
+                },
+            },
+        };
 
     [Fact]
     public void SequencingAndWsiPlannedWhenPresent()

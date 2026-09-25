@@ -251,6 +251,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.Property<int>("SkippedCount")
                         .HasColumnType("integer");
 
+                    b.Property<int>("SourceUnavailableCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 

@@ -47,6 +47,14 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     public string? PredictiveNumber { get; init; }
 
     /// <summary>
+    /// <see cref="PredictiveNumber"/> in its canonical <c>year-number</c> form, or null when it has no
+    /// recognisable one. The number is written differently by every party that handles it — the
+    /// biobank as <c>2029/5678</c>, a NextSeq sample sheet as <c>2029_5678_DNA</c>, an older MiSeq one
+    /// as <c>5678-29</c> — so this, not the raw text, is what a lookup has to compare.
+    /// </summary>
+    public string? PredictiveKey => Normalize.PredictiveKey(PredictiveNumber);
+
+    /// <summary>
     /// Every run this sample was sequenced in, at most one entry per run. Empty is legal: a sample
     /// can be known without any usable sequencing having been found for it.
     /// </summary>
