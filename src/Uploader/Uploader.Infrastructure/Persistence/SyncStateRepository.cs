@@ -155,8 +155,15 @@ internal sealed class SyncStateRepository : ISyncStateRepository
                 continue;
             }
 
+            // Asked before marking, which overwrites the status a failed upsert left behind. A
+            // patient that was never published is still marked, so a reappearance is a create, but
+            // not returned: there is nothing in the catalogue to delete.
+            var published = PatientSyncStateMapper.ToDomain(row).WasPublished;
             MarkOneDeleted(row, runId, now);
-            missing.Add(PatientSyncStateMapper.ToDomain(row));
+            if (published)
+            {
+                missing.Add(PatientSyncStateMapper.ToDomain(row));
+            }
         }
 
         await _context.SaveChangesAsync(cancellationToken);

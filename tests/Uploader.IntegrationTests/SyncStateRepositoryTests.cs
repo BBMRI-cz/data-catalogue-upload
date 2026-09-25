@@ -112,18 +112,23 @@ public sealed class SyncStateRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task MarksMissingPatientsAsDeleted()
+    public async Task MarksMissingPatientsAsDeletedAndReturnsThePublishedOnes()
     {
         await using var context = _db.NewContext();
         var repository = new SyncStateRepository(context, TimeProvider.System);
         await repository.SaveAsync(Init(new PatientSyncState { Id = new PatientId("P1") }), CancellationToken.None);
-        await repository.SaveAsync(Init(new PatientSyncState { Id = new PatientId("P2") }), CancellationToken.None);
+        var published = Init(new PatientSyncState { Id = new PatientId("P2") });
+        published.CatalogueRemoteId = "remote-P2";
+        await repository.SaveAsync(published, CancellationToken.None);
+        await repository.SaveAsync(Init(new PatientSyncState { Id = new PatientId("P3") }), CancellationToken.None);
 
         var missing = await repository.MarkMissingPatientsAsDeletedAsync(
             new HashSet<PatientId> { new("P1") }, "run-3", CancellationToken.None);
 
+        // Both absent patients are marked, but only P2 can have catalogue rows to remove.
         Assert.Equal(new PatientId("P2"), Assert.Single(missing).Id);
         Assert.True((await repository.GetAllForPatientAsync(new PatientId("P2"), CancellationToken.None)).Patient!.IsDeleted);
+        Assert.True((await repository.GetAllForPatientAsync(new PatientId("P3"), CancellationToken.None)).Patient!.IsDeleted);
         Assert.False((await repository.GetAllForPatientAsync(new PatientId("P1"), CancellationToken.None)).Patient!.IsDeleted);
     }
 

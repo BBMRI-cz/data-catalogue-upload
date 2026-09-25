@@ -188,6 +188,28 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task NeverPublishedPatientMissingFromSourceIsOnlyMarked()
+    {
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+        state.Patients["GONE"] = new PatientSyncState
+        {
+            Id = new PatientId("GONE"),
+            SourceFingerprint = "x",
+            Status = SyncStatus.Pending,
+        };
+
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
+            new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // Marked, so a reappearance is a create; but there was never anything in the catalogue to delete.
+        Assert.True(state.Patients["GONE"].IsDeleted);
+        Assert.DoesNotContain(catalogue.Deletes, delete => delete.Contains("GONE", StringComparison.Ordinal));
+        Assert.Equal(0, result.Value.Deleted);
+    }
+
+    [Fact]
     public async Task PatientWhoBecomesEligibleIsCreated()
     {
         var catalogue = new FakeCatalogueGateway();

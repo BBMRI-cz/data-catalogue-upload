@@ -20,7 +20,11 @@ public interface ISyncStateRepository
         string runId,
         CancellationToken cancellationToken);
 
-    /// <summary>Mark patients absent from this run as deleted; return the states marked.</summary>
+    /// <summary>
+    /// Mark patients absent from this run as deleted, and return those among them that were
+    /// published (<see cref="ISyncState.WasPublished"/>). Only those can have catalogue rows to
+    /// remove; the rest are marked so a reappearance is a create, but nothing is sent for them.
+    /// </summary>
     Task<IReadOnlyList<PatientSyncState>> MarkMissingPatientsAsDeletedAsync(
         ISet<PatientId> seenIds,
         string runId,

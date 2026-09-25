@@ -193,9 +193,13 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
                 continue;
             }
 
+            var published = patient.WasPublished;
             patient.IsDeleted = true;
             patient.Status = SyncStatus.Deleted;
-            missing.Add(patient);
+            if (published)
+            {
+                missing.Add(patient);
+            }
         }
 
         return Task.FromResult<IReadOnlyList<PatientSyncState>>(missing);
