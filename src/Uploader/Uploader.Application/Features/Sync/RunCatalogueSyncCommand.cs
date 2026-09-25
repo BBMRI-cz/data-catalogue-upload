@@ -136,7 +136,17 @@ internal sealed class RunCatalogueSyncCommandHandler
             var pseudonyms = await ResolvePseudonymsAsync(data, cancellationToken);
 
             var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
-            foreach (var operation in _planner.Plan(data, existing))
+            var operations = _planner.Plan(data, existing);
+
+            // An ineligible patient who was never published: nothing to send and nothing to record.
+            // Still a skip in the summary, as it always was.
+            if (operations.Count == 0)
+            {
+                result.Skipped++;
+                continue;
+            }
+
+            foreach (var operation in operations)
             {
                 await ExecuteAsync(operation, pseudonyms, runId, result, cancellationToken);
             }

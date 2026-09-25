@@ -13,7 +13,8 @@ public interface ISyncPlanner
 /// Plans catalogue operations by comparing fingerprints. Per aggregate: never successfully written
 /// (no prior state, a soft-deleted prior, or no catalogue id yet) -> CREATE; last attempt failed or
 /// fingerprint changed -> UPDATE; unchanged -> SKIP. Aggregates present in a prior run but absent
-/// now -> DELETE. Operations are returned in dependency order:
+/// now -> DELETE. A patient who is not eligible and was never published gets no operation at all,
+/// so they leave no sync state behind. Operations are returned in dependency order:
 /// patient, then samples, their sequencing/WSI, then imaging studies, then deletions - and the
 /// deletions run child before parent, because the catalogue refuses to remove a row that another
 /// row still references. A patient being removed is therefore the very last operation, after its
@@ -35,7 +36,14 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
     {
         var ops = new List<SyncOperation>();
         var eligible = data.IsUploadEligible;
-        var patientOp = PlanPatient(data.Patient, existing.Patient, eligible);
+
+        // Not eligible and nothing in the catalogue: there is nothing to upload and nothing to
+        // remove. Its children are planned only for an eligible patient, so none were published.
+        if (PlanPatient(data.Patient, existing.Patient, eligible) is not { } patientOp)
+        {
+            return ops;
+        }
+
         var leaving = patientOp.Op == SyncOp.Delete;
 
         // An upsert leads, because every child references the patient. A removal trails everything
@@ -110,27 +118,23 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
     /// An eligible patient is created, updated or skipped on its fingerprint. An ineligible one -
     /// consent withdrawn, or the last sample gone - is deleted if it was ever published, because a
     /// withdrawn patient whose demographics stay in the catalogue is the worst of both answers.
-    /// Never published and still ineligible is simply skipped.
+    /// Never published, or already removed, and still ineligible gets no operation (null): nothing is
+    /// sent, and no state is written that a later run could mistake for a published patient.
     /// </summary>
-    private PatientOperation PlanPatient(PatientAggregate patient, PatientSyncState? prior, bool eligible)
+    private PatientOperation? PlanPatient(PatientAggregate patient, PatientSyncState? prior, bool eligible)
     {
         var fingerprint = patient.ComputeFingerprint().Value;
 
         if (!eligible)
         {
-            return prior is { IsDeleted: false }
+            return prior is { IsDeleted: false, WasPublished: true }
                 ? new PatientOperation
                 {
                     Op = SyncOp.Delete,
                     SourceFingerprint = prior.SourceFingerprint,
                     PatientState = (PatientSyncState)AsDeleted(prior),
                 }
-                : new PatientOperation
-                {
-                    Op = SyncOp.Skip,
-                    SourceFingerprint = fingerprint,
-                    PatientState = Track(new PatientSyncState { Id = patient.Id }, fingerprint, prior),
-                };
+                : null;
         }
 
         return new PatientOperation

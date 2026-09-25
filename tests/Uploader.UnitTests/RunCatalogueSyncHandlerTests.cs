@@ -144,6 +144,50 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task IneligiblePatientLeavesNoStateAndIsNeverDeleted()
+    {
+        // Two runs, because the phantom delete this guards against only ever appeared on the second.
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1", consent: false)]);
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+
+        for (var run = 0; run < 2; run++)
+        {
+            var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
+                new RunCatalogueSyncCommand(), CancellationToken.None);
+
+            Assert.Equal(1, result.Value.Skipped);
+            Assert.Equal(0, result.Value.Deleted);
+        }
+
+        Assert.Empty(state.Patients);
+        Assert.Empty(catalogue.Deletes);
+    }
+
+    [Fact]
+    public async Task IneligiblePatientWithAStoredSkipIsNotDeleted()
+    {
+        // What the first catalogue run left for every ineligible patient, and the second run then
+        // "deleted": a fingerprint, but nothing in the catalogue.
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1", consent: false)]);
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+        state.Patients["P1"] = new PatientSyncState
+        {
+            Id = new PatientId("P1"),
+            SourceFingerprint = "x",
+            Status = SyncStatus.Pending,
+        };
+
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository()).Handle(
+            new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Equal(0, result.Value.Deleted);
+        Assert.Empty(catalogue.Deletes);
+        Assert.False(state.Patients["P1"].IsDeleted);
+    }
+
+    [Fact]
     public async Task PatientWhoBecomesEligibleIsCreated()
     {
         var catalogue = new FakeCatalogueGateway();
