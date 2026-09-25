@@ -100,8 +100,8 @@ flowchart TD
     Build["For each patient: build PatientAggregate (personal/clinical/material + sequencing + WSI + radiology)"]
     Plan["Plan per-entity ops via SHA-256 fingerprints"]
     Decide{"Fingerprint vs stored state"}
-    Create["CREATE (no state or soft-deleted)"]
-    Update["UPDATE (fingerprint changed)"]
+    Create["CREATE (no state, soft-deleted, or never written)"]
+    Update["UPDATE (fingerprint changed, or last attempt failed)"]
     Skip["SKIP (unchanged)"]
     Delete["DELETE (gone from source)"]
     Execute["Execute upserts/deletes to catalogue"]
@@ -121,16 +121,16 @@ flowchart TD
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
 2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number` - the biobank serves none, so this stays empty until #31), and radiology (by `accession_numbers`, patient-level and sample-level combined). Every source serves its own vocabulary; translating it into the catalogue's ontology terms is `CatalogueVocabulary`'s job, and a code with no term that means the same thing is left out rather than guessed at. The sequencing API answers with `samples[] -> runs[]` - a predictive number is not unique and a sample can be resequenced - which the uploader flattens into one FAIR `SamplePreparation` per (sample, run) pair. An unknown predictive number comes back `200` with an empty `samples`: no sequencing record, and not a failure.
-3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when there is no prior state or the entity was soft-deleted, UPDATE when the fingerprint changed, SKIP when unchanged, DELETE when entities disappear from the source.
+3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when the entity was never successfully written (no prior state, a soft-deleted one, or no catalogue id yet), UPDATE when the fingerprint changed or the last attempt failed (the fingerprint is stored before the upsert, so a failure is retried rather than skipped), SKIP when unchanged, DELETE when entities disappear from the source.
 4. **Execute** the plan against the catalogue's GraphQL API. One aggregate becomes several EMX2
    rows across several tables - a patient is a `Personal`, an `IndividualConsent` and a `Clinical` -
    written parents first, because each references the one before.
-5. **Patients missing** from the current run are deleted in the catalogue and soft-deleted in the DB
-   subtree. Deletes run child before parent, deepest first: EMX2 refuses to remove a row another row
+5. **Patients missing** from the current run are soft-deleted in the DB subtree, and deleted in the
+   catalogue if they were ever published (`ISyncState.WasPublished`). Deletes run child before parent, deepest first: EMX2 refuses to remove a row another row
    still references, so any other order fails loudly instead of leaving orphans behind.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
-Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient; it is permission, not content, so it stays out of the fingerprint.
+Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient; it is permission, not content, so it stays out of the fingerprint. An ineligible patient who was ever published (`ISyncState.WasPublished`: it has a catalogue id, or an upsert failed part-way) is deleted after its children; one who never was gets no operation at all and leaves no sync state, so a later run cannot mistake it for a published patient.
 
 ## Sync state machine
 

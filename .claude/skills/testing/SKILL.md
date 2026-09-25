@@ -54,7 +54,9 @@ public void Create_RejectsBirthYearOutOfRange()
 
 **The planner.** `FingerprintSyncPlannerTests` drives `FingerprintSyncPlanner.Plan(data, existing)` and
 asserts the `SyncOp` per entity: no prior -> CREATE, unchanged fingerprint -> SKIP, changed -> UPDATE,
-soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE. Build the prior state and assert the returned
+soft-deleted prior -> CREATE, prior-but-now-absent -> DELETE, prior without a catalogue id -> CREATE,
+failed prior -> UPDATE, and an ineligible patient never published -> no operations at all. A prior that
+means "already uploaded" needs `Status = Synced` **and** a `CatalogueRemoteId`. Build the prior state and assert the returned
 operations.
 
 **XML parsing.** `XmlPatientReaderTests` (unit) feeds inline `XElement.Parse(...)` patient XML and asserts the
