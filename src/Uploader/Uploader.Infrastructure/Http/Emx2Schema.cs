@@ -219,14 +219,11 @@ internal sealed class Emx2Schema
             return answered.Errors;
         }
 
-        var terms = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var node in answered.Value?[ontology] as JsonArray ?? [])
-        {
-            if (node?[OntologyKey]?.GetValue<string>() is { } term)
-            {
-                terms.Add(term);
-            }
-        }
+        var terms = new HashSet<string>(
+            (answered.Value?[ontology] as JsonArray ?? [])
+                .Select(node => node?[OntologyKey]?.GetValue<string>())
+                .OfType<string>(),
+            StringComparer.Ordinal);
 
         _terms[ontology] = terms;
         return terms;
