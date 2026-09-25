@@ -78,6 +78,7 @@ public sealed class FingerprintSyncPlannerTests
                 Id = new PatientId("P1"),
                 SourceFingerprint = patient.ComputeFingerprint().Value,
                 Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
             },
         };
 
@@ -99,6 +100,7 @@ public sealed class FingerprintSyncPlannerTests
                 Id = new PatientId("P1"),
                 SourceFingerprint = "stale-fingerprint",
                 Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
             },
         };
 
@@ -231,6 +233,63 @@ public sealed class FingerprintSyncPlannerTests
         var patientOp = Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(data, PatientSyncStates.Empty())));
 
         Assert.Equal(SyncOp.Skip, patientOp.Op);
+    }
+
+    /// <summary>
+    /// A stored fingerprint without a catalogue id describes nothing the catalogue holds, so a
+    /// matching fingerprint must not turn the first real upload into a skip.
+    /// </summary>
+    [Fact]
+    public void PatientNeverWrittenIsCreatedEvenWhenTheFingerprintMatches()
+    {
+        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = patient.ComputeFingerprint().Value,
+                Status = SyncStatus.Pending,
+            },
+        };
+
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(Data(patient, Sample("S1", "P1")), existing)[0]);
+
+        Assert.Equal(SyncOp.Create, patientOp.Op);
+    }
+
+    /// <summary>The fingerprint is stored before the upsert, so after a failure it already matches.</summary>
+    [Fact]
+    public void FailedUploadIsRetriedEvenWhenUnchanged()
+    {
+        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var sample = Sample("S1", "P1");
+        var existing = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = patient.ComputeFingerprint().Value,
+                Status = SyncStatus.Failed,
+                CatalogueRemoteId = "remote-P1",
+            },
+            Samples = new Dictionary<SampleId, SampleSyncState>
+            {
+                [new SampleId("S1")] = new SampleSyncState
+                {
+                    Id = new SampleId("S1"),
+                    PatientId = new PatientId("P1"),
+                    SourceFingerprint = sample.ComputeFingerprint().Value,
+                    Status = SyncStatus.Failed,
+                    CatalogueRemoteId = "remote-S1",
+                },
+            },
+        };
+
+        var ops = _planner.Plan(Data(patient, sample), existing);
+
+        Assert.Equal(SyncOp.Update, Assert.IsType<PatientOperation>(ops[0]).Op);
+        Assert.Equal(SyncOp.Update, ops.OfType<SampleOperation>().Single().Op);
     }
 
     private static PatientSyncStates ExistingSequencing(string sequencingId, string sampleId) =>

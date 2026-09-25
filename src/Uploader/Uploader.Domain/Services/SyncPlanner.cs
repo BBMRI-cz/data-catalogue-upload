@@ -10,9 +10,10 @@ public interface ISyncPlanner
 }
 
 /// <summary>
-/// Plans catalogue operations by comparing fingerprints. Per aggregate: no prior state or a
-/// soft-deleted prior -> CREATE; fingerprint changed -> UPDATE; unchanged -> SKIP. Aggregates
-/// present in a prior run but absent now -> DELETE. Operations are returned in dependency order:
+/// Plans catalogue operations by comparing fingerprints. Per aggregate: never successfully written
+/// (no prior state, a soft-deleted prior, or no catalogue id yet) -> CREATE; last attempt failed or
+/// fingerprint changed -> UPDATE; unchanged -> SKIP. Aggregates present in a prior run but absent
+/// now -> DELETE. Operations are returned in dependency order:
 /// patient, then samples, their sequencing/WSI, then imaging studies, then deletions - and the
 /// deletions run child before parent, because the catalogue refuses to remove a row that another
 /// row still references. A patient being removed is therefore the very last operation, after its
@@ -89,9 +90,17 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
 
     private static SyncOp Decide(string newFingerprint, ISyncState? prior)
     {
-        if (prior is null || prior.IsDeleted)
+        // Never successfully written: the stored fingerprint describes nothing the catalogue holds.
+        if (prior is null || prior.IsDeleted || prior.CatalogueRemoteId is null)
         {
             return SyncOp.Create;
+        }
+
+        // The stored fingerprint is saved before the upsert runs, so after a failure it already
+        // matches the data that never arrived. Send it again rather than skip it.
+        if (prior.Status == SyncStatus.Failed)
+        {
+            return SyncOp.Update;
         }
 
         return prior.SourceFingerprint != newFingerprint ? SyncOp.Update : SyncOp.Skip;

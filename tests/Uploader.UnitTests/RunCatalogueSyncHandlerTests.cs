@@ -144,6 +144,46 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task PatientWhoBecomesEligibleIsCreated()
+    {
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+        var withoutSamples = new PatientDto { PatientId = "P1", Consent = true, Samples = [] };
+        await CreateHandler(new FakeSourceDataGateway([withoutSamples]), catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        var result = await CreateHandler(
+                new FakeSourceDataGateway([PatientWithSample("P1", "S1")]), catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // The patient's own row goes first; without it the sample would reference nothing.
+        Assert.Equal(2, result.Value.Uploaded);
+        Assert.Contains("patient:mmci_patient_P1", catalogue.Upserts);
+        Assert.Equal(SyncStatus.Synced, state.Patients["P1"].Status);
+    }
+
+    [Fact]
+    public async Task FailedUploadIsRetriedOnTheNextRun()
+    {
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
+        var catalogue = new FakeCatalogueGateway();
+        catalogue.FailUpsertTypes.Add("sample");
+        var state = new InMemorySyncStateRepository();
+        await CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+        Assert.Equal(SyncStatus.Failed, state.Samples["S1"].Status);
+
+        catalogue.FailUpsertTypes.Clear();
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // Nothing changed in the source, yet the sample goes out again; the patient, stored fine, does not.
+        Assert.Equal(1, result.Value.Uploaded);
+        Assert.Equal(0, result.Value.Failed);
+        Assert.Equal(SyncStatus.Synced, state.Samples["S1"].Status);
+    }
+
+    [Fact]
     public async Task SequencingReachesTheAssembledPatientRecord()
     {
         var source = new FakeSourceDataGateway([SequencedPatient()]);
