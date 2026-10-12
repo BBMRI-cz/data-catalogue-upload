@@ -54,22 +54,45 @@ public sealed class SequencingMapperTests
     }
 
     [Fact]
-    public void PanelGenesBecomeFullSequenceGenes()
+    public void StarredPanelGenesAreFullySequencedAndTheRestPartially()
     {
-        var run = Run("R1");
-        run = run with
+        var prep = PreparationWithGenes("BRCA1*", "TP53", "ALK*");
+
+        // The libraries table stars a gene whose coding regions are all covered. The star is not part
+        // of the HGNC symbol, so it comes off - "BRCA1*" would be dropped by the catalogue.
+        Assert.Equal(["BRCA1", "ALK"], prep.FullySequencedGenes);
+        Assert.Equal(["TP53"], prep.PartiallySequencedGenes);
+    }
+
+    [Fact]
+    public void AGeneListWithoutStarsIsAllPartial()
+    {
+        var prep = PreparationWithGenes("BRCA1", "BRCA2");
+
+        Assert.Null(prep.FullySequencedGenes);
+        Assert.Equal(["BRCA1", "BRCA2"], prep.PartiallySequencedGenes);
+    }
+
+    [Fact]
+    public void AStrayStarIsNotAGene()
+    {
+        var prep = PreparationWithGenes("BRCA1*", "*");
+
+        Assert.Equal(["BRCA1"], prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);
+    }
+
+    private static SamplePreparation PreparationWithGenes(params string[] genes)
+    {
+        var run = Run("R1") with
         {
             LibraryPreparation = new LibraryPreparationDto
             {
-                Panel = new PanelDto { PanelId = "panel-1", Name = "TSO", Genes = ["BRCA1", "TP53"] },
+                Panel = new PanelDto { PanelId = "panel-1", Name = "TSO", Genes = genes },
             },
         };
 
-        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
-
-        // The source's gene list is the panel's full-coverage set; nothing states a partial one.
-        Assert.Equal(["BRCA1", "TP53"], prep.FullySequencedGenes);
-        Assert.Null(prep.PartiallySequencedGenes);
+        return Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
     }
 
     [Theory]
@@ -234,6 +257,7 @@ public sealed class SequencingMapperTests
         Assert.Null(prep.LibraryPreparationKit);
         Assert.Null(prep.TargetEnrichmentKit);
         Assert.Null(prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);
         Assert.Null(prep.UmisPresent);
     }
 

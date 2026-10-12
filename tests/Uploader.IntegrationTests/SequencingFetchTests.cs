@@ -42,8 +42,9 @@ public sealed class SequencingFetchTests
         Assert.True(prepared.UmisPresent);
         Assert.Equal(350, prepared.IntendedInsertSize);
         Assert.Equal(151, prepared.IntendedReadLength);
-        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.FullySequencedGenes);
-        Assert.Null(prepared.PartiallySequencedGenes);
+        // The recorded panel stars none of its genes, so none is fully sequenced.
+        Assert.Null(prepared.FullySequencedGenes);
+        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.PartiallySequencedGenes);
 
         var run = prepared.Sequencing!;
         Assert.Equal("p0001_240104_M02340_0399_LCBRW", run.SequencingIdentifier);

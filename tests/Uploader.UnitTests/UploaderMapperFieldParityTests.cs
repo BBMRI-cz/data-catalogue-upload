@@ -197,7 +197,7 @@ public sealed class UploaderMapperFieldParityTests
                                 Abbreviation = "T",
                                 Vendor = "Illumina",
                                 CatalogueCode = "TSO500",
-                                Genes = ["BRCA1", "BRCA2"],
+                                Genes = ["BRCA1*", "BRCA2"],
                                 TargetRegionsRef = "tso.bed",
                             },
                         },
@@ -248,8 +248,8 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("KitA", prep.LibraryPreparationKit);
         Assert.True(prep.PcrFree);
         Assert.Equal("Enrich", prep.TargetEnrichmentKit);
-        Assert.Equal(["BRCA1", "BRCA2"], prep.FullySequencedGenes);
-        Assert.Null(prep.PartiallySequencedGenes);   // no source states a partial set
+        Assert.Equal(["BRCA1"], prep.FullySequencedGenes);     // starred: all coding regions covered
+        Assert.Equal(["BRCA2"], prep.PartiallySequencedGenes);
         Assert.False(prep.UmisPresent);
         Assert.Equal(350, prep.IntendedInsertSize);
         Assert.Equal(150, prep.IntendedReadLength);
