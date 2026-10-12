@@ -59,6 +59,8 @@ internal static class SequencingResponseMapper
             run?.FlowcellId,
             run?.Assay,
             run?.Workflow,
+            run?.SourceClass,
+            run?.ExperimentName,
             run?.PercentageQ30,
             run?.ClusterCountPassingFilter,
             run?.PercentageClustersPassingFilter,

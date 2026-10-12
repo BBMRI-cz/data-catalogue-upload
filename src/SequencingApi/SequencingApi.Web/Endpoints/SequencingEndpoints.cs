@@ -56,6 +56,10 @@ public sealed record SequencingSampleResponse(
 /// sample-specific fields: a run-sample belongs to exactly one run, so serving runs separately would
 /// only hand the client a join to perform. Run fields are null when the referenced run is unknown —
 /// samples reference runs by identity with no foreign key, so that is legal.
+/// <para>
+/// <see cref="SourceClass"/> and <see cref="ExperimentName"/> say what kind of run it was. This
+/// service serves every run; deciding which ones a consumer wants is the consumer's business.
+/// </para>
 /// </summary>
 public sealed record SequencingRunResponse(
     string RunId,
@@ -66,6 +70,8 @@ public sealed record SequencingRunResponse(
     string? FlowcellId,
     string? Assay,
     string? Workflow,
+    string? SourceClass,
+    string? ExperimentName,
     double? PercentageQ30,
     long? ClusterCountPassingFilter,
     double? PercentageClustersPassingFilter,
