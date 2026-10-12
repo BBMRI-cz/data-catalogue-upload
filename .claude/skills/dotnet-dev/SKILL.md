@@ -165,9 +165,11 @@ would otherwise transpose silently).
 return their own model in snake_case and the uploader maps to the FAIR shape on its side. Do not shape a
 source endpoint after `Uploader.Application/Dtos`.
 
-**Uploader change detection is aggregate behaviour.** Each aggregate exposes `ComputeFingerprint()` (SHA-256
-over canonical JSON via `Fingerprint.Of(...)`); `FingerprintSyncPlanner` only compares fingerprints to decide
-CREATE/UPDATE/SKIP/DELETE. Reuse `Fingerprint.Of` - don't hand-roll hashing.
+**Uploader change detection hashes the row the catalogue receives.** The sync handler builds each row with
+`CatalogueMapper` and hashes it (`PayloadFingerprint`, SHA-256 over canonical JSON via `Fingerprint.Of(...)`);
+`FingerprintSyncPlanner` only compares fingerprints to decide CREATE/UPDATE/SKIP/DELETE. Hashing the row rather
+than the aggregate is what re-sends a mapping fix or a config change. Reuse `Fingerprint.Of` - don't hand-roll
+hashing. (WSI and imaging studies have no row yet and still hash their aggregate.)
 
 ## What this codebase deliberately does NOT use
 
