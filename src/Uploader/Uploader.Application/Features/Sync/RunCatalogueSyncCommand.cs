@@ -426,6 +426,8 @@ internal sealed class RunCatalogueSyncCommandHandler
         var wsiComplete = true;
         var imagingComplete = true;
 
+        var sequenced = new List<(SequencingId Id, SampleDto Dto, SampleAggregate Sample)>();
+
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
             var sampleResult = SampleMapper.ToSample(rawSample, patient.Id, rawPatient.Biobank);
@@ -439,32 +441,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             if (sample.SequencingId is { } sequencingId)
             {
-                var fetched = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
-
-                // A source this patient cannot reach costs the patient that source, not the run.
-                if (fetched.IsError)
-                {
-                    Report(result, "sequencing", rawPatient.PatientId, fetched.Errors[0]);
-                    sequencingComplete = false;
-                }
-
-                // A predictive number the sequencing API does not know answers 200 with an empty
-                // sample list. That is a normal answer, not a failure: no aggregate, no counter moved.
-                else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
-                {
-                    var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
-                    if (sequencingResult.IsError)
-                    {
-                        return sequencingResult.Errors;
-                    }
-
-                    // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner
-                    // deletes this sample's published sequencing rows; the sample itself stays.
-                    if (sequencingResult.Value.Preparations.Count > 0)
-                    {
-                        sequencings.Add(sequencingResult.Value);
-                    }
-                }
+                sequenced.Add((sequencingId, rawSample, sample));
             }
 
             if (sample.WsiId is { } wsiId)
@@ -484,6 +461,41 @@ internal sealed class RunCatalogueSyncCommandHandler
                     }
 
                     wsis.Add(wsiResult.Value);
+                }
+            }
+        }
+
+        // A predictive number belongs to the case, so every sample from one surgery carries it. Its
+        // sequencing is fetched once and hangs from one owner: built once per sample, the copies shared
+        // one sync record, moved each other's biospecimen link on every run, and a delete looked under
+        // whichever sample the record happened to name last.
+        foreach (var shared in sequenced.GroupBy(entry => entry.Id))
+        {
+            var fetched = await _sourceGateway.FetchSequencingAsync(shared.Key.Value, cancellationToken);
+
+            // A source this patient cannot reach costs the patient that source, not the run.
+            if (fetched.IsError)
+            {
+                Report(result, "sequencing", rawPatient.PatientId, fetched.Errors[0]);
+                sequencingComplete = false;
+            }
+
+            // A predictive number the sequencing API does not know answers 200 with an empty sample
+            // list. That is a normal answer, not a failure: no aggregate, no counter moved.
+            else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
+            {
+                var owner = SequencingOwner.Choose(shared.Select(entry => (entry.Dto, entry.Sample)));
+                var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, shared.Key, owner.Id);
+                if (sequencingResult.IsError)
+                {
+                    return sequencingResult.Errors;
+                }
+
+                // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner deletes
+                // this number's published sequencing rows; the samples themselves stay.
+                if (sequencingResult.Value.Preparations.Count > 0)
+                {
+                    sequencings.Add(sequencingResult.Value);
                 }
             }
         }
