@@ -18,14 +18,10 @@ public sealed class PatientAggregate : AggregateRoot<PatientId>
     public Clinical? Clinical { get; private init; }
 
     /// <summary>
-    /// Whether the patient consented to their data being shared. Permission to upload, not content —
-    /// so it stays out of <see cref="ComputeFingerprint"/> and is enforced by
+    /// Whether the patient consented to their data being shared. Permission to upload, enforced by
     /// <see cref="PatientCatalogueData.IsUploadEligible"/>.
     /// </summary>
     public bool HasConsent { get; private init; }
-
-    /// <summary>Fingerprint over the patient's catalogue-relevant content.</summary>
-    public Fingerprint ComputeFingerprint() => Fingerprint.Of(Personal, Clinical);
 
     public static ErrorOr<PatientAggregate> Create(
         string? id,

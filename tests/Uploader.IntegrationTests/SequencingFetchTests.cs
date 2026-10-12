@@ -24,9 +24,10 @@ public sealed class SequencingFetchTests
     {
         var sequencing = await FetchAsync(RecordedResponse.Sequencing());
 
-        // One sample sequenced three times: a preparation per run, none collapsed onto another.
-        Assert.Equal(3, sequencing.Preparations.Count);
-        Assert.Equal(3, sequencing.Preparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
+        // One sample sequenced three times, once for MammaPrint: a preparation per remaining run, none
+        // collapsed onto another.
+        Assert.Equal(2, sequencing.Preparations.Count);
+        Assert.Equal(2, sequencing.Preparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
 
         var prepared = Prepared(sequencing, "240104_M02340_0399_LCBRW");
         Assert.Equal("sampleprep_p0001_240104_M02340_0399_LCBRW", prepared.SampleprepIdentifier);
@@ -42,8 +43,9 @@ public sealed class SequencingFetchTests
         Assert.True(prepared.UmisPresent);
         Assert.Equal(350, prepared.IntendedInsertSize);
         Assert.Equal(151, prepared.IntendedReadLength);
-        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.FullySequencedGenes);
-        Assert.Null(prepared.PartiallySequencedGenes);
+        // The recorded panel stars none of its genes, so none is fully sequenced.
+        Assert.Null(prepared.FullySequencedGenes);
+        Assert.Equal(["BRCA1", "BRCA2", "TP53"], prepared.PartiallySequencedGenes);
 
         var run = prepared.Sequencing!;
         Assert.Equal("p0001_240104_M02340_0399_LCBRW", run.SequencingIdentifier);
@@ -51,8 +53,21 @@ public sealed class SequencingFetchTests
         Assert.Equal("2024-01-04", run.SequencingDate);
         Assert.Equal("Illumina platform", run.SequencingPlatform);
         Assert.Equal("MiSeq", run.SequencingInstrumentModel);
-        Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
+        Assert.Equal("Illumina Sequencing", run.SequencingMethod);
         Assert.Equal(95.9, run.PercentageQ30);
+    }
+
+    [Fact]
+    public async Task InstrumentModelComesFromTheInstrumentSerial()
+    {
+        var sequencing = await FetchAsync(RecordedResponse.Sequencing());
+
+        // The source serves the folder name ("NextSeq"), which is not a term; the serial tells the
+        // 550 apart from the 500.
+        Assert.Equal("MiSeq", Prepared(sequencing, "240104_M02340_0399_LCBRW").Sequencing!.SequencingInstrumentModel);
+        Assert.Equal(
+            "Illumina NextSeq 550",
+            Prepared(sequencing, "240102_NB552710_0064_AHG7L").Sequencing!.SequencingInstrumentModel);
     }
 
     [Fact]
@@ -107,17 +122,15 @@ public sealed class SequencingFetchTests
     }
 
     [Fact]
-    public async Task RunWithoutLibraryPreparationOrAnalysisStillArrives()
+    public async Task AMammaPrintRunNeverBecomesAPreparation()
     {
-        var prepared = Prepared(await FetchAsync(RecordedResponse.Sequencing()), "240430_M02340_0412_ABCDE");
+        var sequencing = await FetchAsync(RecordedResponse.Sequencing());
 
-        // The fixture's third run has neither a resolved library nor an analysis: the preparation is
-        // still built and identified, with the fields the source did not state left null.
-        Assert.Equal("sampleprep_p0001_240430_M02340_0412_ABCDE", prepared.SampleprepIdentifier);
-        Assert.Null(prepared.LibraryPreparationKit);
-        Assert.Null(prepared.FullySequencedGenes);
-        Assert.Empty(prepared.Sequencing!.Analyses);
-        Assert.Null(prepared.Sequencing.MedianReadDepth);
+        // The fixture's third run is filed under complete-runs, and only its MP_18_2024 experiment
+        // name says it is MammaPrint. The sequencing API serves it; the catalogue does not get it.
+        Assert.DoesNotContain(
+            sequencing.Preparations,
+            prep => prep.SampleprepIdentifier!.EndsWith("240430_M02340_0412_ABCDE", StringComparison.Ordinal));
     }
 
     [Fact]

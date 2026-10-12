@@ -60,6 +60,27 @@ public sealed class SequencingEndpointTests : IClassFixture<IngestedSequencingHo
     }
 
     /// <summary>
+    /// Every run is served, MammaPrint included, together with what a consumer needs to tell the kinds
+    /// apart: the subtype folder the run was filed under and the operator's experiment name.
+    /// </summary>
+    [Fact]
+    public async Task ServesEachRunsSourceClassAndExperimentName()
+    {
+        var runs = Assert.Single((await Get("/sequencing?predictive_number=4-21")).Samples).Runs;
+
+        var analysed = Assert.Single(runs, run => run.RunId == "240104_M02340_0399_LCBRW");
+        Assert.Equal("complete-runs", analysed.SourceClass);
+        Assert.Equal("HyperCap-EP-240103", analysed.ExperimentName);
+
+        var nextSeq = Assert.Single(runs, run => run.RunId == "240102_NB552710_0064_AHG7L");
+        Assert.Equal("nextseq", nextSeq.SourceClass);
+
+        // A MammaPrint run filed under complete-runs: only its experiment name gives it away.
+        var mammaPrint = Assert.Single(runs, run => run.RunId == "240430_M02340_0412_ABCDE");
+        Assert.Equal("MP_18_2024", mammaPrint.ExperimentName);
+    }
+
+    /// <summary>
     /// The run's cluster statistics reach the wire, and the two instrument families' incompatible
     /// spellings of "clusters passing filter" stay in their own fields: MiSeq states an absolute
     /// count in <c>GenerateFASTQRunStatistics.xml</c>, NextSeq a percentage in

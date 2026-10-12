@@ -53,23 +53,71 @@ public sealed class SequencingMapperTests
         Assert.Empty(mapped.Value.Preparations);
     }
 
-    [Fact]
-    public void PanelGenesBecomeFullSequenceGenes()
+    [Theory]
+    [InlineData("mamma-print", "MammaPrint-240515")]   // the subtype alone gives it away
+    [InlineData("complete-runs", "MP_18_2024")]        // filed with the complete runs: only the name does
+    [InlineData("complete-runs", "mp_18_2024")]
+    public void MammaPrintRunsAreLeftOut(string sourceClass, string experimentName)
     {
-        var run = Run("R1");
-        run = run with
+        var mammaPrint = Run("R2") with { SourceClass = sourceClass, ExperimentName = experimentName };
+
+        var preparations = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"), mammaPrint)] })
+            .Preparations;
+
+        Assert.Equal(["sampleprep_p0001_R1"], preparations.Select(prep => prep.SampleprepIdentifier));
+    }
+
+    [Theory]
+    [InlineData("complete-runs", "HyperCap-EP-240103")]
+    [InlineData("nextseq", "TSO500_Run2024_9")]
+    [InlineData("missing-analysis", null)]
+    public void OtherRunsAreKept(string sourceClass, string? experimentName)
+    {
+        var run = Run("R1") with { SourceClass = sourceClass, ExperimentName = experimentName };
+
+        Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
+    }
+
+    [Fact]
+    public void StarredPanelGenesAreFullySequencedAndTheRestPartially()
+    {
+        var prep = PreparationWithGenes("BRCA1*", "TP53", "ALK*");
+
+        // The libraries table stars a gene whose coding regions are all covered. The star is not part
+        // of the HGNC symbol, so it comes off - "BRCA1*" would be dropped by the catalogue.
+        Assert.Equal(["BRCA1", "ALK"], prep.FullySequencedGenes);
+        Assert.Equal(["TP53"], prep.PartiallySequencedGenes);
+    }
+
+    [Fact]
+    public void AGeneListWithoutStarsIsAllPartial()
+    {
+        var prep = PreparationWithGenes("BRCA1", "BRCA2");
+
+        Assert.Null(prep.FullySequencedGenes);
+        Assert.Equal(["BRCA1", "BRCA2"], prep.PartiallySequencedGenes);
+    }
+
+    [Fact]
+    public void AStrayStarIsNotAGene()
+    {
+        var prep = PreparationWithGenes("BRCA1*", "*");
+
+        Assert.Equal(["BRCA1"], prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);
+    }
+
+    private static SamplePreparation PreparationWithGenes(params string[] genes)
+    {
+        var run = Run("R1") with
         {
             LibraryPreparation = new LibraryPreparationDto
             {
-                Panel = new PanelDto { PanelId = "panel-1", Name = "TSO", Genes = ["BRCA1", "TP53"] },
+                Panel = new PanelDto { PanelId = "panel-1", Name = "TSO", Genes = genes },
             },
         };
 
-        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
-
-        // The source's gene list is the panel's full-coverage set; nothing states a partial one.
-        Assert.Equal(["BRCA1", "TP53"], prep.FullySequencedGenes);
-        Assert.Null(prep.PartiallySequencedGenes);
+        return Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
     }
 
     [Theory]
@@ -183,7 +231,7 @@ public sealed class SequencingMapperTests
         var withFiles = Map(new SequencingDto { Samples = [Sample("p0001", run)] });
         var without = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] });
 
-        Assert.Equal(without.ComputeFingerprint(), withFiles.ComputeFingerprint());
+        Assert.Equal(Fingerprint.Of(without.Preparations), Fingerprint.Of(withFiles.Preparations));
     }
 
     [Fact]
@@ -193,7 +241,7 @@ public sealed class SequencingMapperTests
         {
             SampleType = "dna",
             SampleIndex = 3,
-            InstrumentId = "M02340",
+            InstrumentModel = "MiSeq",
             Workflow = "GenerateFASTQ",
             LibraryPreparation = new LibraryPreparationDto
             {
@@ -217,8 +265,8 @@ public sealed class SequencingMapperTests
 
         // Only the genes cross over: everything else the panel and the run-sample state has no FAIR slot.
         Assert.Equal(
-            Map(new SequencingDto { Samples = [Sample("p0001", bare)] }).ComputeFingerprint(),
-            Map(new SequencingDto { Samples = [Sample("p0001", identified)] }).ComputeFingerprint());
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", bare)] }).Preparations),
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", identified)] }).Preparations));
     }
 
     [Fact]
@@ -234,6 +282,7 @@ public sealed class SequencingMapperTests
         Assert.Null(prep.LibraryPreparationKit);
         Assert.Null(prep.TargetEnrichmentKit);
         Assert.Null(prep.FullySequencedGenes);
+        Assert.Null(prep.PartiallySequencedGenes);
         Assert.Null(prep.UmisPresent);
     }
 
@@ -249,7 +298,7 @@ public sealed class SequencingMapperTests
         Assert.Null(sequencing.SequencingDate);
         Assert.Null(sequencing.SequencingPlatform);
         Assert.Null(sequencing.SequencingInstrumentModel);
-        Assert.Null(sequencing.SequencingMethod);
+        Assert.Equal("Illumina Sequencing", sequencing.SequencingMethod);   // a constant, not run metadata
         Assert.Null(sequencing.PercentageQ30);
         Assert.Null(sequencing.OtherQualityMetrics);
         Assert.Empty(sequencing.Analyses);

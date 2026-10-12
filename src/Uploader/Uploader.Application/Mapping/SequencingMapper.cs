@@ -9,7 +9,8 @@ namespace Uploader.Application.Mapping;
 /// Maps the sequencing API's response onto the <see cref="SequencingAggregate"/>. The source serves
 /// its own model — samples, runs, library preparation, panel, files and analyses — and this is where
 /// it becomes FAIR Genomes: one <see cref="SamplePreparation"/> per (sample, run) pair, each carrying
-/// its run metadata and that run's analyses.
+/// its run metadata and that run's analyses. MammaPrint runs are left out; <c>source_class</c> and
+/// <c>experiment_name</c> are read only to recognise them.
 /// <para>
 /// <b>Served but deliberately dropped</b>, because FAIR Genomes has no field for them and the
 /// catalogue consumes none: the run-sample's <c>files</c> (the FASTQ reads — FAIR has no file
@@ -18,20 +19,21 @@ namespace Uploader.Application.Mapping;
 /// <see cref="Analysis.DataFormatsStored"/>), every panel field but <c>genes</c> (<c>panel_id</c>,
 /// <c>name</c>, <c>abbreviation</c>, <c>vendor</c>, <c>catalogue_code</c>, <c>target_regions_ref</c>),
 /// <c>sample_type</c>, <c>analysis_type</c>, <c>id_scheme</c>, <c>sample_index</c>,
-/// <c>instrument_id</c>, <c>workflow</c>, and the echoed root <c>predictive_number</c> (already the
-/// aggregate's id). The run statistics FAIR does not name are not dropped — they are packed into
-/// <see cref="SequencingRun.OtherQualityMetrics"/>, see <see cref="SequencingMapping"/>.
+/// <c>instrument_model</c> (the folder the run was filed under; the model comes from <c>instrument_id</c>),
+/// <c>assay</c> (it names a kit or an index set, not a method), <c>workflow</c>, and the echoed root
+/// <c>predictive_number</c> (already the aggregate's id). The run statistics FAIR does not name are
+/// not dropped — they are packed into <see cref="SequencingRun.OtherQualityMetrics"/>, see
+/// <see cref="SequencingMapping"/>.
 /// </para>
 /// <para>
-/// <b>FAIR fields left null</b> for want of a source: <c>PartiallySequencedGenes</c> (the panel's
-/// genes are its full-coverage set), <c>ObservedInsertSize</c>, <c>PercentageTr20</c> and
-/// <c>AlgorithmsUsed</c>.
+/// <b>FAIR fields left null</b> for want of a source: <c>ObservedInsertSize</c>,
+/// <c>PercentageTr20</c> and <c>AlgorithmsUsed</c>.
 /// </para>
 /// <para>
-/// <b>Ontology columns carried raw</b>: the kits, the instrument model and the assay-derived
-/// method are the source's own strings, because there is no code list to translate them from the
-/// way there is for a material code. The gateway checks each against the live ontology and drops
-/// the ones that are not terms, which costs a column rather than the row.
+/// <b>Ontology columns carried raw</b>: the kits are the source's own strings, because there is no
+/// code list to translate them from the way there is for a material code. The gateway checks each
+/// against the live ontology and drops the ones that are not terms, which costs a column rather than
+/// the row.
 /// </para>
 /// </summary>
 public static class SequencingMapper
@@ -43,20 +45,33 @@ public static class SequencingMapper
         SequencingAggregate.Create(id.Value, sampleId, ToPreparations(dto, sampleId));
 
     /// <summary>
-    /// One preparation per (sample, run) pair. A predictive number that matches nothing answers with
-    /// an empty sample list, which yields no preparations rather than an empty placeholder.
+    /// One preparation per (sample, run) pair, MammaPrint runs left out. A predictive number that
+    /// matches nothing answers with an empty sample list, which yields no preparations rather than an
+    /// empty placeholder.
     /// </summary>
     private static List<SamplePreparation> ToPreparations(SequencingDto dto, SampleId sampleId) =>
     [
         .. from sample in dto.Samples ?? []
            from run in sample.Runs ?? []
+           where !IsMammaPrint(run)
            select ToPreparation(sample, run, sampleId),
     ];
+
+    /// <summary>
+    /// MammaPrint is a separate assay that never belonged in the catalogue; the previous uploader read
+    /// only <c>MiSEQ/complete-runs</c> and <c>NextSeq</c>. The sequencing API serves it like any other
+    /// run, so it is left out here: by the <c>mamma-print</c> subtype it is filed under, or by its
+    /// <c>MP_</c> experiment name for the one filed under <c>complete-runs</c>.
+    /// </summary>
+    private static bool IsMammaPrint(SequencingRunDto run) =>
+        string.Equals(run.SourceClass, "mamma-print", StringComparison.OrdinalIgnoreCase)
+        || run.ExperimentName?.StartsWith("MP_", StringComparison.OrdinalIgnoreCase) == true;
 
     private static SamplePreparation ToPreparation(SequencingSampleDto sample, SequencingRunDto run, SampleId sampleId)
     {
         var preparationId = SequencingMapping.Identifier(SamplePrepModule, sample.SampleId, run.RunId);
         var library = run.LibraryPreparation;
+        var (fullySequenced, partiallySequenced) = SplitGenes(library?.Panel?.Genes);
 
         return new SamplePreparation
         {
@@ -71,15 +86,39 @@ public static class SequencingMapper
             PcrFree = library?.PcrFree,
             TargetEnrichmentKit = library?.TargetEnrichmentKit,
 
-            // The panel's gene list is its full-coverage set — the source column spells that out
-            // ("Genes (*all coding regions covered)"), so there is no partial set to separate.
-            FullySequencedGenes = library?.Panel?.Genes,
-            PartiallySequencedGenes = null,
+            FullySequencedGenes = fullySequenced,
+            PartiallySequencedGenes = partiallySequenced,
             UmisPresent = library?.UmiPresent,
             IntendedInsertSize = library?.IntendedInsertSize,
             IntendedReadLength = library?.IntendedReadLength,
             Sequencing = ToSequencingRun(sample, run, preparationId),
         };
+    }
+
+    /// <summary>
+    /// The libraries table marks a gene whose coding regions are all covered with a star
+    /// ("Genes (*all coding regions covered)"), and the sequencing API keeps the star in the symbol.
+    /// A starred gene is fully sequenced, the rest partially; the star comes off, because
+    /// <c>BRCA1*</c> is not an HGNC term and the catalogue would drop it.
+    /// </summary>
+    private static (IReadOnlyList<string>? Fully, IReadOnlyList<string>? Partially) SplitGenes(
+        IReadOnlyList<string>? genes)
+    {
+        var fully = new List<string>();
+        var partially = new List<string>();
+
+        foreach (var gene in genes ?? [])
+        {
+            var symbol = gene.TrimEnd('*');
+            if (symbol.Length == 0)
+            {
+                continue; // a stray star, not a gene
+            }
+
+            (symbol.Length < gene.Length ? fully : partially).Add(symbol);
+        }
+
+        return (fully.Count == 0 ? null : fully, partially.Count == 0 ? null : partially);
     }
 
     private static SequencingRun ToSequencingRun(
@@ -99,11 +138,9 @@ public static class SequencingMapper
             BelongsToSamplePreparation = preparationId,
             SequencingDate = run.RunDate,
             SequencingPlatform = CatalogueVocabulary.SequencingPlatform(run.Platform),
-            SequencingInstrumentModel = run.InstrumentModel,
+            SequencingInstrumentModel = CatalogueVocabulary.SequencingInstrumentModel(run.InstrumentId),
 
-            // The sample sheet's assay is the closest the source comes to naming a method; the
-            // catalogue's lookup shapes it later, so it is carried raw.
-            SequencingMethod = run.Assay,
+            SequencingMethod = CatalogueVocabulary.SequencingMethod,
 
             // FAIR types the median depth as an integer; the source keeps the fraction it was given
             // (a mean over the region of interest) and leaves the rounding to whoever needs a whole

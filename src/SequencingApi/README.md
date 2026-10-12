@@ -129,7 +129,7 @@ side, the same division biobank_api uses. Shape:
 ```
 { predictive_number, samples: [ { sample_id, id_scheme, runs: [ {
     run_id, run_date, platform, instrument_model, instrument_id, flowcell_id, assay, workflow,
-    percentage_q30,                       // joined in from the run aggregate
+    source_class, experiment_name, percentage_q30,   // joined in from the run aggregate
     sample_index, sample_type, lane_count,
     library_preparation: { …, panel: { panel_id, name, genes: [], … } },
     files:    [ { role, path, format, lane, read, size_bytes, checksum } ],

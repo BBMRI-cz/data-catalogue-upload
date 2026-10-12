@@ -76,6 +76,25 @@ public static class CatalogueVocabulary
         _ => null,
     };
 
+    private const string Cryotube = "Cryotube 1–2mL Programmable freezing to <-135°C";
+    private const string PpTube = "PP tube 0.5–2mL (-35) to (-18)°C";
+
+    /// <summary>
+    /// <c>Biospecimens.StorageConditions</c>. The ontology names a tube and a temperature together
+    /// and the export names neither, so this is the previous uploader's mapping from the material
+    /// code, taken over as it was (<c>miseq_sample_metadata_collector.py</c>). The terms carry an en
+    /// dash (<c>1–2mL</c>), not a hyphen.
+    /// </summary>
+    public static string? StorageConditions(string? sampleType, string? code) => (sampleType, code) switch
+    {
+        (BiobankMapping.TissueType, "1" or "2" or "3" or "4" or "5" or "7") => Cryotube,
+        (BiobankMapping.SerumType, "C" or "K" or "L" or "PD" or "SD" or "T" or "PR") => Cryotube,
+        (BiobankMapping.GenomeType, "gD" or "PK") => PpTube,
+
+        // RNAlater tissue (53-56) and serum S/PS: the previous uploader named no tube for them.
+        _ => null,
+    };
+
     /// <summary>
     /// <c>Personal.GenderAtBirth</c>. The biobank records a sex; the ontology is GSSO, which spells
     /// it as an assignment at birth.
@@ -113,6 +132,13 @@ public static class CatalogueVocabulary
     public static string? Institute(string? biobank) =>
         biobank is not null && Institutes.TryGetValue(biobank, out var name) ? name : null;
 
+    /// <summary>
+    /// <c>Sequencing.SequencingMethod</c>. The source has no method field - the sample sheet's assay
+    /// names a kit or an index set - and every MMCI run is Illumina sequencing by synthesis, so this
+    /// is the constant the previous uploader sent for MiSeq and NextSeq alike.
+    /// </summary>
+    public const string SequencingMethod = "Illumina Sequencing";
+
     private static readonly FrozenDictionary<string, string> Platforms =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -124,6 +150,21 @@ public static class CatalogueVocabulary
     /// <summary><c>Sequencing.SequencingPlatform</c>: the ontology suffixes every vendor.</summary>
     public static string? SequencingPlatform(string? platform) =>
         platform is not null && Platforms.TryGetValue(platform.Trim(), out var name) ? name : null;
+
+    /// <summary>
+    /// <c>Sequencing.SequencingInstrumentModel</c>, from the instrument's serial number. The source's
+    /// own model is the folder the run was filed under (<c>MiSeq</c>, <c>NextSeq</c>), and the ontology
+    /// has no bare <c>NextSeq</c>: it tells the 500 from the 550, and so does the serial prefix.
+    /// </summary>
+    public static string? SequencingInstrumentModel(string? instrumentId) =>
+        instrumentId?.Trim().ToUpperInvariant() switch
+        {
+            { } id when id.StartsWith("NB55", StringComparison.Ordinal) => "Illumina NextSeq 550",
+            { } id when id.StartsWith("NS500", StringComparison.Ordinal)
+                || id.StartsWith("NB501", StringComparison.Ordinal) => "NextSeq 500",
+            { } id when id.StartsWith("M0", StringComparison.Ordinal) => "MiSeq",
+            _ => null,
+        };
 
     private static readonly FrozenDictionary<string, string> FileFormats =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

@@ -15,7 +15,8 @@ public sealed class RunCatalogueSyncHandlerTests
         FakeSourceDataGateway source,
         FakeCatalogueGateway catalogue,
         InMemorySyncStateRepository state,
-        FakeSyncRunRepository runs) =>
+        FakeSyncRunRepository runs,
+        CatalogueStudy? study = null) =>
         new(
             source,
             catalogue,
@@ -23,7 +24,7 @@ public sealed class RunCatalogueSyncHandlerTests
             runs,
             new FingerprintSyncPlanner(),
             new FakePseudonymMap(),
-            new CatalogueStudy("study_1", "Test Study"),
+            study ?? new CatalogueStudy("study_1", "Test Study"),
             TimeProvider.System,
             NullLogger<RunCatalogueSyncCommandHandler>.Instance);
 
@@ -250,6 +251,48 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task AnUnchangedRowIsNotSentAgain()
+    {
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
+        var state = new InMemorySyncStateRepository();
+        await CreateHandler(source, new FakeCatalogueGateway(), state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        var catalogue = new FakeCatalogueGateway();
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Equal(0, result.Value.Uploaded);
+        Assert.Equal(2, result.Value.Skipped);
+        Assert.DoesNotContain(catalogue.Upserts, upsert => upsert.StartsWith("patient:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The re-send is decided on the row the catalogue receives, not on the aggregate behind it. Only
+    /// the study id changes between these runs - the source data is identical - and the patient row
+    /// names the study, so it has to go out again. A fingerprint of the aggregate skipped it, which is
+    /// also how a fix in <c>CatalogueMapper</c> never reached a published patient.
+    /// </summary>
+    [Fact]
+    public async Task ARowThatChangesWithoutItsSourceIsSentAgain()
+    {
+        var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);
+        var state = new InMemorySyncStateRepository();
+        await CreateHandler(source, new FakeCatalogueGateway(), state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        var catalogue = new FakeCatalogueGateway();
+        var result = await CreateHandler(
+                source, catalogue, state, new FakeSyncRunRepository(), new CatalogueStudy("study_2", "Renamed"))
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        // The patient row names the study; the sample's rows do not, so the sample stays skipped.
+        Assert.Equal(1, result.Value.Uploaded);
+        Assert.Contains("patient:mmci_patient_P1", catalogue.Upserts);
+        Assert.DoesNotContain("sample:mmci_sample_S1", catalogue.Upserts);
+    }
+
+    [Fact]
     public async Task SequencingReachesTheAssembledPatientRecord()
     {
         var source = new FakeSourceDataGateway([SequencedPatient()]);
@@ -279,6 +322,37 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(0, result.Value.Failed);
         Assert.Equal(SyncStatus.Synced, state.Sequencing["PRED1"].Status);
     }
+
+    /// <summary>
+    /// MammaPrint rows published before the uploader left them out need no manual cleanup: a sample
+    /// whose only run is MammaPrint yields no sequencing, and what was published for it is deleted.
+    /// </summary>
+    [Fact]
+    public async Task ASampleSequencedOnlyForMammaPrintLosesItsPublishedSequencing()
+    {
+        var source = new FakeSourceDataGateway([SequencedPatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var state = new InMemorySyncStateRepository();
+        await CreateHandler(source, new FakeCatalogueGateway(), state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        source.Sequencing["PRED1"] = SequencingWithOneRun(
+            new SequencingRunDto { RunId = "R1", Platform = "Illumina", SourceClass = "mamma-print" });
+        var catalogue = new FakeCatalogueGateway();
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Equal(["sequencing:mmci_sample_S1"], catalogue.Deletes);
+        Assert.DoesNotContain("sequencing:mmci_sample_S1", catalogue.Upserts);
+        Assert.Equal(1, result.Value.Deleted);
+        Assert.True(state.Sequencing["PRED1"].IsDeleted);
+    }
+
+    private static SequencingDto SequencingWithOneRun(SequencingRunDto run) => new()
+    {
+        PredictiveNumber = "PRED1",
+        Samples = [new SequencingSampleDto { SampleId = "p0001", Runs = [run] }],
+    };
 
     [Fact]
     public async Task PatientWithoutSequencingIsNotAFailure()

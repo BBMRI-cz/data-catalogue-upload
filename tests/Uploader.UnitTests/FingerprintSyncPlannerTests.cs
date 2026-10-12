@@ -10,6 +10,12 @@ public sealed class FingerprintSyncPlannerTests
 {
     private readonly FingerprintSyncPlanner _planner = new();
 
+    /// <summary>
+    /// Stands in for the handler's fingerprint of the catalogue row. The planner only compares
+    /// fingerprints, so any stable hash of the aggregate exercises every rule here.
+    /// </summary>
+    private static Fingerprint Hash(object aggregate) => Fingerprint.Of(aggregate);
+
     private static PatientAggregate Patient(
         string id,
         Personal? personal = null,
@@ -34,7 +40,7 @@ public sealed class FingerprintSyncPlannerTests
     {
         var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
 
-        var ops = _planner.Plan(data, PatientSyncStates.Empty());
+        var ops = _planner.Plan(data, PatientSyncStates.Empty(), Hash);
 
         Assert.Equal(2, ops.Count);
         Assert.Equal(SyncOp.Create, Assert.IsType<PatientOperation>(ops[0]).Op);
@@ -46,7 +52,7 @@ public sealed class FingerprintSyncPlannerTests
     {
         var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }));
 
-        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty(), Hash));
     }
 
     [Fact]
@@ -57,7 +63,7 @@ public sealed class FingerprintSyncPlannerTests
             Sample("S1", "P1"));
 
         // Neither the patient nor the sample is planned, so nothing is uploaded and no state is kept.
-        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty(), Hash));
     }
 
     [Fact]
@@ -70,13 +76,13 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState
             {
                 Id = new PatientId("P1"),
-                SourceFingerprint = patient.ComputeFingerprint().Value,
+                SourceFingerprint = Hash(patient).Value,
                 Status = SyncStatus.Synced,
                 CatalogueRemoteId = "remote-P1",
             },
         };
 
-        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing)[0]);
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing, Hash)[0]);
 
         Assert.Equal(SyncOp.Skip, patientOp.Op);
     }
@@ -98,7 +104,7 @@ public sealed class FingerprintSyncPlannerTests
             },
         };
 
-        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing)[0]);
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing, Hash)[0]);
 
         Assert.Equal(SyncOp.Update, patientOp.Op);
     }
@@ -113,13 +119,13 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState
             {
                 Id = new PatientId("P1"),
-                SourceFingerprint = patient.ComputeFingerprint().Value,
+                SourceFingerprint = Hash(patient).Value,
                 IsDeleted = true,
                 Status = SyncStatus.Deleted,
             },
         };
 
-        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing)[0]);
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(data, existing, Hash)[0]);
 
         Assert.Equal(SyncOp.Create, patientOp.Op);
     }
@@ -141,7 +147,7 @@ public sealed class FingerprintSyncPlannerTests
             },
         };
 
-        var ops = _planner.Plan(data, existing);
+        var ops = _planner.Plan(data, existing, Hash);
 
         var deletion = ops.OfType<SampleOperation>().Single(op => op.Op == SyncOp.Delete);
         Assert.Equal(new SampleId("OLD"), ((SampleSyncState)deletion.State).Id);
@@ -166,7 +172,7 @@ public sealed class FingerprintSyncPlannerTests
             SequencingComplete = false,
         };
 
-        var ops = _planner.Plan(data, existing);
+        var ops = _planner.Plan(data, existing, Hash);
 
         Assert.DoesNotContain(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
     }
@@ -177,7 +183,7 @@ public sealed class FingerprintSyncPlannerTests
     {
         var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
 
-        var ops = _planner.Plan(data, ExistingSequencing("PRED1", "S1"));
+        var ops = _planner.Plan(data, ExistingSequencing("PRED1", "S1"), Hash);
 
         Assert.Single(ops.OfType<SequencingOperation>(), op => op.Op == SyncOp.Delete);
     }
@@ -215,7 +221,7 @@ public sealed class FingerprintSyncPlannerTests
             },
         };
 
-        var ops = _planner.Plan(data, existing);
+        var ops = _planner.Plan(data, existing, Hash);
 
         var patientOp = Assert.IsType<PatientOperation>(ops[^1]);
         Assert.Equal(SyncOp.Delete, patientOp.Op);
@@ -232,7 +238,7 @@ public sealed class FingerprintSyncPlannerTests
     {
         var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
 
-        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty()));
+        Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty(), Hash));
     }
 
     /// <summary>
@@ -248,12 +254,12 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState
             {
                 Id = new PatientId("P1"),
-                SourceFingerprint = patient.ComputeFingerprint().Value,
+                SourceFingerprint = Hash(patient).Value,
                 Status = SyncStatus.Pending,
             },
         };
 
-        Assert.Empty(_planner.Plan(Data(patient), existing));
+        Assert.Empty(_planner.Plan(Data(patient), existing, Hash));
     }
 
     [Fact]
@@ -272,7 +278,7 @@ public sealed class FingerprintSyncPlannerTests
             },
         };
 
-        Assert.Empty(_planner.Plan(data, existing));
+        Assert.Empty(_planner.Plan(data, existing, Hash));
     }
 
     /// <summary>A failed upsert may have written some rows before it stopped, so they are removed.</summary>
@@ -285,7 +291,7 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState { Id = new PatientId("P1"), SourceFingerprint = "x", Status = SyncStatus.Failed },
         };
 
-        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(data, existing)));
+        var patientOp = Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(data, existing, Hash)));
 
         Assert.Equal(SyncOp.Delete, patientOp.Op);
     }
@@ -303,12 +309,12 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState
             {
                 Id = new PatientId("P1"),
-                SourceFingerprint = patient.ComputeFingerprint().Value,
+                SourceFingerprint = Hash(patient).Value,
                 Status = SyncStatus.Pending,
             },
         };
 
-        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(Data(patient, Sample("S1", "P1")), existing)[0]);
+        var patientOp = Assert.IsType<PatientOperation>(_planner.Plan(Data(patient, Sample("S1", "P1")), existing, Hash)[0]);
 
         Assert.Equal(SyncOp.Create, patientOp.Op);
     }
@@ -324,7 +330,7 @@ public sealed class FingerprintSyncPlannerTests
             Patient = new PatientSyncState
             {
                 Id = new PatientId("P1"),
-                SourceFingerprint = patient.ComputeFingerprint().Value,
+                SourceFingerprint = Hash(patient).Value,
                 Status = SyncStatus.Failed,
                 CatalogueRemoteId = "remote-P1",
             },
@@ -334,14 +340,14 @@ public sealed class FingerprintSyncPlannerTests
                 {
                     Id = new SampleId("S1"),
                     PatientId = new PatientId("P1"),
-                    SourceFingerprint = sample.ComputeFingerprint().Value,
+                    SourceFingerprint = Hash(sample).Value,
                     Status = SyncStatus.Failed,
                     CatalogueRemoteId = "remote-S1",
                 },
             },
         };
 
-        var ops = _planner.Plan(Data(patient, sample), existing);
+        var ops = _planner.Plan(Data(patient, sample), existing, Hash);
 
         Assert.Equal(SyncOp.Update, Assert.IsType<PatientOperation>(ops[0]).Op);
         Assert.Equal(SyncOp.Update, ops.OfType<SampleOperation>().Single().Op);
@@ -372,7 +378,7 @@ public sealed class FingerprintSyncPlannerTests
             Wsis = [WsiAggregate.Create("BIO1", new SampleId("S1"), null).Value],
         };
 
-        var ops = _planner.Plan(data, PatientSyncStates.Empty());
+        var ops = _planner.Plan(data, PatientSyncStates.Empty(), Hash);
 
         Assert.Single(ops.OfType<SequencingOperation>());
         Assert.Single(ops.OfType<WsiOperation>());

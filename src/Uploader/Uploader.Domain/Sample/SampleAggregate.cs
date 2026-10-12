@@ -22,9 +22,6 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     /// <summary>The stored form derived from <see cref="Material"/> - one per sample.</summary>
     public Biospecimen? Biospecimen { get; private init; }
 
-    /// <summary>Fingerprint over the sample's catalogue-relevant content.</summary>
-    public Fingerprint ComputeFingerprint() => Fingerprint.Of(Material, Biospecimen);
-
     public static ErrorOr<SampleAggregate> Create(
         string? id,
         PatientId patientId,

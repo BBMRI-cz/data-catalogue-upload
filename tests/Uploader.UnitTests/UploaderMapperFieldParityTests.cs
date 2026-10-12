@@ -139,9 +139,11 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal(3, b.Quantity);
         Assert.Equal("Available", b.Availability);
 
-        // Never served. StorageConditions is the interesting one: the ontology names a container
-        // and a temperature together ("Cryotube 1-2mL LN") and the export names neither.
-        Assert.Null(b.StorageConditions);
+        // Derived from the material code by the previous uploader's mapping: the export names
+        // neither the tube nor the temperature.
+        Assert.Equal("Cryotube 1–2mL Programmable freezing to <-135°C", b.StorageConditions);
+
+        // Never served.
         Assert.Null(b.PercentageTumorCells);
         Assert.Null(b.NameOfFixative);
         Assert.Null(b.EmbeddingMedium);
@@ -165,7 +167,7 @@ public sealed class UploaderMapperFieldParityTests
                         RunDate = "2021-05-05",
                         Platform = "Illumina",
                         InstrumentModel = "NovaSeq",
-                        InstrumentId = "NB1",
+                        InstrumentId = "NB552710",
                         FlowcellId = "FC1",
                         Assay = "KAPA HyperPlus",
                         Workflow = "GenerateFASTQ",
@@ -195,7 +197,7 @@ public sealed class UploaderMapperFieldParityTests
                                 Abbreviation = "T",
                                 Vendor = "Illumina",
                                 CatalogueCode = "TSO500",
-                                Genes = ["BRCA1", "BRCA2"],
+                                Genes = ["BRCA1*", "BRCA2"],
                                 TargetRegionsRef = "tso.bed",
                             },
                         },
@@ -246,8 +248,8 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("KitA", prep.LibraryPreparationKit);
         Assert.True(prep.PcrFree);
         Assert.Equal("Enrich", prep.TargetEnrichmentKit);
-        Assert.Equal(["BRCA1", "BRCA2"], prep.FullySequencedGenes);
-        Assert.Null(prep.PartiallySequencedGenes);   // no source states a partial set
+        Assert.Equal(["BRCA1"], prep.FullySequencedGenes);     // starred: all coding regions covered
+        Assert.Equal(["BRCA2"], prep.PartiallySequencedGenes);
         Assert.False(prep.UmisPresent);
         Assert.Equal(350, prep.IntendedInsertSize);
         Assert.Equal(150, prep.IntendedReadLength);
@@ -257,8 +259,9 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("sampleprep_p0001_R1", run.BelongsToSamplePreparation);
         Assert.Equal("2021-05-05", run.SequencingDate);
         Assert.Equal("Illumina platform", run.SequencingPlatform);
-        Assert.Equal("NovaSeq", run.SequencingInstrumentModel);
-        Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
+        // From the instrument serial, not the served "NovaSeq" (the folder the run was filed under).
+        Assert.Equal("Illumina NextSeq 550", run.SequencingInstrumentModel);
+        Assert.Equal("Illumina Sequencing", run.SequencingMethod);   // not the served assay, a kit name
         Assert.Equal(30, run.MedianReadDepth);
         Assert.Equal(149, run.ObservedReadLength);
         Assert.Null(run.ObservedInsertSize);      // no source

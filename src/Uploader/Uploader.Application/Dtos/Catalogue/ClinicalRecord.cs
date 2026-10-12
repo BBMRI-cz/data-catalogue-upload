@@ -4,9 +4,8 @@ namespace Uploader.Application.Dtos;
 /// EMX2 <c>Clinical</c> row. <see cref="BelongsToPerson"/> references <c>Personal</c> by its key,
 /// so it must hold the same pseudonym <see cref="PersonalRecord.PersonalIdentifier"/> does.
 /// <para>
-/// <see cref="Diagnosis"/> references the <c>Diagnosis</c> ontology, which is loaded with Orphanet
-/// terms while the biobank serves ICD-10. Nothing we have matches, so it goes out empty - see
-/// <c>docs/catalogue-api-contract.md</c>.
+/// <see cref="Diagnosis"/> references the <c>Diagnosis</c> ontology, which holds ICD-10 terms
+/// alongside Orphanet - see <c>docs/catalogue-api-contract.md</c>.
 /// </para>
 /// </summary>
 public sealed record ClinicalRecord

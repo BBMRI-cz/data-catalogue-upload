@@ -243,9 +243,8 @@ Check three things:
 3. **No real identifier is present.** Every identifier starts with `mmci_`. A bare biobank id such as
    `271801` or `BBMs:2022:3249:SD` is a leak: stop and report it.
 
-`Clinical.diagnosis` is expected to be empty. The catalogue's `Diagnosis` ontology holds Orphanet
-rare-disease terms while the biobank serves ICD-10 oncology codes, and no usable crosswalk exists.
-See [`catalogue-api-contract.md`](catalogue-api-contract.md).
+`Clinical.diagnosis` holds the patient's ICD-10 codes (`C50.9`, `Z12.9`). A patient without one -
+about a third of them - has the column empty.
 
 Now run it a second time with nothing changed:
 

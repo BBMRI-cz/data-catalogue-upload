@@ -6,11 +6,20 @@ namespace Uploader.Domain.Services;
 /// <summary>Domain service that plans per-aggregate catalogue operations for one patient.</summary>
 public interface ISyncPlanner
 {
-    IReadOnlyList<SyncOperation> Plan(PatientCatalogueData data, PatientSyncStates existing);
+    /// <param name="fingerprintOf">
+    /// The fingerprint of what the catalogue would receive for an aggregate. The caller supplies it
+    /// because the row is built outside the domain: a change to that row with no change to the source
+    /// data still has to be sent, and only a fingerprint of the row itself can see it.
+    /// </param>
+    IReadOnlyList<SyncOperation> Plan(
+        PatientCatalogueData data,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf);
 }
 
 /// <summary>
-/// Plans catalogue operations by comparing fingerprints. Per aggregate: never successfully written
+/// Plans catalogue operations by comparing fingerprints of the rows the catalogue would receive,
+/// which the caller supplies. Per aggregate: never successfully written
 /// (no prior state, a soft-deleted prior, or no catalogue id yet) -> CREATE; last attempt failed or
 /// fingerprint changed -> UPDATE; unchanged -> SKIP. Aggregates present in a prior run but absent
 /// now -> DELETE. A patient who is not eligible and was never published gets no operation at all,
@@ -32,14 +41,17 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
     public FingerprintSyncPlanner(TimeProvider? timeProvider = null) =>
         _timeProvider = timeProvider ?? TimeProvider.System;
 
-    public IReadOnlyList<SyncOperation> Plan(PatientCatalogueData data, PatientSyncStates existing)
+    public IReadOnlyList<SyncOperation> Plan(
+        PatientCatalogueData data,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf)
     {
         var ops = new List<SyncOperation>();
         var eligible = data.IsUploadEligible;
 
         // Not eligible and nothing in the catalogue: there is nothing to upload and nothing to
         // remove. Its children are planned only for an eligible patient, so none were published.
-        if (PlanPatient(data.Patient, existing.Patient, eligible) is not { } patientOp)
+        if (PlanPatient(data.Patient, existing.Patient, eligible, fingerprintOf) is not { } patientOp)
         {
             return ops;
         }
@@ -63,25 +75,25 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
             foreach (var sample in data.Samples)
             {
                 seenSamples.Add(sample.Id);
-                ops.Add(PlanSample(sample, existing));
+                ops.Add(PlanSample(sample, existing, fingerprintOf));
             }
 
             foreach (var sequencing in data.Sequencings)
             {
                 seenSequencing.Add(sequencing.Id);
-                ops.Add(PlanSequencing(sequencing, existing));
+                ops.Add(PlanSequencing(sequencing, existing, fingerprintOf));
             }
 
             foreach (var wsi in data.Wsis)
             {
                 seenWsi.Add(wsi.Id);
-                ops.Add(PlanWsi(wsi, existing));
+                ops.Add(PlanWsi(wsi, existing, fingerprintOf));
             }
 
             foreach (var study in data.ImagingStudies)
             {
                 seenImaging.Add(study.Id);
-                ops.Add(PlanImagingStudy(study, existing));
+                ops.Add(PlanImagingStudy(study, existing, fingerprintOf));
             }
         }
 
@@ -121,9 +133,13 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
     /// Never published, or already removed, and still ineligible gets no operation (null): nothing is
     /// sent, and no state is written that a later run could mistake for a published patient.
     /// </summary>
-    private PatientOperation? PlanPatient(PatientAggregate patient, PatientSyncState? prior, bool eligible)
+    private PatientOperation? PlanPatient(
+        PatientAggregate patient,
+        PatientSyncState? prior,
+        bool eligible,
+        Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = patient.ComputeFingerprint().Value;
+        var fingerprint = fingerprintOf(patient).Value;
 
         if (!eligible)
         {
@@ -146,9 +162,12 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
         };
     }
 
-    private SampleOperation PlanSample(SampleAggregate sample, PatientSyncStates existing)
+    private SampleOperation PlanSample(
+        SampleAggregate sample,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = sample.ComputeFingerprint().Value;
+        var fingerprint = fingerprintOf(sample).Value;
         existing.Samples.TryGetValue(sample.Id, out var prior);
         return new SampleOperation
         {
@@ -160,9 +179,12 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
         };
     }
 
-    private SequencingOperation PlanSequencing(SequencingAggregate sequencing, PatientSyncStates existing)
+    private SequencingOperation PlanSequencing(
+        SequencingAggregate sequencing,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = sequencing.ComputeFingerprint().Value;
+        var fingerprint = fingerprintOf(sequencing).Value;
         existing.Sequencing.TryGetValue(sequencing.Id, out var prior);
         return new SequencingOperation
         {
@@ -174,9 +196,12 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
         };
     }
 
-    private WsiOperation PlanWsi(WsiAggregate wsi, PatientSyncStates existing)
+    private WsiOperation PlanWsi(
+        WsiAggregate wsi,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = wsi.ComputeFingerprint().Value;
+        var fingerprint = fingerprintOf(wsi).Value;
         existing.Wsi.TryGetValue(wsi.Id, out var prior);
         return new WsiOperation
         {
@@ -187,9 +212,12 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
         };
     }
 
-    private ImagingStudyOperation PlanImagingStudy(ImagingStudyAggregate study, PatientSyncStates existing)
+    private ImagingStudyOperation PlanImagingStudy(
+        ImagingStudyAggregate study,
+        PatientSyncStates existing,
+        Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = study.ComputeFingerprint().Value;
+        var fingerprint = fingerprintOf(study).Value;
         existing.ImagingStudies.TryGetValue(study.Id, out var prior);
         return new ImagingStudyOperation
         {

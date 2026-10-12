@@ -64,7 +64,7 @@ flowchart TD
     subgraph domain [Domain - models + domain services]
         Models["record models + aggregates"]
         Planner["FingerprintSyncPlanner"]
-        Fingerprint["Fingerprint.Of / aggregate.ComputeFingerprint()"]
+        Fingerprint["Fingerprint.Of"]
     end
 
     subgraph infrastructure [Infrastructure - adapters]
@@ -86,8 +86,8 @@ flowchart TD
 
 | Layer | Path | Responsibility |
 |-------|------|----------------|
-| Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object each aggregate uses for its `ComputeFingerprint()`. No I/O, no framework dependencies. |
-| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. Outbound, `CatalogueMapper` turns aggregates into the EMX2 rows under `Dtos/Catalogue/`, substituting a pseudonym for every real identifier - see [`docs/pseudonymization.md`](docs/pseudonymization.md). `CatalogueVocabulary` is where a biobank code becomes an ontology term. |
+| Domain | `src/Uploader/Uploader.Domain/` | Record models + aggregates, the domain service `FingerprintSyncPlanner`, and the `Fingerprint` value object (SHA-256 over JSON) the planner compares. No I/O, no framework dependencies. |
+| Application | `src/Uploader/Uploader.Application/` | CQRS `RunCatalogueSyncCommand` + handler, `Dtos/` + the hand-written mappers (`Mapping/`: one per source - `PatientMapper`, `SampleMapper`, `SequencingMapper`, `WsiMapper`, `ImagingStudyMapper` - plus `BiobankMapping` for the biobank's derived values), and the port interfaces in `Abstractions/`. Outbound, `CatalogueMapper` turns aggregates into the EMX2 rows under `Dtos/Catalogue/`, substituting a pseudonym for every real identifier - see [`docs/pseudonymization.md`](docs/pseudonymization.md). `CatalogueVocabulary` is where a biobank code becomes an ontology term. The handler also fingerprints each of those rows for the planner, so change detection sees exactly what the catalogue receives. |
 | Infrastructure | `src/Uploader/Uploader.Infrastructure/` | Adapters implementing the ports: typed `HttpClient` gateways (`Http/`) and EF Core + repositories (`Persistence/`). |
 
 The ports in `Uploader.Application/Abstractions` (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`, `ISyncRunRepository`, `IPseudonymMap`) are interfaces. Infrastructure provides concrete implementations, and `Uploader.Host` wires them together from environment variables. Planning is a domain service (`ISyncPlanner`).
@@ -121,7 +121,7 @@ flowchart TD
 
 1. **Fetch** all patients from the biobank API (`GET /patients`).
 2. **Aggregate** each patient: personal/clinical/material from the biobank payload, sequencing (by `predictive_number`), WSI (by `bioptic_number` - the biobank serves none, so this stays empty until #31), and radiology (by `accession_numbers`, patient-level and sample-level combined). Every source serves its own vocabulary; translating it into the catalogue's ontology terms is `CatalogueVocabulary`'s job, and a code with no term that means the same thing is left out rather than guessed at. The sequencing API answers with `samples[] -> runs[]` - a predictive number is not unique and a sample can be resequenced - which the uploader flattens into one FAIR `SamplePreparation` per (sample, run) pair. An unknown predictive number comes back `200` with an empty `samples`: no sequencing record, and not a failure.
-3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints (each aggregate's `ComputeFingerprint()` over `Fingerprint.Of(...)`): CREATE when the entity was never successfully written (no prior state, a soft-deleted one, or no catalogue id yet), UPDATE when the fingerprint changed or the last attempt failed (the fingerprint is stored before the upsert, so a failure is retried rather than skipped), SKIP when unchanged, DELETE when entities disappear from the source.
+3. **Plan** per-entity operations in dependency order using SHA-256 fingerprints of the rows the catalogue would receive (the handler builds each row with `CatalogueMapper` and hashes it with `Fingerprint.Of(...)`, so a mapping fix or a new study id re-sends a row whose source data did not change): CREATE when the entity was never successfully written (no prior state, a soft-deleted one, or no catalogue id yet), UPDATE when the fingerprint changed or the last attempt failed (the fingerprint is stored before the upsert, so a failure is retried rather than skipped), SKIP when unchanged, DELETE when entities disappear from the source.
 4. **Execute** the plan against the catalogue's GraphQL API. One aggregate becomes several EMX2
    rows across several tables - a patient is a `Personal`, an `IndividualConsent` and a `Clinical` -
    written parents first, because each references the one before.
@@ -130,7 +130,7 @@ flowchart TD
    still references, so any other order fails loudly instead of leaving orphans behind.
 6. **Persist** the run summary (scanned / changed / uploaded / deleted / skipped / failed) to `sync_run`.
 
-Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient; it is permission, not content, so it stays out of the fingerprint. An ineligible patient who was ever published (`ISyncState.WasPublished`: it has a catalogue id, or an upsert failed part-way) is deleted after its children; one who never was gets no operation at all and leaves no sync state, so a later run cannot mistake it for a published patient.
+Upload eligibility: a patient is only uploaded if they consented and have at least one sample (`PatientCatalogueData.IsUploadEligible`). Consent is checked explicitly rather than being left to follow from the biobank refusing to attach samples to a non-consenting patient. An ineligible patient who was ever published (`ISyncState.WasPublished`: it has a catalogue id, or an upsert failed part-way) is deleted after its children; one who never was gets no operation at all and leaves no sync state, so a later run cannot mistake it for a published patient.
 
 ## Sync state machine
 

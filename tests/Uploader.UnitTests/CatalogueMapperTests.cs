@@ -144,9 +144,8 @@ public sealed class CatalogueMapperTests
         Assert.Equal(PatientPseudonym, payload.Clinical.BelongsToPerson);
         Assert.Equal(74, payload.Clinical.AgeAtDiagnosis);
 
-        // The catalogue's Diagnosis ontology holds Orphanet terms and these are ICD-10, so the
-        // column goes out empty rather than failing the whole row.
-        Assert.Null(payload.Clinical.Diagnosis);
+        // The catalogue's Diagnosis ontology carries ICD-10 terms, spelled with the dot.
+        Assert.Equal(["C50.4"], payload.Clinical.Diagnosis);
     }
 
     [Fact]
