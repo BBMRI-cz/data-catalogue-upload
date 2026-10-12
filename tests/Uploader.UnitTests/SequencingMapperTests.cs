@@ -183,7 +183,7 @@ public sealed class SequencingMapperTests
         var withFiles = Map(new SequencingDto { Samples = [Sample("p0001", run)] });
         var without = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] });
 
-        Assert.Equal(without.ComputeFingerprint(), withFiles.ComputeFingerprint());
+        Assert.Equal(Fingerprint.Of(without.Preparations), Fingerprint.Of(withFiles.Preparations));
     }
 
     [Fact]
@@ -217,8 +217,8 @@ public sealed class SequencingMapperTests
 
         // Only the genes cross over: everything else the panel and the run-sample state has no FAIR slot.
         Assert.Equal(
-            Map(new SequencingDto { Samples = [Sample("p0001", bare)] }).ComputeFingerprint(),
-            Map(new SequencingDto { Samples = [Sample("p0001", identified)] }).ComputeFingerprint());
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", bare)] }).Preparations),
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", identified)] }).Preparations));
     }
 
     [Fact]

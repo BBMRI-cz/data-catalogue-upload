@@ -1,3 +1,4 @@
+using Uploader.Application.Mapping;
 using Uploader.Domain;
 using Uploader.Domain.Common;
 using Xunit;
@@ -46,15 +47,18 @@ public sealed class FingerprintTests
     }
 
     [Fact]
-    public void PatientFingerprintReflectsContent()
+    public void PatientRowFingerprintReflectsContent()
     {
         var unchanged = PatientAggregate.Create("P1", new Personal { YearOfBirth = 1980 }, null).Value;
         var changed = PatientAggregate.Create("P1", new Personal { YearOfBirth = 1990 }, null).Value;
-        Assert.NotEqual(unchanged.ComputeFingerprint(), changed.ComputeFingerprint());
+
+        Assert.NotEqual(
+            Fingerprint.Of(CatalogueMapper.ToPayload(unchanged, "mmci_patient_P1", "study")),
+            Fingerprint.Of(CatalogueMapper.ToPayload(changed, "mmci_patient_P1", "study")));
     }
 
     [Fact]
-    public void SequencingFingerprintReflectsEveryPreparation()
+    public void SequencingRowFingerprintReflectsEveryPreparation()
     {
         // A sample resequenced on a second run must read as changed, not as the same record: the
         // preparation list is what change detection has to see.
@@ -65,6 +69,8 @@ public sealed class FingerprintTests
         var once = SequencingAggregate.Create("PRED1", sampleId, [first]).Value;
         var twice = SequencingAggregate.Create("PRED1", sampleId, [first, second]).Value;
 
-        Assert.NotEqual(once.ComputeFingerprint(), twice.ComputeFingerprint());
+        Assert.NotEqual(
+            Fingerprint.Of(CatalogueMapper.ToPayload(once, "mmci_sample_S1")),
+            Fingerprint.Of(CatalogueMapper.ToPayload(twice, "mmci_sample_S1")));
     }
 }
