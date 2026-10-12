@@ -37,4 +37,16 @@ public sealed class CatalogueVocabularyTests
     [InlineData(null, "1", null)]
     public void StorageConditionsFollowThePreviousUploadersMapping(string? type, string? code, string? expected) =>
         Assert.Equal(expected, CatalogueVocabulary.StorageConditions(type, code));
+
+    [Theory]
+    [InlineData("NB552710", "Illumina NextSeq 550")]
+    [InlineData("nb552710", "Illumina NextSeq 550")]   // the source upper-cases it, but a term must not hinge on that
+    [InlineData("NS500123", "NextSeq 500")]
+    [InlineData("NB501234", "NextSeq 500")]
+    [InlineData(" M02340 ", "MiSeq")]
+    [InlineData("A00123", null)]                        // a NovaSeq: no term chosen for it
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void InstrumentModelComesFromTheSerialPrefix(string? instrumentId, string? expected) =>
+        Assert.Equal(expected, CatalogueVocabulary.SequencingInstrumentModel(instrumentId));
 }

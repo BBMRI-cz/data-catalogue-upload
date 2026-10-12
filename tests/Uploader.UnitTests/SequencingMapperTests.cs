@@ -193,7 +193,7 @@ public sealed class SequencingMapperTests
         {
             SampleType = "dna",
             SampleIndex = 3,
-            InstrumentId = "M02340",
+            InstrumentModel = "MiSeq",
             Workflow = "GenerateFASTQ",
             LibraryPreparation = new LibraryPreparationDto
             {

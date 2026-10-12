@@ -56,6 +56,19 @@ public sealed class SequencingFetchTests
     }
 
     [Fact]
+    public async Task InstrumentModelComesFromTheInstrumentSerial()
+    {
+        var sequencing = await FetchAsync(RecordedResponse.Sequencing());
+
+        // The source serves the folder name ("NextSeq"), which is not a term; the serial tells the
+        // 550 apart from the 500.
+        Assert.Equal("MiSeq", Prepared(sequencing, "240104_M02340_0399_LCBRW").Sequencing!.SequencingInstrumentModel);
+        Assert.Equal(
+            "Illumina NextSeq 550",
+            Prepared(sequencing, "240102_NB552710_0064_AHG7L").Sequencing!.SequencingInstrumentModel);
+    }
+
+    [Fact]
     public async Task ReadDepthIsRoundedFromTheServedDecimal()
     {
         var run = Prepared(await FetchAsync(RecordedResponse.Sequencing()), "240104_M02340_0399_LCBRW").Sequencing!;

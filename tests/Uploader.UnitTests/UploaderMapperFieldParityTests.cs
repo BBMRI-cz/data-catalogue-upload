@@ -167,7 +167,7 @@ public sealed class UploaderMapperFieldParityTests
                         RunDate = "2021-05-05",
                         Platform = "Illumina",
                         InstrumentModel = "NovaSeq",
-                        InstrumentId = "NB1",
+                        InstrumentId = "NB552710",
                         FlowcellId = "FC1",
                         Assay = "KAPA HyperPlus",
                         Workflow = "GenerateFASTQ",
@@ -259,7 +259,8 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("sampleprep_p0001_R1", run.BelongsToSamplePreparation);
         Assert.Equal("2021-05-05", run.SequencingDate);
         Assert.Equal("Illumina platform", run.SequencingPlatform);
-        Assert.Equal("NovaSeq", run.SequencingInstrumentModel);
+        // From the instrument serial, not the served "NovaSeq" (the folder the run was filed under).
+        Assert.Equal("Illumina NextSeq 550", run.SequencingInstrumentModel);
         Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
         Assert.Equal(30, run.MedianReadDepth);
         Assert.Equal(149, run.ObservedReadLength);
