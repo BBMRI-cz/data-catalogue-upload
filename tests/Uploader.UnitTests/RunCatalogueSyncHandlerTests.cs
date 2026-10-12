@@ -1,3 +1,4 @@
+using ErrorOr;
 using Microsoft.Extensions.Logging.Abstractions;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Features.Sync;
@@ -347,6 +348,87 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(1, result.Value.Deleted);
         Assert.True(state.Sequencing["PRED1"].IsDeleted);
     }
+
+    /// <summary>
+    /// A predictive number belongs to the case, so every sample from one surgery carries it. Its
+    /// sequencing is fetched once and hangs from the tumour tissue rather than from each sample in turn.
+    /// </summary>
+    [Fact]
+    public async Task SamplesSharingAPredictiveNumberAreSequencedOnceUnderTheTumour()
+    {
+        var source = new FakeSourceDataGateway([CasePatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+
+        await Run(source, catalogue, state);
+
+        Assert.Equal(["PRED1"], source.SequencingRequests);
+        var payload = Assert.Single(catalogue.SequencingPayloads);
+        Assert.Equal("mmci_sample_TUMOUR", payload.SampleId);
+        Assert.Equal("mmci_biospecimen_TUMOUR", Assert.Single(payload.SamplePreparations).BelongsToBiospecimen);
+        Assert.Equal("TUMOUR", state.Sequencing["PRED1"].SampleId.Value);
+    }
+
+    /// <summary>
+    /// Built once per sample, the copies of a shared number's sequencing took turns on one sync record,
+    /// so a run with nothing changed still re-sent all but one of them.
+    /// </summary>
+    [Fact]
+    public async Task ASecondRunOverASharedPredictiveNumberSendsNothing()
+    {
+        var source = new FakeSourceDataGateway([CasePatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var state = new InMemorySyncStateRepository();
+        await Run(source, new FakeCatalogueGateway(), state);
+
+        var catalogue = new FakeCatalogueGateway();
+        var result = await Run(source, catalogue, state);
+
+        Assert.Equal(0, result.Value.Uploaded);
+        Assert.Equal(["study:study_1"], catalogue.Upserts);
+    }
+
+    /// <summary>
+    /// The record names the sample the rows were written under, so a delete looks where they hang. When
+    /// each sample took a turn, the record could name one sample while the rows hung from another.
+    /// </summary>
+    [Fact]
+    public async Task ASharedNumberThatTurnsMammaPrintOnlyIsDeletedUnderItsOwner()
+    {
+        var source = new FakeSourceDataGateway([CasePatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var state = new InMemorySyncStateRepository();
+        await Run(source, new FakeCatalogueGateway(), state);
+
+        source.Sequencing["PRED1"] = SequencingWithOneRun(
+            new SequencingRunDto { RunId = "R1", Platform = "Illumina", SourceClass = "mamma-print" });
+        var catalogue = new FakeCatalogueGateway();
+        await Run(source, catalogue, state);
+
+        Assert.Equal(["sequencing:mmci_sample_TUMOUR"], catalogue.Deletes);
+        Assert.True(state.Sequencing["PRED1"].IsDeleted);
+    }
+
+    private static Task<ErrorOr<RunCatalogueSyncCommandResult>> Run(
+        FakeSourceDataGateway source,
+        FakeCatalogueGateway catalogue,
+        InMemorySyncStateRepository state) =>
+        CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None).AsTask();
+
+    /// <summary>One surgery: serum, healthy tissue and the tumour, all carrying the same predictive number.</summary>
+    private static PatientDto CasePatient() => new()
+    {
+        PatientId = "P1",
+        Consent = true,
+        Samples =
+        [
+            new SampleDto { SampleId = "SERUM", Type = "serum", MaterialType = "K", PredictiveNumber = "PRED1" },
+            new SampleDto { SampleId = "HEALTHY", Type = "tissue", MaterialType = "4", PredictiveNumber = "PRED1" },
+            new SampleDto { SampleId = "TUMOUR", Type = "tissue", MaterialType = "1", PredictiveNumber = "PRED1" },
+        ],
+    };
 
     private static SequencingDto SequencingWithOneRun(SequencingRunDto run) => new()
     {
