@@ -76,6 +76,25 @@ public static class CatalogueVocabulary
         _ => null,
     };
 
+    private const string Cryotube = "Cryotube 1–2mL Programmable freezing to <-135°C";
+    private const string PpTube = "PP tube 0.5–2mL (-35) to (-18)°C";
+
+    /// <summary>
+    /// <c>Biospecimens.StorageConditions</c>. The ontology names a tube and a temperature together
+    /// and the export names neither, so this is the previous uploader's mapping from the material
+    /// code, taken over as it was (<c>miseq_sample_metadata_collector.py</c>). The terms carry an en
+    /// dash (<c>1–2mL</c>), not a hyphen.
+    /// </summary>
+    public static string? StorageConditions(string? sampleType, string? code) => (sampleType, code) switch
+    {
+        (BiobankMapping.TissueType, "1" or "2" or "3" or "4" or "5" or "7") => Cryotube,
+        (BiobankMapping.SerumType, "C" or "K" or "L" or "PD" or "SD" or "T" or "PR") => Cryotube,
+        (BiobankMapping.GenomeType, "gD" or "PK") => PpTube,
+
+        // RNAlater tissue (53-56) and serum S/PS: the previous uploader named no tube for them.
+        _ => null,
+    };
+
     /// <summary>
     /// <c>Personal.GenderAtBirth</c>. The biobank records a sex; the ontology is GSSO, which spells
     /// it as an assignment at birth.

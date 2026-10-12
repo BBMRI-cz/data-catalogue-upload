@@ -47,16 +47,13 @@ public static class SampleMapper
         PathologicalState = CatalogueVocabulary.PathologicalState(dto.Type, dto.MaterialType),
     };
 
-    /// <summary>
-    /// The stored form of the sample. <c>StorageConditions</c> is deliberately absent: the
-    /// ontology's terms name a container and a temperature range together ("Cryotube 1-2mL LN"),
-    /// and the export says nothing about the container.
-    /// </summary>
+    /// <summary>The stored form of the sample.</summary>
     private static Biospecimen ToBiospecimen(SampleDto dto, string? biobank) => new()
     {
         BiospecimenIdentifier = BiobankMapping.BiospecimenIdentifier(dto.SampleId),
         DerivedFromMaterial = dto.SampleId,
         BiospecimenForm = CatalogueVocabulary.BiospecimenForm(dto.Type, dto.MaterialType),
+        StorageConditions = CatalogueVocabulary.StorageConditions(dto.Type, dto.MaterialType),
 
         // What a researcher could still request, not what was once collected.
         Quantity = dto.AvailableSamplesNo,
