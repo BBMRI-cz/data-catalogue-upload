@@ -99,11 +99,9 @@ public static class CatalogueMapper
                 ClinicalIdentifier = BiobankMapping.ClinicalIdentifier(patientPseudonym),
                 BelongsToPerson = patientPseudonym,
 
-                // ICD-10, and the catalogue's Diagnosis ontology holds Orphanet terms. Nothing here
-                // would resolve, so the column goes out empty rather than failing the row - see
-                // docs/catalogue-api-contract.md. The codes stay in the domain for the crosswalk
-                // that will eventually fill this.
-                Diagnosis = null,
+                // ICD-10 codes with the dot already put in (C50.9), which is how the catalogue's
+                // Diagnosis ontology spells its ICD-10 terms. Z codes (Z12.9, screening) go too.
+                Diagnosis = clinical.Diagnosis,
                 AgeAtDiagnosis = clinical.AgeAtDiagnosis,
                 ClinicalTimepoint = clinical.ClinicalTimepoint,
                 DiseaseStage = clinical.DiseaseStage,

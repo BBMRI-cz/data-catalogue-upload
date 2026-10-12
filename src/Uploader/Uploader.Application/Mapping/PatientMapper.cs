@@ -33,9 +33,7 @@ public static class PatientMapper
         ClinicalIdentifier = BiobankMapping.ClinicalIdentifier(dto.PatientId),
         BelongsToPerson = dto.PatientId,
 
-        // The catalogue's Diagnosis ontology is Orphanet and these are ICD-10, so nothing here can
-        // reference a term today. Kept because the codes are what a crosswalk would start from, and
-        // because they belong in the fingerprint: a patient whose diagnoses change has changed.
+        // ICD-10, which the catalogue's Diagnosis ontology carries alongside Orphanet.
         Diagnosis = Diagnoses(dto),
         AgeAtDiagnosis = BiobankMapping.AgeInYears(dto.BirthYear, dto.BirthMonth, EarliestEvent(dto)),
     };
