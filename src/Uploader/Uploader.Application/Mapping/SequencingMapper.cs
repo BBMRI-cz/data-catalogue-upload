@@ -24,9 +24,8 @@ namespace Uploader.Application.Mapping;
 /// <see cref="SequencingRun.OtherQualityMetrics"/>, see <see cref="SequencingMapping"/>.
 /// </para>
 /// <para>
-/// <b>FAIR fields left null</b> for want of a source: <c>PartiallySequencedGenes</c> (the panel's
-/// genes are its full-coverage set), <c>ObservedInsertSize</c>, <c>PercentageTr20</c> and
-/// <c>AlgorithmsUsed</c>.
+/// <b>FAIR fields left null</b> for want of a source: <c>ObservedInsertSize</c>,
+/// <c>PercentageTr20</c> and <c>AlgorithmsUsed</c>.
 /// </para>
 /// <para>
 /// <b>Ontology columns carried raw</b>: the kits and the assay-derived method are the source's own
@@ -58,6 +57,7 @@ public static class SequencingMapper
     {
         var preparationId = SequencingMapping.Identifier(SamplePrepModule, sample.SampleId, run.RunId);
         var library = run.LibraryPreparation;
+        var (fullySequenced, partiallySequenced) = SplitGenes(library?.Panel?.Genes);
 
         return new SamplePreparation
         {
@@ -72,15 +72,39 @@ public static class SequencingMapper
             PcrFree = library?.PcrFree,
             TargetEnrichmentKit = library?.TargetEnrichmentKit,
 
-            // The panel's gene list is its full-coverage set — the source column spells that out
-            // ("Genes (*all coding regions covered)"), so there is no partial set to separate.
-            FullySequencedGenes = library?.Panel?.Genes,
-            PartiallySequencedGenes = null,
+            FullySequencedGenes = fullySequenced,
+            PartiallySequencedGenes = partiallySequenced,
             UmisPresent = library?.UmiPresent,
             IntendedInsertSize = library?.IntendedInsertSize,
             IntendedReadLength = library?.IntendedReadLength,
             Sequencing = ToSequencingRun(sample, run, preparationId),
         };
+    }
+
+    /// <summary>
+    /// The libraries table marks a gene whose coding regions are all covered with a star
+    /// ("Genes (*all coding regions covered)"), and the sequencing API keeps the star in the symbol.
+    /// A starred gene is fully sequenced, the rest partially; the star comes off, because
+    /// <c>BRCA1*</c> is not an HGNC term and the catalogue would drop it.
+    /// </summary>
+    private static (IReadOnlyList<string>? Fully, IReadOnlyList<string>? Partially) SplitGenes(
+        IReadOnlyList<string>? genes)
+    {
+        var fully = new List<string>();
+        var partially = new List<string>();
+
+        foreach (var gene in genes ?? [])
+        {
+            var symbol = gene.TrimEnd('*');
+            if (symbol.Length == 0)
+            {
+                continue; // a stray star, not a gene
+            }
+
+            (symbol.Length < gene.Length ? fully : partially).Add(symbol);
+        }
+
+        return (fully.Count == 0 ? null : fully, partially.Count == 0 ? null : partially);
     }
 
     private static SequencingRun ToSequencingRun(
