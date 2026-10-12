@@ -139,9 +139,11 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal(3, b.Quantity);
         Assert.Equal("Available", b.Availability);
 
-        // Never served. StorageConditions is the interesting one: the ontology names a container
-        // and a temperature together ("Cryotube 1-2mL LN") and the export names neither.
-        Assert.Null(b.StorageConditions);
+        // Derived from the material code by the previous uploader's mapping: the export names
+        // neither the tube nor the temperature.
+        Assert.Equal("Cryotube 1–2mL Programmable freezing to <-135°C", b.StorageConditions);
+
+        // Never served.
         Assert.Null(b.PercentageTumorCells);
         Assert.Null(b.NameOfFixative);
         Assert.Null(b.EmbeddingMedium);
