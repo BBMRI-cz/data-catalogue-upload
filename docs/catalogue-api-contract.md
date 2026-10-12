@@ -173,22 +173,11 @@ Contents as loaded in `FairGenomesTest`:
 | `FullySequencedGenes`, `MolecularDiagnosisGene` | 19218 | HGNC symbols | yes, panel gene symbols |
 | `AnatomicalSource` | 13843 | UBERON/NCIT | no source field today |
 | `ManagingBiobank`, `PrimaryAffiliatedInstitute` | 244 | institute list | check MMCI is present |
-| **`Diagnosis`** | 22042 | **Orphanet only** | **no — see below** |
+| `Diagnosis` | 22042 Orphanet + 12326 ICD-10 | Orphanet, ICD-10 | yes, ICD-10 with the dot (`C50.9`, `Z12.9`) |
 
 Every ontology also carries the HL7 nullflavor terms (`Unknown (UNK, nullflavor)`,
 `Not applicable (NA, nullflavor)`, ...) from the schema's `lookupGlobalOptions`, giving a legal way
 to state "not known" rather than omitting the column.
-
-### Open question: `Diagnosis` is Orphanet, our data is ICD-10
-
-`Diagnosis` holds 22042 Orphanet rare-disease terms (`Alexander disease`, code `58`, codesystem
-`Orphanet`). The biobank serves ICD-10 oncology codes, and no usable ICD-10 to Orphanet crosswalk
-exists for common tumours. The YAML anticipated other coding systems — it chose `EDAM:data_3667`
-over `data_2800` explicitly *"to allow alternative disease coding systems (e.g. ICD or SNOMED)"* —
-but only Orphanet terms are loaded.
-
-**Until the schema owner loads ICD-10 into `Diagnosis`, `Clinical.diagnosis` is left empty.** This
-is the one field the catalogue cannot currently receive from us.
 
 ## 8. The production schema is a different model
 
