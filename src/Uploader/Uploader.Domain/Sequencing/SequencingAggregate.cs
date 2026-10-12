@@ -21,9 +21,6 @@ public sealed class SequencingAggregate : AggregateRoot<SequencingId>
     public SampleId SampleId { get; private init; }
     public IReadOnlyList<SamplePreparation> Preparations { get; private init; } = [];
 
-    /// <summary>Fingerprint over the sample preparations.</summary>
-    public Fingerprint ComputeFingerprint() => Fingerprint.Of(Preparations);
-
     public static ErrorOr<SequencingAggregate> Create(
         string? id,
         SampleId sampleId,

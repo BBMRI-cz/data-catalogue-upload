@@ -136,7 +136,7 @@ internal sealed class RunCatalogueSyncCommandHandler
             var pseudonyms = await ResolvePseudonymsAsync(data, cancellationToken);
 
             var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
-            var operations = _planner.Plan(data, existing);
+            var operations = _planner.Plan(data, existing, aggregate => PayloadFingerprint(aggregate, pseudonyms));
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
             // Still a skip in the summary, as it always was.
@@ -235,14 +235,13 @@ internal sealed class RunCatalogueSyncCommandHandler
         operation switch
         {
             PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(
-                CatalogueMapper.ToPayload(patient, pseudonyms.Patient, _study.Identifier), cancellationToken),
+                PatientPayload(patient, pseudonyms), cancellationToken),
 
             SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(
-                CatalogueMapper.ToPayload(sample, pseudonyms.Sample(sample.Id), pseudonyms.Patient),
-                cancellationToken),
+                SamplePayload(sample, pseudonyms), cancellationToken),
 
             SequencingOperation { Sequencing: { } sequencing } => _catalogueGateway.UpsertSequencingAsync(
-                CatalogueMapper.ToPayload(sequencing, pseudonyms.Sample(sequencing.SampleId)), cancellationToken),
+                SequencingPayload(sequencing, pseudonyms), cancellationToken),
 
             // No WSI or radiology source is wired yet, so neither of these can carry data today. If
             // one ever answers, its identifiers are still the real bioptic and accession numbers and
@@ -256,6 +255,39 @@ internal sealed class RunCatalogueSyncCommandHandler
             // carry their aggregate. Reaching here is a programmer error, not bad source data.
             _ => throw new InvalidOperationException($"Unsupported operation for upsert: {operation.GetType().Name}"),
         };
+
+    /// <summary>
+    /// What the planner decides a re-send on: the row the catalogue would receive, not the aggregate
+    /// it is built from. A mapping fix or a new study id changes the row while the source data stays
+    /// the same, and a fingerprint of the aggregate would skip that row on every run. The row is
+    /// built by the same helper the upsert uses, so what is hashed is what is sent.
+    /// </summary>
+    private Fingerprint PayloadFingerprint(object aggregate, PatientPseudonyms pseudonyms) =>
+        aggregate switch
+        {
+            PatientAggregate patient => Fingerprint.Of(PatientPayload(patient, pseudonyms)),
+            SampleAggregate sample => Fingerprint.Of(SamplePayload(sample, pseudonyms)),
+            SequencingAggregate sequencing => Fingerprint.Of(SequencingPayload(sequencing, pseudonyms)),
+
+            // ponytail: no catalogue row exists for these until WSI and radiology are pseudonymized,
+            // and their upserts are refused, so the aggregate is all there is to compare.
+            WsiAggregate wsi => wsi.ComputeFingerprint(),
+            ImagingStudyAggregate study => study.ComputeFingerprint(),
+
+            // Unreachable: the planner only fingerprints the five aggregates above.
+            _ => throw new InvalidOperationException($"No fingerprint for {aggregate.GetType().Name}"),
+        };
+
+    private CataloguePatientPayload PatientPayload(PatientAggregate patient, PatientPseudonyms pseudonyms) =>
+        CatalogueMapper.ToPayload(patient, pseudonyms.Patient, _study.Identifier);
+
+    private static CatalogueSamplePayload SamplePayload(SampleAggregate sample, PatientPseudonyms pseudonyms) =>
+        CatalogueMapper.ToPayload(sample, pseudonyms.Sample(sample.Id), pseudonyms.Patient);
+
+    private static CatalogueSequencingPayload SequencingPayload(
+        SequencingAggregate sequencing,
+        PatientPseudonyms pseudonyms) =>
+        CatalogueMapper.ToPayload(sequencing, pseudonyms.Sample(sequencing.SampleId));
 
     /// <summary>
     /// Removes one aggregate's rows from the catalogue. The planner already ordered the operations
