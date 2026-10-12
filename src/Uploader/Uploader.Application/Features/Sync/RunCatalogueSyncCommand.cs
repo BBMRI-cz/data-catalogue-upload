@@ -458,7 +458,12 @@ internal sealed class RunCatalogueSyncCommandHandler
                         return sequencingResult.Errors;
                     }
 
-                    sequencings.Add(sequencingResult.Value);
+                    // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner
+                    // deletes this sample's published sequencing rows; the sample itself stays.
+                    if (sequencingResult.Value.Preparations.Count > 0)
+                    {
+                        sequencings.Add(sequencingResult.Value);
+                    }
                 }
             }
 

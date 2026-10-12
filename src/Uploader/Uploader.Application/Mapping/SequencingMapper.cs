@@ -9,7 +9,8 @@ namespace Uploader.Application.Mapping;
 /// Maps the sequencing API's response onto the <see cref="SequencingAggregate"/>. The source serves
 /// its own model — samples, runs, library preparation, panel, files and analyses — and this is where
 /// it becomes FAIR Genomes: one <see cref="SamplePreparation"/> per (sample, run) pair, each carrying
-/// its run metadata and that run's analyses.
+/// its run metadata and that run's analyses. MammaPrint runs are left out; <c>source_class</c> and
+/// <c>experiment_name</c> are read only to recognise them.
 /// <para>
 /// <b>Served but deliberately dropped</b>, because FAIR Genomes has no field for them and the
 /// catalogue consumes none: the run-sample's <c>files</c> (the FASTQ reads — FAIR has no file
@@ -44,15 +45,27 @@ public static class SequencingMapper
         SequencingAggregate.Create(id.Value, sampleId, ToPreparations(dto, sampleId));
 
     /// <summary>
-    /// One preparation per (sample, run) pair. A predictive number that matches nothing answers with
-    /// an empty sample list, which yields no preparations rather than an empty placeholder.
+    /// One preparation per (sample, run) pair, MammaPrint runs left out. A predictive number that
+    /// matches nothing answers with an empty sample list, which yields no preparations rather than an
+    /// empty placeholder.
     /// </summary>
     private static List<SamplePreparation> ToPreparations(SequencingDto dto, SampleId sampleId) =>
     [
         .. from sample in dto.Samples ?? []
            from run in sample.Runs ?? []
+           where !IsMammaPrint(run)
            select ToPreparation(sample, run, sampleId),
     ];
+
+    /// <summary>
+    /// MammaPrint is a separate assay that never belonged in the catalogue; the previous uploader read
+    /// only <c>MiSEQ/complete-runs</c> and <c>NextSeq</c>. The sequencing API serves it like any other
+    /// run, so it is left out here: by the <c>mamma-print</c> subtype it is filed under, or by its
+    /// <c>MP_</c> experiment name for the one filed under <c>complete-runs</c>.
+    /// </summary>
+    private static bool IsMammaPrint(SequencingRunDto run) =>
+        string.Equals(run.SourceClass, "mamma-print", StringComparison.OrdinalIgnoreCase)
+        || run.ExperimentName?.StartsWith("MP_", StringComparison.OrdinalIgnoreCase) == true;
 
     private static SamplePreparation ToPreparation(SequencingSampleDto sample, SequencingRunDto run, SampleId sampleId)
     {

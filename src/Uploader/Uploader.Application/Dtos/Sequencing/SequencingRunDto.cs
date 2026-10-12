@@ -16,6 +16,8 @@ public sealed record SequencingRunDto
     public string? FlowcellId { get; init; }
     public string? Assay { get; init; }
     public string? Workflow { get; init; }
+    public string? SourceClass { get; init; }
+    public string? ExperimentName { get; init; }
     public double? PercentageQ30 { get; init; }
     public long? ClusterCountPassingFilter { get; init; }
     public double? PercentageClustersPassingFilter { get; init; }
