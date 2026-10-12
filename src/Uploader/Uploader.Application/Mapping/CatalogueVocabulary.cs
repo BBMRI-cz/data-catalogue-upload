@@ -144,6 +144,21 @@ public static class CatalogueVocabulary
     public static string? SequencingPlatform(string? platform) =>
         platform is not null && Platforms.TryGetValue(platform.Trim(), out var name) ? name : null;
 
+    /// <summary>
+    /// <c>Sequencing.SequencingInstrumentModel</c>, from the instrument's serial number. The source's
+    /// own model is the folder the run was filed under (<c>MiSeq</c>, <c>NextSeq</c>), and the ontology
+    /// has no bare <c>NextSeq</c>: it tells the 500 from the 550, and so does the serial prefix.
+    /// </summary>
+    public static string? SequencingInstrumentModel(string? instrumentId) =>
+        instrumentId?.Trim().ToUpperInvariant() switch
+        {
+            { } id when id.StartsWith("NB55", StringComparison.Ordinal) => "Illumina NextSeq 550",
+            { } id when id.StartsWith("NS500", StringComparison.Ordinal)
+                || id.StartsWith("NB501", StringComparison.Ordinal) => "NextSeq 500",
+            { } id when id.StartsWith("M0", StringComparison.Ordinal) => "MiSeq",
+            _ => null,
+        };
+
     private static readonly FrozenDictionary<string, string> FileFormats =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
