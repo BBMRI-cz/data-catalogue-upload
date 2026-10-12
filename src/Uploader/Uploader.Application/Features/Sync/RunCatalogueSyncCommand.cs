@@ -131,11 +131,12 @@ internal sealed class RunCatalogueSyncCommandHandler
             var data = built.Value;
             seenPatientIds.Add(data.Patient.Id);
 
+            var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
+
             // Resolved once per patient, before anything is planned: every payload built below
             // publishes these in place of the real ids, while the sync state keeps the real ones.
-            var pseudonyms = await ResolvePseudonymsAsync(data, cancellationToken);
+            var pseudonyms = await ResolvePseudonymsAsync(data, existing, cancellationToken);
 
-            var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
             var operations = _planner.Plan(data, existing, aggregate => PayloadFingerprint(aggregate, pseudonyms));
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
@@ -157,18 +158,26 @@ internal sealed class RunCatalogueSyncCommandHandler
         return result;
     }
 
+    /// <summary>
+    /// The samples the source lists now, and those the sync state still holds: a sample that left
+    /// the source - all of them, when consent is withdrawn - is deleted under its pseudonym.
+    /// </summary>
     private async Task<PatientPseudonyms> ResolvePseudonymsAsync(
         PatientCatalogueData data,
+        PatientSyncStates existing,
         CancellationToken cancellationToken)
     {
         var patient = await _pseudonyms.PseudonymizeAsync(
             PseudonymKind.Patient, data.Patient.Id.Value, cancellationToken);
 
         var samples = new Dictionary<SampleId, string>();
-        foreach (var sample in data.Samples)
+        foreach (var sampleId in data.Samples.Select(sample => sample.Id).Concat(existing.Samples.Keys))
         {
-            samples[sample.Id] = await _pseudonyms.PseudonymizeAsync(
-                PseudonymKind.Sample, sample.Id.Value, cancellationToken);
+            if (!samples.ContainsKey(sampleId))
+            {
+                samples[sampleId] = await _pseudonyms.PseudonymizeAsync(
+                    PseudonymKind.Sample, sampleId.Value, cancellationToken);
+            }
         }
 
         return new PatientPseudonyms(patient, samples);
