@@ -24,9 +24,10 @@ public sealed class SequencingFetchTests
     {
         var sequencing = await FetchAsync(RecordedResponse.Sequencing());
 
-        // One sample sequenced three times: a preparation per run, none collapsed onto another.
-        Assert.Equal(3, sequencing.Preparations.Count);
-        Assert.Equal(3, sequencing.Preparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
+        // One sample sequenced three times, once for MammaPrint: a preparation per remaining run, none
+        // collapsed onto another.
+        Assert.Equal(2, sequencing.Preparations.Count);
+        Assert.Equal(2, sequencing.Preparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
 
         var prepared = Prepared(sequencing, "240104_M02340_0399_LCBRW");
         Assert.Equal("sampleprep_p0001_240104_M02340_0399_LCBRW", prepared.SampleprepIdentifier);
@@ -121,17 +122,15 @@ public sealed class SequencingFetchTests
     }
 
     [Fact]
-    public async Task RunWithoutLibraryPreparationOrAnalysisStillArrives()
+    public async Task AMammaPrintRunNeverBecomesAPreparation()
     {
-        var prepared = Prepared(await FetchAsync(RecordedResponse.Sequencing()), "240430_M02340_0412_ABCDE");
+        var sequencing = await FetchAsync(RecordedResponse.Sequencing());
 
-        // The fixture's third run has neither a resolved library nor an analysis: the preparation is
-        // still built and identified, with the fields the source did not state left null.
-        Assert.Equal("sampleprep_p0001_240430_M02340_0412_ABCDE", prepared.SampleprepIdentifier);
-        Assert.Null(prepared.LibraryPreparationKit);
-        Assert.Null(prepared.FullySequencedGenes);
-        Assert.Empty(prepared.Sequencing!.Analyses);
-        Assert.Null(prepared.Sequencing.MedianReadDepth);
+        // The fixture's third run is filed under complete-runs, and only its MP_18_2024 experiment
+        // name says it is MammaPrint. The sequencing API serves it; the catalogue does not get it.
+        Assert.DoesNotContain(
+            sequencing.Preparations,
+            prep => prep.SampleprepIdentifier!.EndsWith("240430_M02340_0412_ABCDE", StringComparison.Ordinal));
     }
 
     [Fact]

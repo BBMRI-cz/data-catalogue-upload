@@ -53,6 +53,31 @@ public sealed class SequencingMapperTests
         Assert.Empty(mapped.Value.Preparations);
     }
 
+    [Theory]
+    [InlineData("mamma-print", "MammaPrint-240515")]   // the subtype alone gives it away
+    [InlineData("complete-runs", "MP_18_2024")]        // filed with the complete runs: only the name does
+    [InlineData("complete-runs", "mp_18_2024")]
+    public void MammaPrintRunsAreLeftOut(string sourceClass, string experimentName)
+    {
+        var mammaPrint = Run("R2") with { SourceClass = sourceClass, ExperimentName = experimentName };
+
+        var preparations = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"), mammaPrint)] })
+            .Preparations;
+
+        Assert.Equal(["sampleprep_p0001_R1"], preparations.Select(prep => prep.SampleprepIdentifier));
+    }
+
+    [Theory]
+    [InlineData("complete-runs", "HyperCap-EP-240103")]
+    [InlineData("nextseq", "TSO500_Run2024_9")]
+    [InlineData("missing-analysis", null)]
+    public void OtherRunsAreKept(string sourceClass, string? experimentName)
+    {
+        var run = Run("R1") with { SourceClass = sourceClass, ExperimentName = experimentName };
+
+        Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
+    }
+
     [Fact]
     public void StarredPanelGenesAreFullySequencedAndTheRestPartially()
     {

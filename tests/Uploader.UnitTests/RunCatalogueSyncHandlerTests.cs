@@ -323,6 +323,37 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(SyncStatus.Synced, state.Sequencing["PRED1"].Status);
     }
 
+    /// <summary>
+    /// MammaPrint rows published before the uploader left them out need no manual cleanup: a sample
+    /// whose only run is MammaPrint yields no sequencing, and what was published for it is deleted.
+    /// </summary>
+    [Fact]
+    public async Task ASampleSequencedOnlyForMammaPrintLosesItsPublishedSequencing()
+    {
+        var source = new FakeSourceDataGateway([SequencedPatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var state = new InMemorySyncStateRepository();
+        await CreateHandler(source, new FakeCatalogueGateway(), state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        source.Sequencing["PRED1"] = SequencingWithOneRun(
+            new SequencingRunDto { RunId = "R1", Platform = "Illumina", SourceClass = "mamma-print" });
+        var catalogue = new FakeCatalogueGateway();
+        var result = await CreateHandler(source, catalogue, state, new FakeSyncRunRepository())
+            .Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.Equal(["sequencing:mmci_sample_S1"], catalogue.Deletes);
+        Assert.DoesNotContain("sequencing:mmci_sample_S1", catalogue.Upserts);
+        Assert.Equal(1, result.Value.Deleted);
+        Assert.True(state.Sequencing["PRED1"].IsDeleted);
+    }
+
+    private static SequencingDto SequencingWithOneRun(SequencingRunDto run) => new()
+    {
+        PredictiveNumber = "PRED1",
+        Samples = [new SequencingSampleDto { SampleId = "p0001", Runs = [run] }],
+    };
+
     [Fact]
     public async Task PatientWithoutSequencingIsNotAFailure()
     {
