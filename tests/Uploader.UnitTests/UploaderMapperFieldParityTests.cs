@@ -261,7 +261,7 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Equal("Illumina platform", run.SequencingPlatform);
         // From the instrument serial, not the served "NovaSeq" (the folder the run was filed under).
         Assert.Equal("Illumina NextSeq 550", run.SequencingInstrumentModel);
-        Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
+        Assert.Equal("Illumina Sequencing", run.SequencingMethod);   // not the served assay, a kit name
         Assert.Equal(30, run.MedianReadDepth);
         Assert.Equal(149, run.ObservedReadLength);
         Assert.Null(run.ObservedInsertSize);      // no source

@@ -273,7 +273,7 @@ public sealed class SequencingMapperTests
         Assert.Null(sequencing.SequencingDate);
         Assert.Null(sequencing.SequencingPlatform);
         Assert.Null(sequencing.SequencingInstrumentModel);
-        Assert.Null(sequencing.SequencingMethod);
+        Assert.Equal("Illumina Sequencing", sequencing.SequencingMethod);   // a constant, not run metadata
         Assert.Null(sequencing.PercentageQ30);
         Assert.Null(sequencing.OtherQualityMetrics);
         Assert.Empty(sequencing.Analyses);

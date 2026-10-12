@@ -52,7 +52,7 @@ public sealed class SequencingFetchTests
         Assert.Equal("2024-01-04", run.SequencingDate);
         Assert.Equal("Illumina platform", run.SequencingPlatform);
         Assert.Equal("MiSeq", run.SequencingInstrumentModel);
-        Assert.Equal("KAPA HyperPlus", run.SequencingMethod);
+        Assert.Equal("Illumina Sequencing", run.SequencingMethod);
         Assert.Equal(95.9, run.PercentageQ30);
     }
 
