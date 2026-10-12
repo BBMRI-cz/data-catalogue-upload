@@ -410,6 +410,29 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.True(state.Sequencing["PRED1"].IsDeleted);
     }
 
+    /// <summary>
+    /// A newest export with <c>consent="false"</c> lists the patient with no samples at all. The ones
+    /// published before are still deleted under their pseudonyms, sequencing first.
+    /// </summary>
+    [Fact]
+    public async Task APatientWhoWithdrawsConsentHasTheSamplesTheExportNoLongerListsDeleted()
+    {
+        var source = new FakeSourceDataGateway([SequencedPatient()]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto { RunId = "R1", Platform = "Illumina" });
+        var state = new InMemorySyncStateRepository();
+        await Run(source, new FakeCatalogueGateway(), state);
+
+        var withdrawn = new FakeSourceDataGateway([SequencedPatient() with { Consent = false, Samples = [] }]);
+        var catalogue = new FakeCatalogueGateway();
+        var result = await Run(withdrawn, catalogue, state);
+
+        Assert.Equal(
+            ["sequencing:mmci_sample_S1", "sample:mmci_sample_S1", "patient:mmci_patient_P1"],
+            catalogue.Deletes);
+        Assert.Equal(0, result.Value.Failed);
+        Assert.True(state.Patients["P1"].IsDeleted);
+    }
+
     private static Task<ErrorOr<RunCatalogueSyncCommandResult>> Run(
         FakeSourceDataGateway source,
         FakeCatalogueGateway catalogue,
