@@ -81,7 +81,21 @@ internal sealed class Emx2CatalogueGateway : ICatalogueGateway
             return saved;
         }
 
-        return await SaveAsync(payload.ExternalId, cancellationToken, (Emx2Tables.Analysis, analyses));
+        saved = await SaveAsync(payload.ExternalId, cancellationToken, (Emx2Tables.Analysis, analyses));
+        if (saved.IsError)
+        {
+            return saved;
+        }
+
+        // save only adds and overwrites, so a run the sample no longer has - a MammaPrint run left
+        // out, a run gone from the tree - would stay published. Remove what this payload did not send.
+        var sent = new Emx2Queries.Subtree(
+            [.. preparations.Select(preparation => preparation.SampleprepIdentifier).OfType<string>()],
+            [.. runs.Select(run => run.SequencingIdentifier).OfType<string>()],
+            [.. analyses.Select(analysis => analysis.AnalysisIdentifier).OfType<string>()]);
+        var pruned = await DeleteSequencingRowsAsync(payload.SampleId, keep: sent, cancellationToken);
+
+        return pruned.IsError ? pruned.Errors : saved;
     }
 
     public Task<ErrorOr<Deleted>> DeletePatientAsync(
@@ -101,13 +115,22 @@ internal sealed class Emx2CatalogueGateway : ICatalogueGateway
             (Emx2Tables.Biospecimens, Emx2Tables.BiospecimenKey, [BiobankMapping.BiospecimenIdentifier(samplePseudonym) ?? string.Empty]),
             (Emx2Tables.Material, Emx2Tables.MaterialKey, [samplePseudonym]));
 
-    public async Task<ErrorOr<Deleted>> DeleteSequencingAsync(
+    public Task<ErrorOr<Deleted>> DeleteSequencingAsync(
         string samplePseudonym,
+        CancellationToken cancellationToken) =>
+        DeleteSequencingRowsAsync(samplePseudonym, keep: new([], [], []), cancellationToken);
+
+    /// <summary>
+    /// Deletes the sample's published sequencing rows, except those in <paramref name="keep"/>.
+    /// Preparation, sequencing and analysis keys come from the run tree, not from anything the
+    /// uploader stores, so the only way to know which rows exist is to ask. One query walks the
+    /// biospecimen's REFBACK chain down to the analyses; deletes run child before parent.
+    /// </summary>
+    private async Task<ErrorOr<Deleted>> DeleteSequencingRowsAsync(
+        string samplePseudonym,
+        Emx2Queries.Subtree keep,
         CancellationToken cancellationToken)
     {
-        // Preparation, sequencing and analysis keys come from the run tree, not from anything the
-        // uploader stores, so the only way to know which rows exist is to ask. One query walks the
-        // biospecimen's REFBACK chain down to the analyses.
         var found = await _client.PostAsync(
             Emx2Queries.SequencingSubtree,
             new { key = BiobankMapping.BiospecimenIdentifier(samplePseudonym) },
@@ -117,17 +140,14 @@ internal sealed class Emx2CatalogueGateway : ICatalogueGateway
             return found.Errors;
         }
 
-        var subtree = Emx2Queries.ReadSequencingSubtree(found.Value);
-        if (subtree.Preparations.Count == 0)
-        {
-            return Result.Deleted;
-        }
+        var published = Emx2Queries.ReadSequencingSubtree(found.Value);
 
+        // DeleteAsync skips an empty key list, so nothing to remove sends nothing.
         return await DeleteAsync(
             cancellationToken,
-            (Emx2Tables.Analysis, Emx2Tables.AnalysisKey, subtree.Analyses),
-            (Emx2Tables.Sequencing, Emx2Tables.SequencingKey, subtree.Runs),
-            (Emx2Tables.SamplePreparation, Emx2Tables.PreparationKey, subtree.Preparations));
+            (Emx2Tables.Analysis, Emx2Tables.AnalysisKey, [.. published.Analyses.Except(keep.Analyses)]),
+            (Emx2Tables.Sequencing, Emx2Tables.SequencingKey, [.. published.Runs.Except(keep.Runs)]),
+            (Emx2Tables.SamplePreparation, Emx2Tables.PreparationKey, [.. published.Preparations.Except(keep.Preparations)]));
     }
 
     /// <summary>

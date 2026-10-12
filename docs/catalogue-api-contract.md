@@ -100,6 +100,11 @@ Dates and datetimes are `String` scalars — send ISO-8601.
 
 Use `save`. There is no create-then-amend dance.
 
+**`save` never removes a row the payload left out.** That matters for sequencing, where one sample
+is many rows (one preparation, sequencing and analysis set per run): a run the sample no longer has
+would stay published. So after saving a sample's sequencing the uploader reads what hangs off its
+biospecimen and deletes the rows it did not just send, child first.
+
 **`save` replaces the whole row; it does not merge.** Transcript step 3 sends a row without
 `genderAtBirth` and the previously stored value is gone, with `mg_insertedOn` moving too. Every
 `save` must carry the complete row as it should end up.
