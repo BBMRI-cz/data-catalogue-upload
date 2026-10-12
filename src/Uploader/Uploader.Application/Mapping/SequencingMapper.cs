@@ -19,19 +19,20 @@ namespace Uploader.Application.Mapping;
 /// <c>name</c>, <c>abbreviation</c>, <c>vendor</c>, <c>catalogue_code</c>, <c>target_regions_ref</c>),
 /// <c>sample_type</c>, <c>analysis_type</c>, <c>id_scheme</c>, <c>sample_index</c>,
 /// <c>instrument_model</c> (the folder the run was filed under; the model comes from <c>instrument_id</c>),
-/// <c>workflow</c>, and the echoed root <c>predictive_number</c> (already the
-/// aggregate's id). The run statistics FAIR does not name are not dropped — they are packed into
-/// <see cref="SequencingRun.OtherQualityMetrics"/>, see <see cref="SequencingMapping"/>.
+/// <c>assay</c> (it names a kit or an index set, not a method), <c>workflow</c>, and the echoed root
+/// <c>predictive_number</c> (already the aggregate's id). The run statistics FAIR does not name are
+/// not dropped — they are packed into <see cref="SequencingRun.OtherQualityMetrics"/>, see
+/// <see cref="SequencingMapping"/>.
 /// </para>
 /// <para>
 /// <b>FAIR fields left null</b> for want of a source: <c>ObservedInsertSize</c>,
 /// <c>PercentageTr20</c> and <c>AlgorithmsUsed</c>.
 /// </para>
 /// <para>
-/// <b>Ontology columns carried raw</b>: the kits and the assay-derived method are the source's own
-/// strings, because there is no code list to translate them from the way there is for a material
-/// code. The gateway checks each against the live ontology and drops the ones that are not terms,
-/// which costs a column rather than the row.
+/// <b>Ontology columns carried raw</b>: the kits are the source's own strings, because there is no
+/// code list to translate them from the way there is for a material code. The gateway checks each
+/// against the live ontology and drops the ones that are not terms, which costs a column rather than
+/// the row.
 /// </para>
 /// </summary>
 public static class SequencingMapper
@@ -126,9 +127,7 @@ public static class SequencingMapper
             SequencingPlatform = CatalogueVocabulary.SequencingPlatform(run.Platform),
             SequencingInstrumentModel = CatalogueVocabulary.SequencingInstrumentModel(run.InstrumentId),
 
-            // The sample sheet's assay is the closest the source comes to naming a method; the
-            // catalogue's lookup shapes it later, so it is carried raw.
-            SequencingMethod = run.Assay,
+            SequencingMethod = CatalogueVocabulary.SequencingMethod,
 
             // FAIR types the median depth as an integer; the source keeps the fraction it was given
             // (a mean over the region of interest) and leaves the rounding to whoever needs a whole

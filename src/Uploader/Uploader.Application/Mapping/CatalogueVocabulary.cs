@@ -132,6 +132,13 @@ public static class CatalogueVocabulary
     public static string? Institute(string? biobank) =>
         biobank is not null && Institutes.TryGetValue(biobank, out var name) ? name : null;
 
+    /// <summary>
+    /// <c>Sequencing.SequencingMethod</c>. The source has no method field - the sample sheet's assay
+    /// names a kit or an index set - and every MMCI run is Illumina sequencing by synthesis, so this
+    /// is the constant the previous uploader sent for MiSeq and NextSeq alike.
+    /// </summary>
+    public const string SequencingMethod = "Illumina Sequencing";
+
     private static readonly FrozenDictionary<string, string> Platforms =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
