@@ -17,6 +17,9 @@ internal sealed class FakeSourceDataGateway : ISourceDataGateway
     /// <summary>What the sequencing API answers with, keyed by predictive number.</summary>
     public Dictionary<string, SequencingDto> Sequencing { get; } = [];
 
+    /// <summary>Every predictive number the sequencing API was asked about, in order.</summary>
+    public List<string> SequencingRequests { get; } = [];
+
     /// <summary>
     /// Sources set to fail, by the names the handler reports them under: "biobank", "sequencing",
     /// "radiology", "wsi". The value is the error that source answers with, so a test can pick
@@ -44,10 +47,13 @@ internal sealed class FakeSourceDataGateway : ISourceDataGateway
             : ErrorOrFactory.From<IReadOnlyList<ImagingStudyDto>>(Array.Empty<ImagingStudyDto>()));
 
     public Task<ErrorOr<SequencingDto?>> FetchSequencingAsync(
-        string predictiveNumber, CancellationToken cancellationToken) =>
-        Task.FromResult(Failing.TryGetValue("sequencing", out var error)
+        string predictiveNumber, CancellationToken cancellationToken)
+    {
+        SequencingRequests.Add(predictiveNumber);
+        return Task.FromResult(Failing.TryGetValue("sequencing", out var error)
             ? (ErrorOr<SequencingDto?>)error
             : ErrorOrFactory.From(Sequencing.GetValueOrDefault(predictiveNumber)));
+    }
 
     public Task<ErrorOr<WsiDto?>> FetchWsiAsync(string biopticNumber, CancellationToken cancellationToken) =>
         Task.FromResult(Failing.TryGetValue("wsi", out var error)

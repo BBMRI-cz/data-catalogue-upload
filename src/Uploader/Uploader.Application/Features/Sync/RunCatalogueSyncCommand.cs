@@ -131,11 +131,12 @@ internal sealed class RunCatalogueSyncCommandHandler
             var data = built.Value;
             seenPatientIds.Add(data.Patient.Id);
 
+            var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
+
             // Resolved once per patient, before anything is planned: every payload built below
             // publishes these in place of the real ids, while the sync state keeps the real ones.
-            var pseudonyms = await ResolvePseudonymsAsync(data, cancellationToken);
+            var pseudonyms = await ResolvePseudonymsAsync(data, existing, cancellationToken);
 
-            var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
             var operations = _planner.Plan(data, existing, aggregate => PayloadFingerprint(aggregate, pseudonyms));
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
@@ -157,18 +158,26 @@ internal sealed class RunCatalogueSyncCommandHandler
         return result;
     }
 
+    /// <summary>
+    /// The samples the source lists now, and those the sync state still holds: a sample that left
+    /// the source - all of them, when consent is withdrawn - is deleted under its pseudonym.
+    /// </summary>
     private async Task<PatientPseudonyms> ResolvePseudonymsAsync(
         PatientCatalogueData data,
+        PatientSyncStates existing,
         CancellationToken cancellationToken)
     {
         var patient = await _pseudonyms.PseudonymizeAsync(
             PseudonymKind.Patient, data.Patient.Id.Value, cancellationToken);
 
         var samples = new Dictionary<SampleId, string>();
-        foreach (var sample in data.Samples)
+        foreach (var sampleId in data.Samples.Select(sample => sample.Id).Concat(existing.Samples.Keys))
         {
-            samples[sample.Id] = await _pseudonyms.PseudonymizeAsync(
-                PseudonymKind.Sample, sample.Id.Value, cancellationToken);
+            if (!samples.ContainsKey(sampleId))
+            {
+                samples[sampleId] = await _pseudonyms.PseudonymizeAsync(
+                    PseudonymKind.Sample, sampleId.Value, cancellationToken);
+            }
         }
 
         return new PatientPseudonyms(patient, samples);
@@ -426,6 +435,8 @@ internal sealed class RunCatalogueSyncCommandHandler
         var wsiComplete = true;
         var imagingComplete = true;
 
+        var sequenced = new List<(SequencingId Id, SampleDto Dto, SampleAggregate Sample)>();
+
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
             var sampleResult = SampleMapper.ToSample(rawSample, patient.Id, rawPatient.Biobank);
@@ -439,32 +450,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             if (sample.SequencingId is { } sequencingId)
             {
-                var fetched = await _sourceGateway.FetchSequencingAsync(sequencingId.Value, cancellationToken);
-
-                // A source this patient cannot reach costs the patient that source, not the run.
-                if (fetched.IsError)
-                {
-                    Report(result, "sequencing", rawPatient.PatientId, fetched.Errors[0]);
-                    sequencingComplete = false;
-                }
-
-                // A predictive number the sequencing API does not know answers 200 with an empty
-                // sample list. That is a normal answer, not a failure: no aggregate, no counter moved.
-                else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
-                {
-                    var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, sequencingId, sample.Id);
-                    if (sequencingResult.IsError)
-                    {
-                        return sequencingResult.Errors;
-                    }
-
-                    // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner
-                    // deletes this sample's published sequencing rows; the sample itself stays.
-                    if (sequencingResult.Value.Preparations.Count > 0)
-                    {
-                        sequencings.Add(sequencingResult.Value);
-                    }
-                }
+                sequenced.Add((sequencingId, rawSample, sample));
             }
 
             if (sample.WsiId is { } wsiId)
@@ -484,6 +470,41 @@ internal sealed class RunCatalogueSyncCommandHandler
                     }
 
                     wsis.Add(wsiResult.Value);
+                }
+            }
+        }
+
+        // A predictive number belongs to the case, so every sample from one surgery carries it. Its
+        // sequencing is fetched once and hangs from one owner: built once per sample, the copies shared
+        // one sync record, moved each other's biospecimen link on every run, and a delete looked under
+        // whichever sample the record happened to name last.
+        foreach (var shared in sequenced.GroupBy(entry => entry.Id))
+        {
+            var fetched = await _sourceGateway.FetchSequencingAsync(shared.Key.Value, cancellationToken);
+
+            // A source this patient cannot reach costs the patient that source, not the run.
+            if (fetched.IsError)
+            {
+                Report(result, "sequencing", rawPatient.PatientId, fetched.Errors[0]);
+                sequencingComplete = false;
+            }
+
+            // A predictive number the sequencing API does not know answers 200 with an empty sample
+            // list. That is a normal answer, not a failure: no aggregate, no counter moved.
+            else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
+            {
+                var owner = SequencingOwner.Choose(shared.Select(entry => (entry.Dto, entry.Sample)));
+                var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, shared.Key, owner.Id);
+                if (sequencingResult.IsError)
+                {
+                    return sequencingResult.Errors;
+                }
+
+                // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner deletes
+                // this number's published sequencing rows; the samples themselves stay.
+                if (sequencingResult.Value.Preparations.Count > 0)
+                {
+                    sequencings.Add(sequencingResult.Value);
                 }
             }
         }
