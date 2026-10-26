@@ -1,36 +1,19 @@
-using BiobankApi.Application.Features.Ingest;
-using Mediator;
 using Quartz;
 
 namespace BiobankApi.Web.Scheduling;
 
 /// <summary>
 /// Quartz job that runs the biobank ingestion pipeline on the configured schedule (weekly by
-/// default). Each run dispatches <see cref="IngestExportsCommand"/> and logs the summary. Failures
-/// are logged, never thrown, so a bad run does not stop the scheduler from firing again.
+/// default), through the same <see cref="IngestionRunner"/> as <c>POST /admin/ingest</c>, so the two
+/// never overlap. Failures are logged, never thrown, so a bad run does not stop the scheduler from
+/// firing again.
 /// </summary>
 [DisallowConcurrentExecution]
 internal sealed class IngestionJob : IJob
 {
-    private readonly ISender _sender;
-    private readonly ILogger<IngestionJob> _logger;
+    private readonly IngestionRunner _runner;
 
-    public IngestionJob(ISender sender, ILogger<IngestionJob> logger)
-    {
-        _sender = sender;
-        _logger = logger;
-    }
+    public IngestionJob(IngestionRunner runner) => _runner = runner;
 
-    public async Task Execute(IJobExecutionContext context)
-    {
-        var result = await _sender.Send(new IngestExportsCommand(), context.CancellationToken);
-        result.Switch(
-            success => _logger.LogInformation(
-                "Scheduled ingestion complete: {Ingested} ingested, {Failed} failed.",
-                success.Ingested,
-                success.Failed),
-            errors => _logger.LogError(
-                "Scheduled ingestion failed: {Errors}",
-                string.Join("; ", errors.Select(error => error.Description))));
-    }
+    public Task Execute(IJobExecutionContext context) => _runner.RunIfIdleAsync(context.CancellationToken);
 }

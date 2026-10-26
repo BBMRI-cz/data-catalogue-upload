@@ -25,6 +25,7 @@ public sealed class BiobankDbContext : DbContext
     public DbSet<SerumSampleEntity> SerumSamples => Set<SerumSampleEntity>();
     public DbSet<GenomeSampleEntity> GenomeSamples => Set<GenomeSampleEntity>();
     public DbSet<DiagnosticSpecimenEntity> DiagnosticSpecimens => Set<DiagnosticSpecimenEntity>();
+    public DbSet<IngestRunEntity> IngestRuns => Set<IngestRunEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,6 +38,12 @@ public sealed class BiobankDbContext : DbContext
             (left, right) => (left ?? new List<string>()).SequenceEqual(right ?? new List<string>()),
             value => value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item.GetHashCode(StringComparison.Ordinal))),
             value => value.ToList());
+
+        modelBuilder.Entity<IngestRunEntity>(builder =>
+        {
+            builder.ToTable("ingest_run");
+            builder.HasKey(run => run.Id);
+        });
 
         modelBuilder.Entity<PatientEntity>(builder =>
         {

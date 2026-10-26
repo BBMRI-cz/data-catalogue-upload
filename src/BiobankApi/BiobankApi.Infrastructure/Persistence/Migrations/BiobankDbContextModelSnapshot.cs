@@ -122,6 +122,35 @@ namespace BiobankApi.Infrastructure.Persistence.Migrations
                     b.ToTable("genome_sample", (string)null);
                 });
 
+            modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.IngestRunEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Errors")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Failure")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Ingested")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ingest_run", (string)null);
+                });
+
             modelBuilder.Entity("BiobankApi.Infrastructure.Persistence.Entities.PatientEntity", b =>
                 {
                     b.Property<string>("PatientId")
