@@ -61,6 +61,27 @@ public sealed class RunCatalogueSyncHandlerTests
     }
 
     [Fact]
+    public async Task UnpublishableStudyEndsTheRunWithItsReason()
+    {
+        // The study is sent first, so this is the earliest a run can end: it has to be in sync_run
+        // already, and say why it stopped rather than leave a bare failed count.
+        var catalogue = new FakeCatalogueGateway();
+        catalogue.FailUpsertTypes.Add("study");
+        var runs = new FakeSyncRunRepository();
+
+        var result = await CreateHandler(
+            new FakeSourceDataGateway([PatientWithSample("P1", "S1")]),
+            catalogue,
+            new InMemorySyncStateRepository(),
+            runs).Handle(new RunCatalogueSyncCommand(), CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal(runs.Finished!.RunId, runs.Started);
+        Assert.Equal("Cannot publish the study: study failed", runs.Finished.Failure);
+        Assert.Equal(["study:study_1"], catalogue.Upserts);
+    }
+
+    [Fact]
     public async Task RecordsFailureWhenUpsertFails()
     {
         var source = new FakeSourceDataGateway([PatientWithSample("P1", "S1")]);

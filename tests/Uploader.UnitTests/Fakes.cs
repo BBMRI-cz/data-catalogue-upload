@@ -214,13 +214,24 @@ internal sealed class InMemorySyncStateRepository : ISyncStateRepository
 
 internal sealed class FakeSyncRunRepository : ISyncRunRepository
 {
+    public string? Started { get; private set; }
+
     public RunCatalogueSyncCommandResult? Finished { get; private set; }
+
+    public Task StartAsync(string runId, CancellationToken cancellationToken)
+    {
+        Started = runId;
+        return Task.CompletedTask;
+    }
 
     public Task FinishAsync(RunCatalogueSyncCommandResult result, CancellationToken cancellationToken)
     {
         Finished = result;
         return Task.CompletedTask;
     }
+
+    public Task<SyncRun?> GetLatestAsync(CancellationToken cancellationToken) =>
+        throw new NotSupportedException("The handler never reads runs back.");
 }
 
 /// <summary>
