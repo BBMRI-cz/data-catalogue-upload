@@ -16,8 +16,11 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
 
+builder.Services.AddSingleton<IngestionRunner>();
+
 // Weekly in-process ingestion via Quartz (OS-independent: identical on Windows and Linux). The cron
-// is overridable with BIOBANK_INGEST_CRON for testing; POST /admin/ingest triggers a run on demand.
+// is overridable with BIOBANK_INGEST_CRON for testing; POST /admin/ingest triggers a run on demand,
+// through the same IngestionRunner, so the two never overlap.
 // Disabled with DisableScheduler=true: integration tests spin up many hosts in one process, and
 // Quartz's global static logging provider captures (then over-disposes) a per-host LoggerFactory.
 if (!builder.Configuration.GetValue<bool>("DisableScheduler"))

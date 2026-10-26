@@ -34,6 +34,12 @@ public sealed class RunCatalogueSyncCommandResult
     /// deployed and never counted here - it is not contacted at all.
     /// </summary>
     public int SourceUnavailable { get; set; }
+
+    /// <summary>
+    /// Why the run ended before it could sync anything, or null when it ran to the end. Per-record
+    /// problems are counted above, not reported here.
+    /// </summary>
+    public string? Failure { get; set; }
 }
 
 internal sealed class RunCatalogueSyncCommandHandler
@@ -77,6 +83,7 @@ internal sealed class RunCatalogueSyncCommandHandler
     {
         var runId = Guid.NewGuid().ToString();
         var result = new RunCatalogueSyncCommandResult(runId);
+        await _runRepository.StartAsync(runId, cancellationToken);
 
         // Personal references the study, so it has to exist before the first patient does.
         var study = await _catalogueGateway.UpsertStudyAsync(
@@ -84,6 +91,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         if (study.IsError)
         {
             result.Failed++;
+            result.Failure = $"Cannot publish the study: {study.Errors[0].Description}";
             _logger.LogError("Cannot publish the study: {Error}", study.Errors[0].Description);
             await _runRepository.FinishAsync(result, cancellationToken);
             return study.Errors;
@@ -95,6 +103,7 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Without the biobank there is no run to have: every patient comes from it. Record the
             // run so the outage is visible in sync_run, then report rather than throw.
             Record(result, fetched.Errors[0]);
+            result.Failure = $"Cannot list patients: {fetched.Errors[0].Description}";
             _logger.LogError("Cannot list patients: {Error}", fetched.Errors[0].Description);
             await _runRepository.FinishAsync(result, cancellationToken);
             return fetched.Errors;

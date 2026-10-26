@@ -1,47 +1,33 @@
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Application.Features.Ingest;
 using SequencingApi.Domain;
 using SequencingApi.Domain.Common;
-using SequencingApi.Web.Endpoints;
 using Xunit;
 
 namespace SequencingApi.IntegrationTests;
 
 /// <summary>
-/// The whole pipeline over the real <c>TestData</c> tree and the real repositories (on in-memory
-/// SQLite, not fakes): <c>POST /admin/ingest</c> reads the source, maps it, persists it, and the
-/// stored aggregate is then read back out.
+/// The whole pipeline over the real <c>TestData</c> tree and the real repositories (on SQLite, not
+/// fakes): an ingest started by <c>POST /admin/ingest</c> reads the source, maps it, persists it, and
+/// the stored aggregate is then read back out.
 /// </summary>
 /// <remarks>
-/// This is also the coverage for the Quartz <c>IngestionJob</c>, which dispatches the identical
-/// <see cref="IngestRecordsCommand"/> — the job itself is ten lines of glue around this call.
+/// The Quartz <c>IngestionJob</c> dispatches the identical <see cref="IngestRecordsCommand"/> through
+/// the same runner; <see cref="ScheduledIngestTests"/> covers that path.
 /// </remarks>
 public sealed class IngestEndToEndTests
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
-
     [Fact]
     public async Task IngestStoresTheWholeTreeAndServesASampleBackFromTheDatabase()
     {
-        // One connection held open for the test so the :memory: database survives across the separate
-        // scopes of the ingest request and the read that follows it.
-        using var connection = new SqliteConnection("Filename=:memory:");
-        connection.Open();
-
+        using var database = new TempSqliteFile();
         using var rootFactory = new WebApplicationFactory<Program>();
-        var factory = SqliteWebHost.Configure(rootFactory, connection);
+        var factory = SqliteWebHost.Configure(rootFactory, database.Path);
         using var client = factory.CreateClient();
 
-        var summary = await Ingest(client);
+        var summary = await AdminIngest.IngestAndWaitAsync(client);
 
         // Four distinct samples across three runs (p0001, p0002, p0009, p0050); the orphan folder
         // p0003 is reported instead of ingested, which is why this is not five.
@@ -80,15 +66,13 @@ public sealed class IngestEndToEndTests
     [Fact]
     public async Task IngestingTwiceIsIdempotentAndDoesNotDuplicateChildren()
     {
-        using var connection = new SqliteConnection("Filename=:memory:");
-        connection.Open();
-
+        using var database = new TempSqliteFile();
         using var rootFactory = new WebApplicationFactory<Program>();
-        var factory = SqliteWebHost.Configure(rootFactory, connection);
+        var factory = SqliteWebHost.Configure(rootFactory, database.Path);
         using var client = factory.CreateClient();
 
-        var first = await Ingest(client);
-        var second = await Ingest(client);
+        var first = await AdminIngest.IngestAndWaitAsync(client);
+        var second = await AdminIngest.IngestAndWaitAsync(client);
 
         // The scheduled job runs weekly over a tree that mostly has not changed, so a second run must
         // land on exactly the same numbers.
@@ -124,7 +108,7 @@ public sealed class IngestEndToEndTests
     /// A run that leaves the source must leave the database with it. Saving alone only ever adds and
     /// replaces, so before the ingest cleared first, a withdrawn run kept its samples, its files and
     /// its predictive numbers indefinitely — served by <c>GET /sequencing</c> as though still real,
-    /// with the ingest response reporting only what it had read and nothing about what it had not.
+    /// with the ingest reporting only what it had read and nothing about what it had not.
     /// </summary>
     [Fact]
     public async Task ARunWithdrawnFromTheSourceIsRemovedOnTheNextIngest()
@@ -135,14 +119,12 @@ public sealed class IngestEndToEndTests
         {
             CopyDirectory(Path.Join(SqliteWebHost.TestDataPath, "Runs"), tree);
 
-            using var connection = new SqliteConnection("Filename=:memory:");
-            connection.Open();
-
+            using var database = new TempSqliteFile();
             using var rootFactory = new WebApplicationFactory<Program>();
-            var factory = SqliteWebHost.Configure(rootFactory, connection, tree);
+            var factory = SqliteWebHost.Configure(rootFactory, database.Path, tree);
             using var client = factory.CreateClient();
 
-            var before = await Ingest(client);
+            var before = await AdminIngest.IngestAndWaitAsync(client);
             Assert.Equal(3, before.IngestedRuns);
             Assert.Equal(4, before.IngestedSamples);
 
@@ -150,7 +132,7 @@ public sealed class IngestEndToEndTests
             Directory.Delete(Path.Join(tree, "2024", "MiSEQ", "complete-runs", "240430_M02340_0412_ABCDE"), recursive: true);
             Directory.Delete(Path.Join(tree, "2024", "MiSEQ", "mamma-print", "240430_M02340_0412_ABCDE"), recursive: true);
 
-            var after = await Ingest(client);
+            var after = await AdminIngest.IngestAndWaitAsync(client);
             Assert.Equal(2, after.IngestedRuns);
 
             using var scope = factory.Services.CreateScope();
@@ -192,15 +174,5 @@ public sealed class IngestEndToEndTests
         {
             File.Copy(file, Path.Join(destination, Path.GetRelativePath(source, file)));
         }
-    }
-
-    private static async Task<IngestResponse> Ingest(HttpClient client)
-    {
-        using var response = await client.PostAsync("/admin/ingest", content: null, default);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return (await response.Content.ReadFromJsonAsync<IngestResponse>(
-            JsonOptions,
-            default))!;
     }
 }

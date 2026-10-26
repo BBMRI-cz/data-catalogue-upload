@@ -5,7 +5,7 @@ same **Clean Architecture + DDD** layering as [biobank_api](../BiobankApi): a do
 and invariant factories, a CQRS application layer dispatched through the
 [`Mediator`](https://github.com/martinothamar/Mediator) source generator, EF Core for persistence, and
 an ASP.NET Core Minimal API host. Ingestion runs in-process in the Web host (weekly Quartz job +
-`POST /admin/ingest`).
+`POST /admin/ingest`, both through `IngestionRunner`), and `GET /admin/ingest` reports the latest.
 
 > **Status: ingesting.** Domain (#54), persistence (#55) and the MMCI ingestion pipeline (#56) have
 > landed, and the scheduled entrypoint (#57) runs it weekly. Search the tree for `ponytail:` to find
@@ -63,7 +63,10 @@ source text into numbers or dates is decoding, not domain logic, and stays in In
 
 `IngestRecordsCommand` reads the `ISequencingDataSource` port and persists what validates through the
 three repositories, reporting per-record failures instead of aborting the run. It is dispatched by the
-weekly Quartz `IngestionJob` and by `POST /admin/ingest`, and is idempotent — the repositories
+weekly Quartz `IngestionJob` and by `POST /admin/ingest`, both through the singleton `IngestionRunner`,
+whose one-slot lock keeps a manual and a scheduled ingest from overlapping. The handler records each
+ingest in the `ingest_run` table as it starts and completes the row with the counts, the reader's
+errors or the reason it could not run, which is what `GET /admin/ingest` serves. It is idempotent — the repositories
 delete-then-insert on the natural key, so re-running over an unchanged tree is a no-op.
 
 **One directory per source adapter**, under `Infrastructure/DataSource/<Facility>/`. MMCI is the first
@@ -103,9 +106,9 @@ the sample sheet instead).
 | Layer | Project | Notes |
 |-------|---------|-------|
 | Domain | `SequencingApi.Domain` | `Samples/`, `Runs/`, `Panels/` aggregates; `QualityMetrics` + `Enums.cs` at the root; `Common/` base types, typed ids and `Normalize`. |
-| Application | `SequencingApi.Application` | `IngestRecordsCommand`, `GetSequencingQuery` (+ its validator), `GetSummaryQuery`, the `ISequencingDataSource` port, Mediator/FluentValidation wiring. |
+| Application | `SequencingApi.Application` | `IngestRecordsCommand`, `GetLatestIngestRunQuery`, `GetSequencingQuery` (+ its validator), `GetSummaryQuery`, the `ISequencingDataSource` and `IIngestRunRepository` ports, Mediator/FluentValidation wiring. |
 | Infrastructure | `SequencingApi.Infrastructure` | `SequencingDbContext` + repositories, hand-written mappers, `SequencingOptions`, design-time factory, and the MMCI source adapter in `DataSource/Mmci/`. |
-| Web | `SequencingApi.Web` | Minimal-API host (endpoints below) and the Quartz `IngestionJob`. Each `Endpoints/*.cs` file holds its route **and** the response records it serves; the projection lives in `Mapping/`. |
+| Web | `SequencingApi.Web` | Minimal-API host (endpoints below), the Quartz `IngestionJob` and the `IngestionRunner` it shares with `POST /admin/ingest`. Each `Endpoints/*.cs` file holds its route **and** the response records it serves; the projection lives in `Mapping/`. |
 
 ## HTTP API
 
@@ -116,7 +119,8 @@ JSON is snake_case throughout, both property names and enum values (`FileRole.Ba
 | `GET /health` | Liveness. |
 | `GET /sequencing?predictive_number=<x>` | Everything held for one predictive number. |
 | `GET /summary` | Corpus-wide totals (`GetSummaryQueryResult`). |
-| `POST /admin/ingest` | Runs the ingestion pipeline now; same command the weekly job dispatches. |
+| `POST /admin/ingest` | Starts the ingestion pipeline in the background - the same command the weekly job dispatches - and answers `202` at once, or `409` while an ingest is already running. |
+| `GET /admin/ingest` | `{running, last_run}`: whether an ingest is running, and the latest one's counts, errors and `failure` (`null` before the first; no `finished_at` while running or if it was cut short). |
 
 ### `GET /sequencing`
 
@@ -172,5 +176,6 @@ RUN_MIGRATIONS=true POSTGRES_PORT=5434 \
   dotnet run --project src/SequencingApi/SequencingApi.Web    # http://localhost:8002
 
 curl http://localhost:8002/health                 # {"status":"ok"}
-curl -X POST http://localhost:8002/admin/ingest    # ingest summary (samples, runs, panels, failures)
+curl -X POST http://localhost:8002/admin/ingest    # 202: started in the background
+curl http://localhost:8002/admin/ingest            # {"running": ..., "last_run": {samples, runs, panels, errors}}
 ```

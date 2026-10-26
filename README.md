@@ -5,7 +5,7 @@ services it reads from. The solution is [`DataCatalogueUpload.slnx`](DataCatalog
 
 | Service | Projects | What it is |
 |---------|----------|------------|
-| uploader | [`src/Uploader`](src/Uploader) | Scheduled, one-shot sync job: aggregates per-patient data from the source APIs and saves it into a MOLGENIS EMX2 catalogue. |
+| uploader | [`src/Uploader`](src/Uploader) | Sync service: on an in-process Quartz schedule (and on demand), aggregates per-patient data from the source APIs and saves it into a MOLGENIS EMX2 catalogue. |
 | biobank_api | [`src/BiobankApi`](src/BiobankApi) | Source API service: parses biobank XML exports and serves the patient/sample/clinical endpoints the uploader consumes. |
 | sequencing_api | [`src/SequencingApi`](src/SequencingApi) | Source API service for sequencing data (domain model landed; persistence and endpoints land with #55/#58). Same Clean Architecture layering and in-process Quartz ingestion as biobank_api. |
 
@@ -31,14 +31,18 @@ docker compose -f compose.biobank.yml up -d biobank-db
 RUN_MIGRATIONS=true POSTGRES_PORT=5433 \
   dotnet run --project src/BiobankApi/BiobankApi.Web          # http://localhost:8001
 
-# trigger ingestion on the running API (also runs weekly via the Quartz schedule)
-curl -X POST http://localhost:8001/admin/ingest
+# start an ingest on the running API (also runs weekly via the Quartz schedule), then check on it
+curl -X POST http://localhost:8001/admin/ingest     # 202: started in the background
+curl http://localhost:8001/admin/ingest             # {"running": ..., "last_run": {...}}
 
-# point the sync job at a catalogue: copy .env.example to .env and fill in CATALOGUE_TOKEN
+# point the sync service at a catalogue: copy .env.example to .env and fill in CATALOGUE_TOKEN
 cp .env.example .env
 
-# run the sync job (applies its EF migrations on startup, then syncs and prints a JSON summary)
-dotnet run --project src/Uploader/Uploader.Host
+# run the sync service (syncs Mon/Wed/Fri 02:00 UTC), then sync now and check on it
+RUN_MIGRATIONS=true ASPNETCORE_URLS=http://localhost:8003 \
+  dotnet run --project src/Uploader/Uploader.Host
+curl -X POST http://localhost:8003/admin/sync       # 202: started in the background
+curl http://localhost:8003/admin/sync               # {"running": ..., "last_run": {...}}
 ```
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the

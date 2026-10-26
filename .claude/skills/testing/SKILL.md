@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the test projects under tests/ (unit + integration per service) - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the uploader's source mappers and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper), source contracts against a recorded response, and the API hosts with WebApplicationFactory<Program>. xUnit, plain Assert, no mocking libraries.
+description: Test conventions for the data-catalogue-upload .NET solution. Use when writing, running, or fixing tests in the test projects under tests/ (unit + integration per service) - unit-testing domain aggregates/factories, the FingerprintSyncPlanner, the uploader's source mappers and the sync handler with hand-written fakes; integration-testing EF Core repositories against in-memory SQLite (the SqliteDatabase helper), source contracts against a recorded response, and all three hosts with WebApplicationFactory<Program> - including the background POST /admin/sync and /admin/ingest triggers (held sources, polling GET, a SQLite file per host). xUnit, plain Assert, no mocking libraries.
 ---
 
 # Testing (data-catalogue-upload)
@@ -10,11 +10,11 @@ Tests live under `tests/`, two projects per service - **unit** and **integration
 ```
 tests/
 ├── BiobankApi.UnitTests             DomainModelsTests (aggregates/factories), XmlPatientReaderTests (pure XML->domain)
-├── BiobankApi.IntegrationTests      ApiTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
+├── BiobankApi.IntegrationTests      ApiTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
-├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
+├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
 ├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMapperTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
-└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
+└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
 ```
 
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
@@ -85,7 +85,9 @@ framework:
   and the `SyncStatus.Failed` + `LastError` recording).
 - `InMemorySyncStateRepository` - dictionaries of `*SyncState` keyed by id; implements the subtree load and
   the soft-delete/mark-missing behaviour.
-- `FakeSyncRunRepository` - captures the finished `RunCatalogueSyncCommandResult`.
+- `FakeSyncRunRepository` - records the id the run started under (`Started`) and captures the finished
+  `RunCatalogueSyncCommandResult` (`Finished`), so a test can assert a run was recorded before any work and
+  what `Failure` it ended with.
 
 Inject these where the composition root would inject the real adapters; a class that implements the interface
 is all that's needed.
@@ -126,15 +128,17 @@ shortened because the real ones exceed Windows' 260-character path limit once co
 
 `IngestEndToEndTests` runs the whole pipeline over that tree through `POST /admin/ingest` with the real
 repositories on SQLite, and **ingests twice** to prove idempotency: these repositories delete-then-insert,
-so a broken cascade only shows up as duplicated children on the second save. It doubles as the coverage
-for the Quartz `IngestionJob`, which dispatches the identical command.
+so a broken cascade only shows up as duplicated children on the second save. The `POST` only starts the
+ingest, so it goes through `AdminIngest.IngestAndWaitAsync`, which polls `GET /admin/ingest` until nothing
+is running and returns the run. The Quartz `IngestionJob` dispatches the identical command through the
+same `IngestionRunner`; `ScheduledIngestTests` covers that entry point.
 
-`SqliteWebHost.Configure(root, connection)` is the shared wiring behind both that and
+`SqliteWebHost.Configure(root, databasePath, runsPath?, source?)` is the shared wiring behind both that and
 `SequencingEndpointTests`: the real host over the `TestData` tree with the Postgres `DbContext` swapped for
-SQLite and the real repositories kept. The caller owns the root `WebApplicationFactory` and the open
-`SqliteConnection` - the `:memory:` database only lives as long as the connection stays open. The read-side
-tests ingest **once** via an `IngestedSequencingHost` class fixture, since ingestion is idempotent and they
-only read afterwards. Assert HTTP status codes there, not just bodies: `200` + empty vs `404` vs `400` is
+SQLite and the real repositories kept. The caller owns the root `WebApplicationFactory` and the database
+file (a `TempSqliteFile`, deleted on dispose); pass `source` to replace the run tree with a fake. The
+read-side tests ingest **once** via an `IngestedSequencingHost` class fixture, since ingestion is idempotent
+and they only read afterwards. Assert HTTP status codes there, not just bodies: `200` + empty vs `404` vs `400` is
 the actual contract with the uploader's gateway.
 
 `SequencingApi.IntegrationTests` shares one fixture file, `SequencingFixtures`, across its mapper, repository
@@ -144,6 +148,30 @@ mappers are hand-written, so a dropped field is only caught if the fixture would
 Cross-aggregate read models are `*StatsReader`, not repositories, and are tested against the database too -
 their counters are computed by `GROUP BY` on every call, so a test is the only thing between a mis-written
 query and a wrong number (`StatsReaderTests`). Always include the empty-database case.
+
+## Integration tests: the admin triggers and the background run
+
+All three hosts start their work - the uploader's sync, each API's ingest - in the background, through a
+singleton runner (`SyncRunner`, `IngestionRunner`) shared by `POST /admin/...` and the Quartz job. Each
+service tests that the same way:
+
+- **A host over a SQLite *file*, not `:memory:`** - `UploaderWebApplicationFactory`,
+  `BiobankWebApplicationFactory`, sequencing's `SqliteWebHost` + `TempSqliteFile`. The run writes on a
+  background thread while the test polls `GET`, and one shared in-memory `SqliteConnection` cannot serve two
+  threads at once; a file gives each scope its own connection. Each deletes its file on dispose
+  (`SqliteConnection.ClearAllPools()` first, or Windows keeps it locked).
+- **A source a test can hold open** - `HeldSourceDataGateway`, `HeldPatientExportSource`,
+  `HeldSequencingDataSource`. Construct it `held: true`, await its `Fetching`/`Parsing`/`Reading` task (by
+  then the run is recorded as started), assert `running: true` and the `409` on a second `POST`, then
+  `Release()` it. Count its calls (`Fetches`/`Parses`/`Reads`) to prove a refused or skipped trigger ran
+  nothing.
+- **Poll, never sleep** - `WaitUntilIdleAsync` / `IngestAndWaitAsync` poll `GET` every 50 ms with a 30 s cap.
+- **The scheduled entry point** (`ScheduledSyncTests`, `ScheduledIngestTests`) resolves the runner from the
+  test host and calls `RunIfIdleAsync` directly: it must run to the end when idle and return at once while a
+  manual run holds the lock. The Quartz cron itself is not tested; `DisableScheduler=true` keeps Quartz off.
+- **The run tables** (`SyncRunRepositoryTests`, `IngestRunRepositoryTests`) use a `SettableClock` so start
+  and finish get distinct known times. SQLite cannot `ORDER BY` a `DateTimeOffset`, so "latest" is picked in
+  memory - always include the case where an older run finishes after a newer one started.
 
 ## Integration tests: the biobank API
 

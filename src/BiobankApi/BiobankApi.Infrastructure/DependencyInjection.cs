@@ -6,6 +6,7 @@ using BiobankApi.Infrastructure.Xml;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace BiobankApi.Infrastructure;
 
@@ -22,6 +23,8 @@ public static class DependencyInjection
         services.AddDbContext<BiobankDbContext>(db => db.UseNpgsql(options.ConnectionString));
 
         services.AddScoped<IPatientRepository, SqlPatientRepository>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IIngestRunRepository, SqlIngestRunRepository>();
 
         // The single export source for this biobank; the ingestion handler reads it.
         services.AddSingleton<IPatientExportSource>(_ => new XmlExportParser(options.BiobankXmlExportPath));

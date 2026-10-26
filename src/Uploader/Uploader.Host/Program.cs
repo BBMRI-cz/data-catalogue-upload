@@ -1,45 +1,57 @@
 using System.Text.Json;
-using Mediator;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Quartz;
 using Uploader.Application;
-using Uploader.Application.Features.Sync;
+using Uploader.Host.Endpoints;
+using Uploader.Host.Scheduling;
 using Uploader.Infrastructure;
 using Uploader.Infrastructure.Persistence;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
 
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddOpenApi();
 
-using var host = builder.Build();
+builder.Services.AddSingleton<SyncRunner>();
 
-// Ensure the sync-state schema exists (parity with the Python create_all on startup).
-using (var migrationScope = host.Services.CreateScope())
+// In-process sync via Quartz, like the source APIs' ingestion (OS-independent: identical on Windows
+// and Linux). Mon/Wed/Fri 02:00 UTC, after the Sunday 17:00 UTC source ingests; the cron is
+// overridable with UPLOADER_SYNC_CRON, and POST /admin/sync triggers a run on demand.
+// Disabled with DisableScheduler=true: integration tests spin up many hosts in one process, and
+// Quartz's global static logging provider captures (then over-disposes) a per-host LoggerFactory.
+if (!builder.Configuration.GetValue<bool>("DisableScheduler"))
 {
-    var database = migrationScope.ServiceProvider.GetRequiredService<UploaderDbContext>();
-    await database.Database.MigrateAsync();
+    var syncCron = builder.Configuration["UPLOADER_SYNC_CRON"] ?? "0 0 2 ? * MON,WED,FRI";
+    builder.Services.AddQuartz(quartz =>
+    {
+        var jobKey = new JobKey("sync");
+        quartz.AddJob<SyncJob>(jobKey);
+        quartz.AddTrigger(trigger => trigger
+            .ForJob(jobKey)
+            .WithCronSchedule(syncCron, cron => cron.InTimeZone(TimeZoneInfo.Utc)));
+    });
+    builder.Services.AddQuartzHostedService(options => options.WaitForJobsToComplete = true);
 }
 
-using var scope = host.Services.CreateScope();
-var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-var result = await sender.Send(new RunCatalogueSyncCommand());
+var app = builder.Build();
 
-var summaryJsonOptions = new JsonSerializerOptions
+// Apply pending migrations when explicitly asked (set by the container; tests leave it unset).
+if (string.Equals(Environment.GetEnvironmentVariable("RUN_MIGRATIONS"), "true", StringComparison.OrdinalIgnoreCase))
 {
-    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    WriteIndented = true,
-};
+    using var migrationScope = app.Services.CreateScope();
+    await migrationScope.ServiceProvider.GetRequiredService<UploaderDbContext>().Database.MigrateAsync();
+}
 
-return result.Match(
-    summary =>
-    {
-        Console.WriteLine(JsonSerializer.Serialize(summary, summaryJsonOptions));
-        return summary.Failed == 0 ? 0 : 1;
-    },
-    errors =>
-    {
-        Console.Error.WriteLine(string.Join("; ", errors.Select(error => error.Description)));
-        return 1;
-    });
+app.MapOpenApi();
+app.MapHealthEndpoints();
+app.MapAdminEndpoints();
+
+await app.RunAsync();
+return 0;
+
+/// <summary>Exposed so the integration tests can host the app via <c>WebApplicationFactory</c>.</summary>
+public partial class Program;

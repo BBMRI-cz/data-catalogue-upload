@@ -47,9 +47,10 @@ For local runs against `biobank-db`, set `POSTGRES_PORT=5433`.
 `SEQUENCING_MAPPING_TABLE_PATH` (pseudonymizer mappings), `SEQUENCING_INGEST_CRON`. For local runs
 against `sequencing-db`, set `POSTGRES_PORT=5434`.
 
-**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, the source and catalogue URLs, and
-`PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader mints.
-See [`docs/pseudonymization.md`](docs/pseudonymization.md).
+**uploader:** `POSTGRES_USER|PASSWORD|DB|HOST|PORT`, the source and catalogue URLs,
+`PSEUDONYM_PREFIX` (default `mmci`) - the biobank prefix on every pseudonym the uploader mints, see
+[`docs/pseudonymization.md`](docs/pseudonymization.md) - and `UPLOADER_SYNC_CRON`, the Quartz
+schedule in UTC (default `0 0 2 ? * MON,WED,FRI`).
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -97,8 +98,8 @@ dotnet ef migrations add <Name> \
   --output-dir Persistence/Migrations
 ```
 
-At runtime the **uploader** applies migrations on startup; the **biobank_api** and **sequencing_api**
-apply them when `RUN_MIGRATIONS=true` is set (the container sets it; tests leave it unset).
+At runtime all three services apply their migrations on startup when `RUN_MIGRATIONS=true` is set
+(the containers set it; tests leave it unset).
 
 ## Running the services
 
@@ -106,22 +107,32 @@ apply them when `RUN_MIGRATIONS=true` is set (the container sets it; tests leave
 # biobank API server (http://localhost:8001)
 RUN_MIGRATIONS=true POSTGRES_PORT=5433 dotnet run --project src/BiobankApi/BiobankApi.Web
 
-# trigger biobank ingestion on the running API (also runs weekly via Quartz)
-curl -X POST http://localhost:8001/admin/ingest
+# start biobank ingestion on the running API (also runs weekly via Quartz), then check on it
+curl -X POST http://localhost:8001/admin/ingest    # 202 started, 409 one is already running
+curl http://localhost:8001/admin/ingest            # {"running": false, "last_run": {"ingested": ..., "errors": [...]}}
 
-# sequencing API server (scaffold; http://localhost:8002)
+# sequencing API server (http://localhost:8002)
 RUN_MIGRATIONS=true POSTGRES_PORT=5434 dotnet run --project src/SequencingApi/SequencingApi.Web
-curl -X POST http://localhost:8002/admin/ingest    # {"ingested_samples":0,"error_count":0,"errors":[]}
+curl -X POST http://localhost:8002/admin/ingest
+curl http://localhost:8002/admin/ingest            # {"running": false, "last_run": {"ingested_samples": ..., "error_count": ...}}
 
-# uploader sync job (prints a JSON summary; exit 0 = no failures, 1 = failures)
-dotnet run --project src/Uploader/Uploader.Host
+# uploader sync service (http://localhost:8003; syncs Mon/Wed/Fri 02:00 UTC, and on demand)
+RUN_MIGRATIONS=true ASPNETCORE_URLS=http://localhost:8003 dotnet run --project src/Uploader/Uploader.Host
+curl -X POST http://localhost:8003/admin/sync      # 202 started, 409 one is already running
+curl http://localhost:8003/admin/sync              # {"running": false, "last_run": {"uploaded": ..., "failure": null}}
 ```
+
+All three triggers return at once and run in the background; the `GET` beside each reports the
+latest run - `finished_at` null with `running` false means it was cut short (a crash or a restart),
+and `failure` says why a run could not do anything at all.
 
 ## Tests
 
 - `*.UnitTests` - pure tests (domain services, planner, builders, handlers with fakes).
-- `*.IntegrationTests` - EF Core against in-memory SQLite via the `SqliteDatabase` helper; the API
-  hosts are exercised end-to-end with `WebApplicationFactory<Program>`.
+- `*.IntegrationTests` - EF Core against in-memory SQLite via the `SqliteDatabase` helper; all three
+  hosts are exercised end-to-end with `WebApplicationFactory<Program>`, over a throwaway SQLite file
+  (a run happens in the background while the test polls, which one in-memory connection cannot
+  serve).
 
 ```bash
 dotnet test DataCatalogueUpload.slnx                                  # everything
@@ -136,10 +147,11 @@ One compose file per stack. Run them all on one machine, or one per machine — 
 ```bash
 docker compose -f compose.biobank.yml up -d --build       # biobank-db + biobank-api    :8001
 docker compose -f compose.sequencing.yml up -d --build    # sequencing-db + sequencing-api :8002
-docker compose -f compose.uploader.yml up -d uploader-db  # uploader-db                 :5432
+docker compose -f compose.uploader.yml up -d --build     # uploader-db :5432 + uploader :8003
 
 curl -X POST http://localhost:8001/admin/ingest           # ingest on demand
-docker compose -f compose.uploader.yml run --rm uploader  # one sync, prints a JSON summary
+curl -X POST http://localhost:8003/admin/sync             # sync on demand
+curl http://localhost:8003/admin/sync                     # how the latest sync went
 ```
 
 The three stacks are three separate Compose projects on three separate networks even on one host, so
@@ -147,7 +159,8 @@ container names do not resolve between them. The uploader addresses the source A
 `host.docker.internal`; `.env.example` covers it.
 
 The Dockerfiles build with the repo root as their context (central package management +
-project references). The uploader is a job, not a server, hence `run --rm` rather than `up`.
+project references). All three are long-running services with `restart: unless-stopped`; each runs
+its own work on an in-process Quartz schedule.
 
 ## CI
 

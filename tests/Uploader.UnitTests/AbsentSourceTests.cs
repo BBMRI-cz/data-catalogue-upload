@@ -141,5 +141,8 @@ public sealed class AbsentSourceTests
         Assert.NotNull(runs.Finished);
         Assert.Equal(1, runs.Finished!.SourceUnavailable);
         Assert.Equal(0, runs.Finished.Scanned);
+        Assert.Equal(
+            "Cannot list patients: biobank is unavailable: Connection refused (localhost:9)",
+            runs.Finished.Failure);
     }
 }

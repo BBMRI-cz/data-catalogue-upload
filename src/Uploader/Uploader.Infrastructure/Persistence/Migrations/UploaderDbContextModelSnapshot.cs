@@ -242,6 +242,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.Property<int>("FailedCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Failure")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset?>("FinishedAt")
                         .HasColumnType("timestamp with time zone");
 

@@ -16,20 +16,30 @@ internal sealed class IngestExportsCommandHandler
 {
     private readonly IPatientExportSource _source;
     private readonly IPatientRepository _repository;
+    private readonly IIngestRunRepository _runs;
 
-    public IngestExportsCommandHandler(IPatientExportSource source, IPatientRepository repository)
+    public IngestExportsCommandHandler(
+        IPatientExportSource source,
+        IPatientRepository repository,
+        IIngestRunRepository runs)
     {
         _source = source;
         _repository = repository;
+        _runs = runs;
     }
 
     public async ValueTask<ErrorOr<IngestExportsCommandResult>> Handle(
         IngestExportsCommand command,
         CancellationToken cancellationToken)
     {
+        // Recorded before any work, so an ingest cut short still shows up - as unfinished.
+        var runId = Guid.NewGuid().ToString();
+        await _runs.StartAsync(runId, cancellationToken);
+
         var parsed = _source.ParsePatients();
         if (parsed.IsError)
         {
+            await _runs.FailAsync(runId, parsed.Errors[0].Description, cancellationToken);
             return parsed.Errors;
         }
 
@@ -39,6 +49,8 @@ internal sealed class IngestExportsCommandHandler
         // Parse failures and per-patient persistence failures are both reported, not fatal.
         var errors = result.Errors.Concat(saveErrors).ToList();
         var ingested = result.Patients.Count - saveErrors.Count;
-        return new IngestExportsCommandResult(ingested, errors.Count, errors);
+        var ingest = new IngestExportsCommandResult(ingested, errors.Count, errors);
+        await _runs.FinishAsync(runId, ingest, cancellationToken);
+        return ingest;
     }
 }
