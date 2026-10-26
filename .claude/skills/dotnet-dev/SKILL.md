@@ -102,8 +102,13 @@ register it in that service's `DependencyInjection.cs`. Both API services group 
 
 So biobank has `IPatientRepository`; sequencing has `ISampleRepository`, `ISequencingRunRepository` and
 `IPanelRepository`, plus `ISequencingStatsReader`. The `Reader` suffix is load-bearing: a repository hands
-back aggregates through the mappers, a reader projects in SQL and never round-trips the domain. Do not mix
-the two in one interface.
+back aggregates through the mappers, a reader projects in SQL and never round-trips the domain. Keep the two
+in separate interfaces.
+
+**Run logs are the one exception.** `sync_run` (uploader) and `ingest_run` (both APIs) record what a run did,
+not a domain concept, so there is no aggregate behind them. Their port - `ISyncRunRepository`,
+`IIngestRunRepository` - writes the row (`StartAsync` as the run begins, `FinishAsync`/`FailAsync` as it ends)
+and reads back a flat record (`SyncRun`, `IngestRun`) for `GET /admin/...`, and keeps the `Repository` name.
 
 ```csharp
 public interface IPatientRepository
@@ -128,7 +133,9 @@ the owner's key is what enforces one-to-one, and it makes absence an absent row 
 group that needs a marker to distinguish "not recorded" from "recorded, every field unknown". An **ordered**
 child collection gets rows with an explicit `Position` column (`run_read`), never a JSON blob - order that
 lives in a serialized string is order a query cannot restore. JSON columns are reserved for **scalar** lists
-(`patient.AccessionNumbers`, `panel.Genes`), stored via a `ValueConverter` + `ValueComparer` pair.
+(`patient.AccessionNumbers`, `panel.Genes`), stored via a `ValueConverter` + `ValueComparer` pair. The one
+structured exception is a run log's error list (`ingest_run.Errors`): written once at the end of an ingest and
+only ever read back whole, so it is a plain text column the repository serializes, not a child table.
 
 **Mapping is hand-written.** DTO -> domain (uploader `Mapping/`, one mapper per source) and domain <-> EF entity
 (`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field
@@ -138,7 +145,10 @@ public mapper signatures stable and cover every field with a round-trip / record
 re-run `Create` validation on data already persisted.
 
 **API endpoints are Minimal API.** An endpoint only builds a Command/Query, calls `ISender`, and maps the
-`ErrorOr` to HTTP via `ErrorResults`. No business logic in endpoints; JSON is snake_case (matches the
+`ErrorOr` to HTTP via `ErrorResults`. Work that must outlive the request - a catalogue sync, an ingest - goes
+to the host's singleton runner instead (`Scheduling/SyncRunner`, `Scheduling/IngestionRunner`): the runner
+sends the command in its own scope, shared with the Quartz job so the two never overlap, and the endpoint
+answers `202` when it starts a run, `409` when one is already running. No business logic in endpoints; JSON is snake_case (matches the
 consumers), enum values included - write them with
 `JsonNamingPolicy.SnakeCaseLower.ConvertName(value.ToString())` so `BamIndex` reads as `bam_index`.
 
@@ -150,7 +160,8 @@ consumers), enum values included - write them with
    rule is deliberately relaxed, so a route and its wire shape change together.
 2. **A hand-written `internal static class <Thing>ResponseMapper` in `Web/Mapping/`** projects the
    domain/application type onto it - `PatientResponseMapper`, `SequencingResponseMapper`,
-   `SummaryResponseMapper`, `IngestResponseMapper`. Plain static `ToResponse` overloads, public entry
+   `SummaryResponseMapper`, `IngestStatusResponseMapper` (both APIs), and the uploader host's
+   `SyncStatusResponseMapper`. Plain static `ToResponse` overloads, public entry
    point plus private ones per child type.
 3. **Never serialize a Domain or Application type onto the wire.** Not an aggregate, not a `*CommandResult`,
    not a port DTO - even when the response would be a field-for-field copy. `/summary` and `/admin/ingest`

@@ -50,7 +50,8 @@ Because Domain and Application have no I/O, reproduce most bugs as **pure unit t
 - **Per-entity upsert failures are recorded, not thrown.** In `RunCatalogueSyncCommandHandler.ExecuteAsync`,
   when the catalogue gateway returns an `ErrorOr` error the run **continues**: it increments `result.Failed`,
   sets the entity's `SyncStatus.Failed`, stores the message in `state.LastError`, and persists it. So a
-  non-zero `"failed"` in the JSON summary is a real bug whose detail is in the DB, not in stdout.
+  non-zero `"failed"` in the run summary (`GET /admin/sync`, i.e. the latest `sync_run` row) is a real bug
+  whose detail is in the per-entity sync state, not in the summary.
   - Inspect it: query the relevant `*_sync_state` table for rows where `status = 'failed'` and read
     `last_error`.
   - Reproduce it: drive the handler in a test with a `FakeCatalogueGateway` whose `FailUpsertTypes` includes

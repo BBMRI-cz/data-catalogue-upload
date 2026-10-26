@@ -1,7 +1,7 @@
 # Deploying and running the uploader
 
-A runbook for deploying this repository onto the machines that hold the source data, and running one
-sync into the MOLGENIS EMX2 data catalogue. Follow it top to bottom the first time.
+A runbook for deploying this repository onto the machines that hold the source data, and syncing
+them into the MOLGENIS EMX2 data catalogue on a schedule. Follow it top to bottom the first time.
 
 ## 1. Three stacks
 
@@ -52,7 +52,7 @@ Every machine gets the same checkout and the same `.env`, filled in for what it 
 ```bash
 git clone git@github.com:BBMRI-cz/data-catalogue-upload.git
 cd data-catalogue-upload
-git checkout feat/emx2-catalogue-upload
+git checkout master
 cp .env.example .env
 ```
 
@@ -72,9 +72,13 @@ Start it and load the export:
 docker compose -f compose.biobank.yml up -d --build
 curl -s http://127.0.0.1:8001/health
 curl -X POST http://127.0.0.1:8001/admin/ingest
+curl -s http://127.0.0.1:8001/admin/ingest
 ```
 
-The ingest reports how many patients it parsed and stored.
+The `POST` starts the ingest in the background and answers `202` at once (`409` if one is already
+running). The `GET` reports it: `running` until it is done, then `last_run` with how many patients
+were stored, the records that failed and why in `errors`, and `failure` if it could not read the
+exports at all. Repeat the `GET` until `running` is `false`.
 
 **Never prune the export directory.** Each weekly file lists only the last ~60 days of a patient's
 samples, so the API merges every file a patient ever had
@@ -107,10 +111,12 @@ SEQUENCING_MAPPING_DIR=/home/export/pseudonymization_table
 docker compose -f compose.sequencing.yml up -d --build
 curl -s http://127.0.0.1:8002/health
 curl -X POST http://127.0.0.1:8002/admin/ingest
+curl -s http://127.0.0.1:8002/admin/ingest
 ```
 
-The sequencing ingest walks the whole run tree and takes a while on the first pass. If it starts and
-never finishes, see section 10.
+As for the biobank, the `POST` only starts the ingest and the `GET` reports it. The sequencing ingest
+walks the whole run tree and takes a while on the first pass. If `running` stays `true` for hours,
+see section 10.
 
 ## 5. The uploader stack
 
@@ -146,6 +152,10 @@ uploader treats an unreachable biobank as fatal, since every patient comes from 
 Neither source API has any authentication. `/patients` is an anonymous GET that returns real patient
 identifiers, birth years, sex and ICD-10 diagnoses, before any pseudonymization, and `/admin/ingest`
 is an anonymous POST that anyone able to reach it can fire.
+
+The uploader's `/admin/sync` is unauthenticated too, and it writes to the real catalogue. That is why
+`compose.uploader.yml` publishes it on `127.0.0.1:8003` with no bind variable to widen it: trigger a
+sync from the uploader's own machine, over SSH from anywhere else.
 
 On a single locked-down host that is containable. Across a network it is not. At minimum:
 
@@ -190,28 +200,56 @@ section 10.
 
 `.env` is git-ignored. The token belongs there and nowhere else.
 
-## 8. The first run
+## 8. Starting the uploader, and the first sync
 
 ```bash
-docker compose -f compose.uploader.yml run --rm uploader
+docker compose -f compose.uploader.yml up -d --build
+curl -s http://127.0.0.1:8003/health
 ```
 
-The uploader applies its own database migrations, runs one sync, prints a JSON summary and exits. It
-is a job, not a server, so `run --rm` rather than `up`. Exit code is `0` when nothing failed and `1`
-otherwise.
+The uploader is a long-running service, like the two source APIs: it applies its own database
+migrations on start, then waits. Nothing is synced at startup - a restart or a redeploy must not start
+an upload nobody asked for - so start the first one by hand:
+
+```bash
+curl -X POST http://127.0.0.1:8003/admin/sync
+```
+
+It answers `202` at once and syncs in the background, or `409` if a sync is already running. A first
+run over the full export takes about an hour and a half. Follow it with:
+
+```bash
+curl -s http://127.0.0.1:8003/admin/sync
+```
 
 ```json
 {
-  "run_id": "…",
-  "scanned": 812,
-  "changed": 812,
-  "uploaded": 812,
-  "deleted": 0,
-  "skipped": 0,
-  "failed": 0,
-  "source_unavailable": 0
+  "running": false,
+  "last_run": {
+    "run_id": "…",
+    "started_at": "2026-10-26T02:00:00+00:00",
+    "finished_at": "2026-10-26T03:31:12+00:00",
+    "failure": null,
+    "scanned": 812,
+    "changed": 812,
+    "uploaded": 812,
+    "deleted": 0,
+    "skipped": 0,
+    "failed": 0,
+    "source_unavailable": 0
+  }
 }
 ```
+
+`running` says whether a sync is in progress now; `last_run` is the most recently started one -
+`null` before the first. How it ended:
+
+| `last_run` | meaning |
+|---|---|
+| `finished_at` set, `failure` null | it ran to the end; the counters say how it went |
+| `finished_at` set, `failure` set | it stopped before syncing anything, and `failure` says why |
+| `finished_at` null, `running` true | it is still going |
+| `finished_at` null, `running` false | it was cut short by a crash or a restart - the log has the reason |
 
 | counter | meaning |
 |---|---|
@@ -228,6 +266,36 @@ second means chase an outage. A source with no URL is not deployed, is never con
 counted in neither — radiology and WSI are blank by design, because no such service exists yet.
 
 An aggregate is a patient, a sample or a sequencing run, so the counters exceed the patient count.
+A run that ends with `failed` or `source_unavailable` above zero is also logged at error level
+(`docker compose -f compose.uploader.yml logs uploader`).
+
+### The schedule, and why it runs in-process
+
+After the first sync the uploader keeps the catalogue current by itself: **Mondays, Wednesdays and
+Fridays at 02:00 UTC**. Monday's run is the one that matters - both source APIs ingest on Sundays at
+17:00 UTC, so it publishes that week's data. Wednesday's and Friday's mostly find nothing changed and
+skip everything (about 18 minutes against the full export), but they retry anything that failed and
+publish a source re-ingested by hand mid-week. To change the schedule, set `UPLOADER_SYNC_CRON` in
+`.env` to a Quartz cron expression - always read as UTC - and recreate the container.
+
+The schedule lives inside the uploader, as an in-process Quartz job, rather than in a cron entry or a
+systemd timer on the host:
+
+- **It is the pattern the source APIs already use.** Both run their weekly ingest as an in-process
+  Quartz job with the cron in an environment variable; the uploader now works the same way, so all
+  three stacks are deployed, scheduled and inspected alike.
+- **It behaves the same on any host.** The schedule ships inside the image, so it is identical on
+  Linux and on Windows, and there is no crontab or unit file on the host to set up or forget.
+- **The manual trigger cannot collide with it.** `POST /admin/sync` and the schedule start a sync
+  through the same lock in the same process, so the two never run at once - a scheduled turn that
+  finds a sync running is skipped. A `docker compose run` launched by a host timer would be a second
+  process that nothing stops from overlapping.
+- **A failed run stays visible without anyone watching.** Every run is recorded as it starts and
+  completed as it ends, and `GET /admin/sync` reports the latest - including one that failed outright
+  or never finished. A one-shot job's exit code is gone the moment it exits.
+
+The cost is a process that stays up between runs, and that a turn missed while the container is down
+is not caught up: the next scheduled turn - or a `POST` - covers it.
 
 ## 9. Checking the catalogue, and running it again
 
@@ -246,13 +314,14 @@ Check three things:
 `Clinical.diagnosis` holds the patient's ICD-10 codes (`C50.9`, `Z12.9`). A patient without one -
 about a third of them - has the column empty.
 
-Now run it a second time with nothing changed:
+Now sync a second time with nothing changed:
 
 ```bash
-docker compose -f compose.uploader.yml run --rm uploader
+curl -X POST http://127.0.0.1:8003/admin/sync
+curl -s http://127.0.0.1:8003/admin/sync
 ```
 
-Everything should land on `skipped`, with `uploaded` at zero. That is the fingerprint comparison
+Once `running` is `false`, everything should land on `skipped`, with `uploaded` at zero. That is the fingerprint comparison
 working: the catalogue is written only when the source actually changed.
 
 To leave the test schema as you found it, delete the rows through the EMX2 UI, child tables first —
@@ -260,7 +329,7 @@ To leave the test schema as you found it, delete the rows through the EMX2 UI, c
 `IndividualConsent`, `Personal`, `Study`. The catalogue refuses to delete a row another row still
 references, so any other order fails.
 
-If you also want the next run to re-upload everything, clear the uploader's sync state:
+If you also want the next sync to re-upload everything, clear the uploader's sync state:
 
 ```bash
 docker compose -f compose.uploader.yml down -v
@@ -299,13 +368,24 @@ not deployed" and the run would upload nobody without complaining.
 completes and each patient keeps the data from the sources that did answer. Rows a failed source
 would have reported are left alone rather than deleted, so a re-run after the outage repairs itself.
 
-**The run fails immediately with an error instead of a summary.** The biobank could not be listed.
-Every patient comes from it, so there is no run to have. Check the firewall, the bind address, and
-`BIOBANK_API_URL`.
+**`last_run.failure` reads `Cannot list patients: ...`.** The biobank could not be listed. Every
+patient comes from it, so there is no run to have. Check the firewall, the bind address, and
+`BIOBANK_API_URL`. `Cannot publish the study: ...` means the catalogue refused the `Study` row - check
+the token (section 7) and `CATALOGUE_SCHEMA`.
+
+**`last_run` has no `finished_at`, and `running` is `false`.** The sync was cut short - the container
+was restarted or stopped mid-run, or the sync crashed. `docker compose -f compose.uploader.yml logs
+uploader` has the reason for a crash. Nothing is lost: the sync state is saved after every upload, so
+the next run picks up where this one stopped, and patients that left the source are deleted only by a
+run that reaches the end. Start one with `POST /admin/sync`, or leave it to the schedule.
+
+**`POST /admin/sync` answers `409`.** A sync is already running - the scheduled one, or an earlier
+`POST`. Follow it with `GET /admin/sync` rather than starting another.
 
 ## 11. Known gaps
 
-- Neither source API authenticates callers. Section 6 is the mitigation, not a fix.
+- Neither source API authenticates callers, and neither does the uploader's `/admin/sync`. Section 6
+  is the mitigation, not a fix.
 - `Clinical.diagnosis` goes out empty until ICD-10 terms are loaded into the catalogue's `Diagnosis`
   ontology, which is the schema owner's decision.
 - Radiology and whole-slide imaging have no source service. Their URLs are blank, they are never
