@@ -40,9 +40,16 @@ public sealed class SequencingDbContext : DbContext
     public DbSet<SequencingRunEntity> SequencingRuns => Set<SequencingRunEntity>();
     public DbSet<RunReadEntity> RunReads => Set<RunReadEntity>();
     public DbSet<PanelEntity> Panels => Set<PanelEntity>();
+    public DbSet<IngestRunEntity> IngestRuns => Set<IngestRunEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<IngestRunEntity>(builder =>
+        {
+            builder.ToTable("ingest_run");
+            builder.HasKey(run => run.Id);
+        });
+
         // List<string> stored as a JSON text column (portable across PostgreSQL and SQLite), as
         // patient.AccessionNumbers is. A scalar list, unlike the structured reads, which are rows.
         var jsonConverter = new ValueConverter<List<string>, string>(

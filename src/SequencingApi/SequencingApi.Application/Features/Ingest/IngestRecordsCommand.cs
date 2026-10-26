@@ -18,26 +18,34 @@ internal sealed class IngestRecordsCommandHandler
     private readonly ISampleRepository _samples;
     private readonly ISequencingRunRepository _runs;
     private readonly IPanelRepository _panels;
+    private readonly IIngestRunRepository _ingests;
 
     public IngestRecordsCommandHandler(
         ISequencingDataSource source,
         ISampleRepository samples,
         ISequencingRunRepository runs,
-        IPanelRepository panels)
+        IPanelRepository panels,
+        IIngestRunRepository ingests)
     {
         _source = source;
         _samples = samples;
         _runs = runs;
         _panels = panels;
+        _ingests = ingests;
     }
 
     public async ValueTask<ErrorOr<IngestRecordsCommandResult>> Handle(
         IngestRecordsCommand command,
         CancellationToken cancellationToken)
     {
+        // Recorded before any work, so an ingest cut short still shows up - as unfinished.
+        var ingestId = Guid.NewGuid().ToString();
+        await _ingests.StartAsync(ingestId, cancellationToken);
+
         var read = _source.ReadRecords(cancellationToken);
         if (read.IsError)
         {
+            await _ingests.FailAsync(ingestId, read.Errors[0].Description, cancellationToken);
             return read.Errors;
         }
 
@@ -66,11 +74,13 @@ internal sealed class IngestRecordsCommandHandler
 
         // Read problems and per-record persistence failures are both reported, not fatal.
         var errors = result.Errors.Concat(panelErrors).Concat(runErrors).Concat(sampleErrors).ToList();
-        return new IngestRecordsCommandResult(
+        var ingest = new IngestRecordsCommandResult(
             IngestedSamples: result.Samples.Count - sampleErrors.Count,
             IngestedRuns: result.Runs.Count - runErrors.Count,
             IngestedPanels: result.Panels.Count - panelErrors.Count,
             ErrorCount: errors.Count,
             Errors: errors);
+        await _ingests.FinishAsync(ingestId, ingest, cancellationToken);
+        return ingest;
     }
 }

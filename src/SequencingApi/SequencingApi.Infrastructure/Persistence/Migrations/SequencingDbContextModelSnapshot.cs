@@ -51,6 +51,41 @@ namespace SequencingApi.Infrastructure.Persistence.Migrations
                     b.ToTable("analysis", (string)null);
                 });
 
+            modelBuilder.Entity("SequencingApi.Infrastructure.Persistence.Entities.IngestRunEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ErrorCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Errors")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Failure")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("IngestedPanels")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IngestedRuns")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IngestedSamples")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ingest_run", (string)null);
+                });
+
             modelBuilder.Entity("SequencingApi.Infrastructure.Persistence.Entities.LibraryPreparationEntity", b =>
                 {
                     b.Property<long>("RunSampleId")

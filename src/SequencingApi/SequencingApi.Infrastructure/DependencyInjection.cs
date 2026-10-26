@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using SequencingApi.Application.Abstractions.DataSource;
 using SequencingApi.Application.Abstractions.Repositories;
 using SequencingApi.Infrastructure.Configuration;
@@ -26,6 +27,10 @@ public static class DependencyInjection
         services.AddScoped<ISequencingRunRepository, SqlSequencingRunRepository>();
         services.AddScoped<IPanelRepository, SqlPanelRepository>();
         services.AddScoped<ISequencingStatsReader, SqlSequencingStatsReader>();
+
+        // What each ingest did, for GET /admin/ingest.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IIngestRunRepository, SqlIngestRunRepository>();
 
         // The single data source for this facility; the ingestion handler reads it. Another facility
         // would supply its own adapter under DataSource/<Facility>/ and be registered here instead.
