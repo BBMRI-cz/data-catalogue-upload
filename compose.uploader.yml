@@ -1,8 +1,9 @@
 # The sync job and its database. Run this wherever you want the upload to happen — it reads no
 # files, so unlike the two source stacks it is not tied to any machine.
 #
-#   docker compose -f compose.uploader.yml up -d uploader-db
-#   docker compose -f compose.uploader.yml run --rm uploader
+#   docker compose -f compose.uploader.yml up -d --build
+#   curl -X POST http://127.0.0.1:8003/admin/sync    # sync now, on top of the schedule
+#   curl http://127.0.0.1:8003/admin/sync            # is one running, and how did the last one go
 #
 # One of three stacks, each deployable on its own machine: compose.biobank.yml,
 # compose.sequencing.yml, and this one. See docs/deployment.md for the full runbook.
@@ -27,14 +28,14 @@ services:
       # new identifier and the catalogue fills with duplicates. Back it up before touching it.
       - uploader_db_data:/var/lib/postgresql/data
 
-  # One-shot, not a server: it runs, prints a JSON summary and exits. Hence restart "no" and
-  # `run --rm` rather than `up`.
+  # A long-running service: it syncs on a Quartz schedule (Mon/Wed/Fri 02:00 UTC; UPLOADER_SYNC_CRON
+  # in .env overrides it) and on POST /admin/sync. GET /admin/sync reports the latest run.
   uploader:
     build:
       context: .
       dockerfile: src/Uploader/Uploader.Host/Dockerfile
     container_name: uploader
-    restart: "no"
+    restart: unless-stopped
     # The catalogue token lives here and nowhere else. Copy .env.example to .env and fill it in;
     # .env is git-ignored.
     env_file:
@@ -45,6 +46,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: data_catalogue_upload
+      ASPNETCORE_URLS: http://+:8003
+      RUN_MIGRATIONS: "true"
       # Both required, with no default on purpose: an empty URL means "this source is not deployed",
       # so a typo would otherwise produce a quiet run that uploads nobody rather than an error.
       BIOBANK_API_URL: "${BIOBANK_API_URL:?set BIOBANK_API_URL in .env}"
@@ -62,6 +65,11 @@ services:
     # error rather than a crash.
     depends_on:
       - uploader-db
+    ports:
+      # POST /admin/sync has no authentication and writes to the real catalogue, so unlike the
+      # source APIs there is no bind variable: loopback only. Trigger it from this machine, over SSH
+      # from anywhere else.
+      - "127.0.0.1:8003:8003"
 
 volumes:
   uploader_db_data:
