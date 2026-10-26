@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BiobankApi.Application.Abstractions.Export;
@@ -6,21 +5,15 @@ using BiobankApi.Domain;
 using BiobankApi.Domain.Patients;
 using BiobankApi.Infrastructure.Persistence;
 using BiobankApi.Web.Endpoints;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace BiobankApi.IntegrationTests;
 
 /// <summary>
-/// Full-stack flow against the real <see cref="SqlPatientRepository"/> (over in-memory SQLite, not a
-/// fake): POST /admin/ingest stores a fully-populated patient, then GET /patients serves it back.
-/// Exercises the endpoint, response mapper, query handler, EF Core mapping and persistence at once.
+/// Full-stack flow against the real <see cref="SqlPatientRepository"/> (over SQLite, not a fake):
+/// an ingest started by POST /admin/ingest stores a fully-populated patient, then GET /patients
+/// serves it back. Exercises the endpoints, response mappers, handlers, EF Core mapping and
+/// persistence at once.
 /// </summary>
 public sealed class IngestThenListEndToEndTests
 {
@@ -34,42 +27,13 @@ public sealed class IngestThenListEndToEndTests
     {
         var patient = FullyPopulatedPatient();
         var source = new FakePatientExportSource(new ExportParseResult([patient], []));
+        using var factory = new BiobankWebApplicationFactory(source);
+        using var client = factory.CreateClientWithSchema();
 
-        // One open connection kept for the test lifetime so the :memory: database survives across the
-        // separate scopes of the ingest request and the list request.
-        using var connection = new SqliteConnection("Filename=:memory:");
-        connection.Open();
-
-        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseSetting("DisableScheduler", "true");
-            builder.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<IPatientExportSource>();
-                services.AddSingleton<IPatientExportSource>(source);
-
-                // Swap the Postgres DbContext for SQLite; keep the real repository. EF Core 10 applies
-                // the provider through IDbContextOptionsConfiguration<T>, so the Npgsql one must also be
-                // removed or both providers get registered and EF rejects the mix.
-                services.RemoveAll<DbContextOptions<BiobankDbContext>>();
-                services.RemoveAll<DbContextOptions>();
-                services.RemoveAll<IDbContextOptionsConfiguration<BiobankDbContext>>();
-                services.AddDbContext<BiobankDbContext>(db => db.UseSqlite(connection));
-            });
-        });
-
-        using (var scope = factory.Services.CreateScope())
-        {
-            scope.ServiceProvider.GetRequiredService<BiobankDbContext>().Database.EnsureCreated();
-        }
-
-        using var client = factory.CreateClient();
-
-        using var ingestResponse = await client.PostAsync("/admin/ingest", content: null);
-        Assert.Equal(HttpStatusCode.OK, ingestResponse.StatusCode);
-        var summary = await ingestResponse.Content.ReadFromJsonAsync<IngestSummary>(JsonOptions);
-        Assert.Equal(1, summary!.Ingested);
-        Assert.Equal(0, summary.Failed);
+        using var status = await AdminIngest.IngestAndWaitAsync(client);
+        var run = status.RootElement.GetProperty("last_run");
+        Assert.Equal(1, run.GetProperty("ingested").GetInt32());
+        Assert.Equal(0, run.GetProperty("failed").GetInt32());
 
         var patients = await client.GetFromJsonAsync<List<PatientResponse>>("/patients", JsonOptions);
 
@@ -128,6 +92,4 @@ public sealed class IngestThenListEndToEndTests
             accessionNumbers: ["ACC1", "ACC2"], samples: [tissue, serum, genome],
             diagnosticSpecimens: [specimen]).Value;
     }
-
-    private sealed record IngestSummary(int Ingested, int Failed);
 }
