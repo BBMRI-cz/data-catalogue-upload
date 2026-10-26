@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Data.Sqlite;
 using SequencingApi.Web.Endpoints;
 using Xunit;
 
@@ -187,27 +186,25 @@ public sealed class SequencingEndpointTests : IClassFixture<IngestedSequencingHo
 /// </summary>
 public sealed class IngestedSequencingHost : IAsyncLifetime
 {
-    // Held open for the lifetime of the fixture, or the :memory: database vanishes between requests.
-    private readonly SqliteConnection _connection = new("Filename=:memory:");
+    private readonly TempSqliteFile _database = new();
     private WebApplicationFactory<Program>? _rootFactory;
 
     public HttpClient Client { get; private set; } = default!;
 
     public async Task InitializeAsync()
     {
-        _connection.Open();
         _rootFactory = new WebApplicationFactory<Program>();
-        Client = SqliteWebHost.Configure(_rootFactory, _connection).CreateClient();
+        Client = SqliteWebHost.Configure(_rootFactory, _database.Path).CreateClient();
 
-        using var ingest = await Client.PostAsync("/admin/ingest", content: null, default);
-        Assert.Equal(HttpStatusCode.OK, ingest.StatusCode);
+        var ingest = await AdminIngest.IngestAndWaitAsync(Client);
+        Assert.Null(ingest.Failure);
     }
 
     public Task DisposeAsync()
     {
         Client?.Dispose();
         _rootFactory?.Dispose();
-        _connection.Dispose();
+        _database.Dispose();
         return Task.CompletedTask;
     }
 }
