@@ -1,0 +1,41 @@
+# Version updates. Security updates are switched on in the repository settings and work without
+# this file; this adds the weekly "a newer version exists" PRs on top.
+#
+# Compose files are deliberately not covered: they pin postgres:16, and a postgres major bump cannot
+# open an existing data volume without a dump and restore.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule: { interval: weekly }
+    ignore:
+      # These move with the .NET release (net10.0 / global.json), not on their own.
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql.EntityFrameworkCore.PostgreSQL"
+        update-types: ["version-update:semver-major"]
+    groups:
+      nuget-minor-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+    groups:
+      actions-minor-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directories:
+      - "/src/BiobankApi/BiobankApi.Web"
+      - "/src/SequencingApi/SequencingApi.Web"
+      - "/src/Uploader/Uploader.Host"
+    schedule: { interval: weekly }
+    ignore:
+      # A new .NET major has to land together with global.json and the target framework.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      docker-minor-patch: { update-types: [minor, patch] }
