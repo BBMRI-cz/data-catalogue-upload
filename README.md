@@ -55,6 +55,10 @@ one machine, and a bind mount resolves only on the host running the container. R
 together on one machine, or one per machine.
 [`docs/deployment.md`](docs/deployment.md) is the runbook either way.
 
+`compose.training.yml` is not a deployment: it runs both source APIs over a synthetic dataset, for
+work that needs data shaped like ours without access to the servers. See
+[`docs/training-dataset.md`](docs/training-dataset.md).
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
