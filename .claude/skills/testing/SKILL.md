@@ -14,7 +14,8 @@ tests/
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
 ├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMapperTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
-└── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
+├── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
+└── TrainingSeeder.IntegrationTests  TrainingSeederTests (the seeder through both APIs' repositories on SQLite: edge cases, same rows per seed, non-empty DB left alone, migrations match the model), PredictiveNumberTests, SeedSettingsTests
 ```
 
 Framework is **xUnit** (`[Fact]` / `[Theory]`) with plain `Assert.*`. **No FluentAssertions, no Moq /
@@ -216,5 +217,5 @@ unset field is written as an explicit null rather than omitted.
 
 ## CI
 
-CI runs `dotnet test DataCatalogueUpload.slnx --configuration Release` on every push/PR to `master` (all four
-projects). Keep tests green before pushing - see the `github-workflow` skill.
+CI runs `dotnet test DataCatalogueUpload.slnx --configuration Release` on every push/PR to `master` (every
+test project in the solution). Keep tests green before pushing - see the `github-workflow` skill.
