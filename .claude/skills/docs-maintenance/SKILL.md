@@ -52,8 +52,10 @@ Cross-check each item against the live code/config:
 8. **Compose topology.** Three files, one stack each: `compose.biobank.yml` (biobank-db, biobank-api),
    `compose.sequencing.yml` (sequencing-db, sequencing-api), `compose.uploader.yml` (uploader-db, uploader).
    There is no `compose.prod.yml` - it was removed when the stacks were split, so any doc still naming it is
-   stale. Every service a doc lists must appear in the file it names, and every `${VAR}` those files
-   substitute must appear in `.env.example`.
+   stale. A fourth file, `compose.training.yml` (training-biobank-db, training-sequencing-db,
+   training-seeder, training-biobank-api, training-sequencing-api), is not a deployment stack: docs must not
+   list it among the three. Every service a doc lists must appear in the file it names, and every `${VAR}`
+   those files substitute must appear in `.env.example`.
 9. **Secrets.** No token, key, or credential value in any tracked file, and no description of a real token's
    claims or privileges either. `.env` must not be tracked; `.env.example` carries key names with empty
    values for anything secret.

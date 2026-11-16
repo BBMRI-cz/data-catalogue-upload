@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fills a brand-new biobank_api and sequencing_api database with a synthetic training dataset
+    (#112). It builds aggregates through the domain factories and saves them through the services'
+    own repositories, so a schema change reaches it without anyone editing it. Run by
+    compose.training.yml only: no service references this project and no production image contains it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>TrainingSeeder</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\BiobankApi\BiobankApi.Infrastructure\BiobankApi.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\SequencingApi\SequencingApi.Infrastructure\SequencingApi.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TrainingSeeder.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The real value frequencies, exported by export-vocabulary.sql. Embedded, so the seeder and its
+         tests read the same bytes wherever they run. -->
+    <EmbeddedResource Include="biobank-vocabulary.json" LogicalName="biobank-vocabulary.json" />
+    <EmbeddedResource Include="sequencing-vocabulary.json" LogicalName="sequencing-vocabulary.json" />
+  </ItemGroup>
+
+</Project>

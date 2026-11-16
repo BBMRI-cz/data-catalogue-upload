@@ -5,7 +5,9 @@ them into the MOLGENIS EMX2 data catalogue on a schedule. Follow it top to botto
 
 ## 1. Three stacks
 
-There is one compose file per stack, and each is deployable on its own machine.
+There is one compose file per stack, and each is deployable on its own machine. (`compose.training.yml`
+is not one of them: it serves a synthetic dataset for work off the servers and is never deployed -
+see [`training-dataset.md`](training-dataset.md).)
 
 | stack | compose file | services | needs |
 |---|---|---|---|

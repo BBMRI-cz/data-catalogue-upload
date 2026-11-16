@@ -23,7 +23,11 @@
     <Project Path="tests/BiobankApi.UnitTests/BiobankApi.UnitTests.csproj" />
     <Project Path="tests/SequencingApi.IntegrationTests/SequencingApi.IntegrationTests.csproj" />
     <Project Path="tests/SequencingApi.UnitTests/SequencingApi.UnitTests.csproj" />
+    <Project Path="tests/TrainingSeeder.IntegrationTests/TrainingSeeder.IntegrationTests.csproj" />
     <Project Path="tests/Uploader.IntegrationTests/Uploader.IntegrationTests.csproj" />
     <Project Path="tests/Uploader.UnitTests/Uploader.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/TrainingSeeder/TrainingSeeder.csproj" />
   </Folder>
 </Solution>

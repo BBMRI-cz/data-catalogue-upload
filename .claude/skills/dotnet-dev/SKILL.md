@@ -16,7 +16,13 @@ src/
 ├── BiobankApi/     BiobankApi.{Domain,Application,Infrastructure,Web}
 ├── SequencingApi/  SequencingApi.{Domain,Application,Infrastructure,Web}
 └── Uploader/       Uploader.{Domain,Application,Infrastructure,Host}
+tools/
+└── TrainingSeeder/ synthetic training dataset; references both APIs' Infrastructure, referenced by nothing
 ```
+
+A domain or repository change reaches `tools/TrainingSeeder` through the factories and repositories it calls:
+if its CI test (`TrainingSeeder.IntegrationTests`) fails, a new invariant or renamed value needs the
+generator under `tools/TrainingSeeder/Generation/` updating, not the domain loosening.
 
 - **TFM `net10.0`**, nullable + implicit usings on, **warnings are errors** (set in `Directory.Build.props`).
 - **Central package management.** All NuGet versions live in `Directory.Packages.props`. Add a package with

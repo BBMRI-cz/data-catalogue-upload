@@ -133,6 +133,9 @@ and `failure` says why a run could not do anything at all.
   hosts are exercised end-to-end with `WebApplicationFactory<Program>`, over a throwaway SQLite file
   (a run happens in the background while the test polls, which one in-memory connection cannot
   serve).
+- `TrainingSeeder.IntegrationTests` - the training seeder against SQLite through both services' real
+  repositories: every record valid, the same rows for the same seed, a non-empty database left alone,
+  and the migrations in step with the model the seeder writes through.
 
 ```bash
 dotnet test DataCatalogueUpload.slnx                                  # everything
@@ -161,6 +164,16 @@ container names do not resolve between them. The uploader addresses the source A
 The Dockerfiles build with the repo root as their context (central package management +
 project references). All three are long-running services with `restart: unless-stopped`; each runs
 its own work on an in-process Quartz schedule.
+
+`compose.training.yml` is the odd one out: both source APIs over synthetic data from
+`tools/TrainingSeeder`, on in-memory databases, with no uploader and no schedule. It is the quickest
+way to have both APIs serving realistic data locally - `SEED_PATIENTS=500` keeps it small. See
+[`docs/training-dataset.md`](docs/training-dataset.md).
+
+```bash
+SEED_PATIENTS=500 docker compose -f compose.training.yml up --build   # :8001 + :8002
+docker compose -f compose.training.yml down                           # throws the data away
+```
 
 ## CI
 
