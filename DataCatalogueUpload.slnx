@@ -26,4 +26,7 @@
     <Project Path="tests/Uploader.IntegrationTests/Uploader.IntegrationTests.csproj" />
     <Project Path="tests/Uploader.UnitTests/Uploader.UnitTests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/TrainingSeeder/TrainingSeeder.csproj" />
+  </Folder>
 </Solution>
