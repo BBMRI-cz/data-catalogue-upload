@@ -1,0 +1,117 @@
+# The training dataset (#112): both source APIs over synthetic data, for someone who has no access
+# to the servers. No real patient is in it - the values follow the real data's frequencies, and every
+# identifier and date is generated. See docs/training-dataset.md.
+#
+#   docker compose -f compose.training.yml up --build
+#   curl http://localhost:8001/patients
+#   curl "http://localhost:8002/sequencing?predictive_number=2019/5342"   # any number on /patients
+#
+# Kept apart from the three production stacks on purpose: seeding is not a flag on them, so no wrong
+# setting on a server can put generated patients into a real database. The databases live in memory
+# (tmpfs), so every start begins empty and `down` throws the data away.
+#
+# SEED_PATIENTS sets the dataset size (default: the real patient count); SEED picks another dataset.
+name: training
+
+services:
+  training-biobank-db:
+    image: postgres:16
+    container_name: training-biobank-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
+    # No published port: only the seeder and the API reach it.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d biobank_api"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  training-sequencing-db:
+    image: postgres:16
+    container_name: training-sequencing-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sequencing_api"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Creates both schemas, writes the dataset through the services' own repositories, and exits.
+  training-seeder:
+    build:
+      context: .
+      dockerfile: tools/TrainingSeeder/Dockerfile
+    container_name: training-seeder
+    environment:
+      BIOBANK_POSTGRES_HOST: training-biobank-db
+      BIOBANK_POSTGRES_PORT: 5432
+      BIOBANK_POSTGRES_USER: postgres
+      BIOBANK_POSTGRES_PASSWORD: postgres
+      BIOBANK_POSTGRES_DB: biobank_api
+      SEQUENCING_POSTGRES_HOST: training-sequencing-db
+      SEQUENCING_POSTGRES_PORT: 5432
+      SEQUENCING_POSTGRES_USER: postgres
+      SEQUENCING_POSTGRES_PASSWORD: postgres
+      SEQUENCING_POSTGRES_DB: sequencing_api
+      SEED_PATIENTS: ${SEED_PATIENTS:-}
+      SEED: ${SEED:-}
+    depends_on:
+      training-biobank-db:
+        condition: service_healthy
+      training-sequencing-db:
+        condition: service_healthy
+    restart: "no"
+
+  # The APIs start only once the seeder has finished, on the schema it created (no migrations of
+  # their own), and with no weekly ingest: there is no export to ingest, only the seeded data.
+  training-biobank-api:
+    build:
+      context: .
+      dockerfile: src/BiobankApi/BiobankApi.Web/Dockerfile
+    container_name: training-biobank-api
+    environment:
+      POSTGRES_HOST: training-biobank-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: biobank_api
+      ASPNETCORE_URLS: http://+:8001
+      RUN_MIGRATIONS: "false"
+      DisableScheduler: "true"
+    depends_on:
+      training-seeder:
+        condition: service_completed_successfully
+    # The production ports, on loopback, so an uploader run on the host (DEVELOPMENT.md) reads this
+    # stack with its default URLs. The uploader container cannot: host.docker.internal does not
+    # reach a loopback-only port on Linux.
+    ports:
+      - "127.0.0.1:8001:8001"
+
+  training-sequencing-api:
+    build:
+      context: .
+      dockerfile: src/SequencingApi/SequencingApi.Web/Dockerfile
+    container_name: training-sequencing-api
+    environment:
+      POSTGRES_HOST: training-sequencing-db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sequencing_api
+      ASPNETCORE_URLS: http://+:8002
+      RUN_MIGRATIONS: "false"
+      DisableScheduler: "true"
+    depends_on:
+      training-seeder:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8002:8002"
