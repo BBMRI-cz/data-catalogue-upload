@@ -6,23 +6,32 @@ using Uploader.Domain.Common;
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// Maps the sequencing API's response onto the <see cref="SequencingAggregate"/>. The source serves
-/// its own model — samples, runs, library preparation, panel, files and analyses — and this is where
-/// it becomes FAIR Genomes: one <see cref="SamplePreparation"/> per (sample, run) pair, each carrying
-/// its run metadata and that run's analyses. MammaPrint runs are left out; <c>source_class</c> and
-/// <c>experiment_name</c> are read only to recognise them.
+/// Maps the sequencing API's response straight onto the catalogue's FAIR Genomes rows -
+/// <c>SamplePreparation</c>, <c>Sequencing</c> and <c>Analysis</c> - and builds the
+/// <see cref="SequencingAggregate"/> the sync planner keeps them under. The source serves its own
+/// model (samples, runs, library preparation, panel, files and analyses), and this is where it becomes
+/// FAIR Genomes: one preparation per (sample, run) pair, each carrying its run and that run's analyses.
+/// MammaPrint runs are left out; <c>source_class</c> and <c>experiment_name</c> are read only to
+/// recognise them.
+/// <para>
+/// The chain arrives pseudonymized already: its identifiers derive, via <see cref="SequencingMapping"/>,
+/// from the sequencing API's sample id, which is the run tree's <c>mmci_predictive_&lt;uuid&gt;</c> folder
+/// name. The one reference out of it - to the biobank's stored biospecimen - is derived from the owning
+/// sample's pseudonym via <see cref="BiobankMapping"/>, never copied, so it cannot drift from the key
+/// the sample payload published.
+/// </para>
 /// <para>
 /// <b>Served but deliberately dropped</b>, because FAIR Genomes has no field for them and the
 /// catalogue consumes none: the run-sample's <c>files</c> (the FASTQ reads — FAIR has no file
 /// inventory anywhere in the preparation -> sequencing -> analysis chain, and v2 removed even the
 /// data-location columns v1 had, so an analysis output survives only as its format in
-/// <see cref="Analysis.DataFormatsStored"/>), every panel field but <c>genes</c> (<c>panel_id</c>,
+/// <see cref="AnalysisRecord.DataFormatsStored"/>), every panel field but <c>genes</c> (<c>panel_id</c>,
 /// <c>name</c>, <c>abbreviation</c>, <c>vendor</c>, <c>catalogue_code</c>, <c>target_regions_ref</c>),
 /// <c>sample_type</c>, <c>analysis_type</c>, <c>id_scheme</c>, <c>sample_index</c>,
 /// <c>instrument_model</c> (the folder the run was filed under; the model comes from <c>instrument_id</c>),
 /// <c>assay</c> (it names a kit or an index set, not a method), <c>workflow</c>, and the echoed root
-/// <c>predictive_number</c> (already the aggregate's id). The run statistics FAIR does not name are
-/// not dropped — they are packed into <see cref="SequencingRun.OtherQualityMetrics"/>, see
+/// <c>predictive_number</c> (real, and already the aggregate's id). The run statistics FAIR does not name
+/// are not dropped — they are packed into <see cref="SequencingRecord.OtherQualityMetrics"/>, see
 /// <see cref="SequencingMapping"/>.
 /// </para>
 /// <para>
@@ -36,26 +45,41 @@ namespace Uploader.Application.Mapping;
 /// the row.
 /// </para>
 /// </summary>
-public static class SequencingMapper
+public static class CatalogueSequencingMapper
 {
     private const string SamplePrepModule = "sampleprep";
     private const string AnalysisModule = "analysis";
 
-    public static ErrorOr<SequencingAggregate> ToSequencing(SequencingDto dto, SequencingId id, SampleId sampleId) =>
-        SequencingAggregate.Create(id.Value, sampleId, ToPreparations(dto, sampleId));
+    /// <summary>
+    /// Whether the response has anything for the catalogue. A predictive number the source does not
+    /// know answers with an empty sample list, and one sequenced only for MammaPrint has only runs that
+    /// are left out; neither gets an aggregate, so the planner deletes what was published under it.
+    /// </summary>
+    public static bool HasPreparations(SequencingDto dto) => Pairs(dto).Any();
+
+    /// <summary>What the sync planner needs of the sequencing: its real predictive number and its owner.</summary>
+    /// <param name="ownerId">The sample the number's sequencing hangs from, see <see cref="SequencingOwner"/>.</param>
+    public static ErrorOr<SequencingAggregate> ToSequencing(SequencingId id, SampleId ownerId) =>
+        SequencingAggregate.Create(id.Value, ownerId);
+
+    /// <param name="samplePseudonym">The owning sample's pseudonym, which keys the payload.</param>
+    public static CatalogueSequencingPayload ToPayload(SequencingDto dto, string samplePseudonym) =>
+        new()
+        {
+            ExternalId = samplePseudonym,
+            SampleId = samplePseudonym,
+            SamplePreparations = [.. Pairs(dto).Select(pair => ToPreparation(pair.Sample, pair.Run, samplePseudonym))],
+        };
 
     /// <summary>
-    /// One preparation per (sample, run) pair, MammaPrint runs left out. A predictive number that
-    /// matches nothing answers with an empty sample list, which yields no preparations rather than an
-    /// empty placeholder.
+    /// Every (sample, run) pair the response holds, MammaPrint runs left out. Each pair is its own
+    /// preparation, so a resequenced sample loses nothing.
     /// </summary>
-    private static List<SamplePreparation> ToPreparations(SequencingDto dto, SampleId sampleId) =>
-    [
-        .. from sample in dto.Samples ?? []
-           from run in sample.Runs ?? []
-           where !IsMammaPrint(run)
-           select ToPreparation(sample, run, sampleId),
-    ];
+    private static IEnumerable<(SequencingSampleDto Sample, SequencingRunDto Run)> Pairs(SequencingDto dto) =>
+        from sample in dto.Samples ?? []
+        from run in sample.Runs ?? []
+        where !IsMammaPrint(run)
+        select (sample, run);
 
     /// <summary>
     /// MammaPrint is a separate assay that never belonged in the catalogue; the previous uploader read
@@ -67,20 +91,23 @@ public static class SequencingMapper
         string.Equals(run.SourceClass, "mamma-print", StringComparison.OrdinalIgnoreCase)
         || run.ExperimentName?.StartsWith("MP_", StringComparison.OrdinalIgnoreCase) == true;
 
-    private static SamplePreparation ToPreparation(SequencingSampleDto sample, SequencingRunDto run, SampleId sampleId)
+    private static SamplePreparationRecord ToPreparation(
+        SequencingSampleDto sample,
+        SequencingRunDto run,
+        string samplePseudonym)
     {
         var preparationId = SequencingMapping.Identifier(SamplePrepModule, sample.SampleId, run.RunId);
         var library = run.LibraryPreparation;
         var (fullySequenced, partiallySequenced) = SplitGenes(library?.Panel?.Genes);
 
-        return new SamplePreparation
+        return new SamplePreparationRecord
         {
             SampleprepIdentifier = preparationId,
 
             // The biobank's stored biospecimen, not the sequencing API's sample id: that one is the
             // pseudonymized predictive number. v2 points a preparation at the biospecimen rather
             // than the material, and the id is derived so it cannot drift from the row it names.
-            BelongsToBiospecimen = BiobankMapping.BiospecimenIdentifier(sampleId.Value),
+            BelongsToBiospecimen = BiobankMapping.BiospecimenIdentifier(samplePseudonym),
             InputAmount = library?.InputAmount,
             LibraryPreparationKit = library?.LibraryPrepKit,
             PcrFree = library?.PcrFree,
@@ -91,7 +118,7 @@ public static class SequencingMapper
             UmisPresent = library?.UmiPresent,
             IntendedInsertSize = library?.IntendedInsertSize,
             IntendedReadLength = library?.IntendedReadLength,
-            Sequencing = ToSequencingRun(sample, run, preparationId),
+            Sequencing = ToSequencingRecord(sample, run, preparationId),
         };
     }
 
@@ -121,7 +148,7 @@ public static class SequencingMapper
         return (fully.Count == 0 ? null : fully, partially.Count == 0 ? null : partially);
     }
 
-    private static SequencingRun ToSequencingRun(
+    private static SequencingRecord ToSequencingRecord(
         SequencingSampleDto sample,
         SequencingRunDto run,
         string? preparationId)
@@ -132,7 +159,7 @@ public static class SequencingMapper
         var quality = (run.Analyses ?? []).Select(analysis => analysis.Quality).FirstOrDefault(q => q is not null);
         var sequencingId = SequencingMapping.SequencingIdentifier(sample.SampleId, run.RunId);
 
-        return new SequencingRun
+        return new SequencingRecord
         {
             SequencingIdentifier = sequencingId,
             BelongsToSamplePreparation = preparationId,
@@ -163,7 +190,7 @@ public static class SequencingMapper
         };
     }
 
-    private static List<Analysis> ToAnalyses(
+    private static List<AnalysisRecord> ToAnalyses(
         SequencingSampleDto sample,
         SequencingRunDto run,
         string? sequencingId)
@@ -182,7 +209,7 @@ public static class SequencingMapper
         ];
     }
 
-    private static Analysis ToAnalysis(AnalysisDto dto, string? analysisId, string? sequencingId)
+    private static AnalysisRecord ToAnalysis(AnalysisDto dto, string? analysisId, string? sequencingId)
     {
         var files = dto.Files ?? [];
 
@@ -191,7 +218,7 @@ public static class SequencingMapper
         // format list is built from.
         var formats = CatalogueVocabulary.DataFormats(files.Select(file => file.Role));
 
-        return new Analysis
+        return new AnalysisRecord
         {
             AnalysisIdentifier = analysisId,
             BelongsToSequencing = sequencingId,

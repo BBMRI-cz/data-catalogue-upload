@@ -2,7 +2,7 @@ namespace Uploader.Application.Dtos;
 
 /// <summary>
 /// FAIR Genomes <c>Sequencing</c> row. Both identity fields already carry pseudonyms, derived from
-/// the sequencing API's sample id, so this record is copied across unchanged.
+/// the sequencing API's sample id, so nothing in this record needs substituting.
 /// </summary>
 public sealed record SequencingRecord
 {

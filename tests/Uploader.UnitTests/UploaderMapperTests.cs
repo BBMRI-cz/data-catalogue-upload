@@ -8,8 +8,8 @@ namespace Uploader.UnitTests;
 public sealed class UploaderMapperTests
 {
     // Patient and sample rows live in CataloguePatientMapperTests and CatalogueSampleMapperTests, and
-    // sequencing in SequencingMapperTests: its source serves a nested list rather than one record, so
-    // its cardinality and drops need a file of their own.
+    // sequencing in CatalogueSequencingMapperTests: its source serves a nested list rather than one
+    // record, so its cardinality and drops need a file of their own.
 
     [Fact]
     public void WsiReturnsNullFixedBlockWhenNoKeys()

@@ -4,7 +4,7 @@ using Xunit;
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// The two derived values in the sequencing -> domain mapping. Everything else is carried verbatim,
+/// The two derived values in the sequencing -> catalogue mapping. Everything else is carried verbatim,
 /// so this covers all of the mapping's logic.
 /// </summary>
 public sealed class SequencingMappingTests

@@ -1,7 +1,5 @@
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
-using Uploader.Domain;
-using Uploader.Domain.Common;
 using Uploader.Infrastructure.Configuration;
 using Uploader.Infrastructure.Http;
 using Xunit;
@@ -9,15 +7,18 @@ using Xunit;
 namespace Uploader.IntegrationTests;
 
 /// <summary>
-/// Wire to domain in one pass: a recorded <c>GET /sequencing?predictive_number=4-21</c> body goes
-/// through the real <see cref="HttpSourceDataGateway"/> and the real mapper, and the assembled
-/// aggregate is inspected. This is what catches a serializer mismatch — the whole reason this alignment
-/// was needed — which a mapper unit test cannot see because it starts from an already-built DTO.
+/// Wire to catalogue rows in one pass: a recorded <c>GET /sequencing?predictive_number=4-21</c> body
+/// goes through the real <see cref="HttpSourceDataGateway"/> and the real mapper, and the payload the
+/// catalogue would receive is inspected. This is what catches a serializer mismatch — the whole reason
+/// this alignment was needed — which a mapper unit test cannot see because it starts from an
+/// already-built DTO.
 /// </summary>
 public sealed class SequencingFetchTests
 {
-    private static readonly SequencingId PredictiveNumber = new("4-21");
-    private static readonly SampleId BiobankSample = new("S-T");
+    private const string PredictiveNumber = "4-21";
+
+    /// <summary>The owning biobank sample's pseudonym, the fake map's form of <c>S-T</c>.</summary>
+    private const string SamplePseudonym = "mmci_sample_S-T";
 
     [Fact]
     public async Task SequencingArrivesWithRunsPreparationAndPanel()
@@ -26,15 +27,15 @@ public sealed class SequencingFetchTests
 
         // One sample sequenced three times, once for MammaPrint: a preparation per remaining run, none
         // collapsed onto another.
-        Assert.Equal(2, sequencing.Preparations.Count);
-        Assert.Equal(2, sequencing.Preparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
+        Assert.Equal(2, sequencing.SamplePreparations.Count);
+        Assert.Equal(2, sequencing.SamplePreparations.Select(prep => prep.SampleprepIdentifier).Distinct().Count());
 
         var prepared = Prepared(sequencing, "240104_M02340_0399_LCBRW");
         Assert.Equal("sampleprep_p0001_240104_M02340_0399_LCBRW", prepared.SampleprepIdentifier);
 
-        // The biospecimen is derived from the biobank's sample id, not from the sequencing API's
-        // pseudonymized predictive id.
-        Assert.Equal("biospecimen_S-T", prepared.BelongsToBiospecimen);
+        // The biospecimen is derived from the biobank sample's pseudonym, not from the sequencing
+        // API's pseudonymized predictive id.
+        Assert.Equal("mmci_biospecimen_S-T", prepared.BelongsToBiospecimen);
 
         Assert.Equal(250, prepared.InputAmount);
         Assert.Equal("KAPA HyperPlus", prepared.LibraryPreparationKit);
@@ -129,7 +130,7 @@ public sealed class SequencingFetchTests
         // The fixture's third run is filed under complete-runs, and only its MP_18_2024 experiment
         // name says it is MammaPrint. The sequencing API serves it; the catalogue does not get it.
         Assert.DoesNotContain(
-            sequencing.Preparations,
+            sequencing.SamplePreparations,
             prep => prep.SampleprepIdentifier!.EndsWith("240430_M02340_0412_ABCDE", StringComparison.Ordinal));
     }
 
@@ -138,22 +139,26 @@ public sealed class SequencingFetchTests
     {
         // A predictive number the sequencing API does not know: 200 with an empty sample list, which
         // must read as "nothing sequenced", not as a failure and not as an empty placeholder record.
-        var sequencing = await FetchAsync(RecordedResponse.EmptySequencing());
+        var response = await FetchResponseAsync(RecordedResponse.EmptySequencing());
 
-        Assert.Empty(sequencing.Preparations);
+        Assert.False(CatalogueSequencingMapper.HasPreparations(response));
+        Assert.Empty(CatalogueSequencingMapper.ToPayload(response, SamplePseudonym).SamplePreparations);
     }
 
-    private static async Task<SequencingAggregate> FetchAsync(string recordedBody)
+    private static async Task<CatalogueSequencingPayload> FetchAsync(string recordedBody) =>
+        CatalogueSequencingMapper.ToPayload(await FetchResponseAsync(recordedBody), SamplePseudonym);
+
+    private static async Task<SequencingDto> FetchResponseAsync(string recordedBody)
     {
         var gateway = new HttpSourceDataGateway(
             RecordedResponse.ClientFactory(recordedBody), new UploaderOptions());
-        var fetched = await gateway.FetchSequencingAsync(PredictiveNumber.Value, CancellationToken.None);
+        var fetched = await gateway.FetchSequencingAsync(PredictiveNumber, CancellationToken.None);
 
-        return SequencingMapper.ToSequencing(fetched.Value!, PredictiveNumber, BiobankSample).Value;
+        return fetched.Value!;
     }
 
-    private static SamplePreparation Prepared(SequencingAggregate sequencing, string runId) =>
+    private static SamplePreparationRecord Prepared(CatalogueSequencingPayload sequencing, string runId) =>
         Assert.Single(
-            sequencing.Preparations,
+            sequencing.SamplePreparations,
             prep => prep.Sequencing!.SequencingIdentifier!.EndsWith(runId, StringComparison.Ordinal));
 }

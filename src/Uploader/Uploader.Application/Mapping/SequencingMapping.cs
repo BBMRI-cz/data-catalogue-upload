@@ -3,9 +3,10 @@ using System.Globalization;
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// The computed pieces of the sequencing -> domain mapping: the derived FAIR identifiers and the
-/// packing of the run statistics into <c>OtherQualityMetrics</c>. Everything else the mapper carries
-/// verbatim, so this is the whole of the mapping's logic.
+/// The computed pieces of the sequencing -> catalogue mapping: the derived FAIR identifiers and the
+/// packing of the run statistics into <c>OtherQualityMetrics</c>. Apart from the vocabulary lookups,
+/// <see cref="CatalogueSequencingMapper"/> carries everything else verbatim, so this is the whole of
+/// the mapping's own logic.
 /// </summary>
 internal static class SequencingMapping
 {

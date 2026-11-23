@@ -145,10 +145,10 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Resolved once per patient, before anything is planned: every payload built below
             // publishes these in place of the real ids, while the sync state keeps the real ones.
             var pseudonyms = await ResolvePseudonymsAsync(data, existing, cancellationToken);
-            var payloads = BuildPayloads(rawPatient, built.Value.Samples, pseudonyms);
+            var payloads = BuildPayloads(rawPatient, built.Value, pseudonyms);
 
             var operations = _planner.Plan(
-                data, existing, aggregate => PayloadFingerprint(aggregate, payloads, pseudonyms));
+                data, existing, aggregate => PayloadFingerprint(aggregate, payloads));
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
             // Still a skip in the summary, as it always was.
@@ -195,26 +195,37 @@ internal sealed class RunCatalogueSyncCommandHandler
     }
 
     /// <summary>
-    /// The patient's and samples' catalogue rows, built once from the biobank's records now that the
-    /// pseudonyms are known. The planner fingerprints these objects and the upsert sends the same ones.
+    /// The patient's, samples' and sequencing's catalogue rows, built once from the source records now
+    /// that the pseudonyms are known. The planner fingerprints these objects and the upsert sends the
+    /// same ones.
     /// </summary>
     private PatientPayloads BuildPayloads(
         PatientDto rawPatient,
-        IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> samples,
+        AssembledPatient assembled,
         PatientPseudonyms pseudonyms)
     {
         // Keyed by the aggregate object rather than its id, so a sample the source lists twice keeps
         // a payload per listing, exactly as it gets an operation per listing.
         var samplePayloads = new Dictionary<SampleAggregate, CatalogueSamplePayload>(ReferenceEqualityComparer.Instance);
-        foreach (var (dto, sample) in samples)
+        foreach (var (dto, sample) in assembled.Samples)
         {
             samplePayloads[sample] = CatalogueSampleMapper.ToPayload(
                 dto, pseudonyms.Sample(sample.Id), pseudonyms.Patient, rawPatient.Biobank);
         }
 
+        // Published under the owning sample's pseudonym, which keys the rows and the biospecimen link.
+        var sequencingPayloads =
+            new Dictionary<SequencingAggregate, CatalogueSequencingPayload>(ReferenceEqualityComparer.Instance);
+        foreach (var (dto, sequencing) in assembled.Sequencings)
+        {
+            sequencingPayloads[sequencing] = CatalogueSequencingMapper.ToPayload(
+                dto, pseudonyms.Sample(sequencing.SampleId));
+        }
+
         return new PatientPayloads(
             CataloguePatientMapper.ToPayload(rawPatient, pseudonyms.Patient, _study.Identifier),
-            samplePayloads);
+            samplePayloads,
+            sequencingPayloads);
     }
 
     private async Task ExecuteAsync(
@@ -253,7 +264,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         result.Changed++;
-        var upserted = await UpsertAsync(operation, payloads, pseudonyms, cancellationToken);
+        var upserted = await UpsertAsync(operation, payloads, cancellationToken);
         if (!upserted.IsError)
         {
             operation.State.CatalogueRemoteId = upserted.Value;
@@ -275,7 +286,6 @@ internal sealed class RunCatalogueSyncCommandHandler
     private Task<ErrorOr<string>> UpsertAsync(
         SyncOperation operation,
         PatientPayloads payloads,
-        PatientPseudonyms pseudonyms,
         CancellationToken cancellationToken) =>
         operation switch
         {
@@ -286,7 +296,7 @@ internal sealed class RunCatalogueSyncCommandHandler
                 payloads.Sample(sample), cancellationToken),
 
             SequencingOperation { Sequencing: { } sequencing } => _catalogueGateway.UpsertSequencingAsync(
-                SequencingPayload(sequencing, pseudonyms), cancellationToken),
+                payloads.Sequencing(sequencing), cancellationToken),
 
             // No WSI or radiology source is wired yet, so neither of these can carry data today. If
             // one ever answers, its identifiers are still the real bioptic and accession numbers and
@@ -304,20 +314,16 @@ internal sealed class RunCatalogueSyncCommandHandler
     /// <summary>
     /// What the planner decides a re-send on: the row the catalogue would receive, not the aggregate
     /// it is built from. A mapping fix or a new study id changes the row while the source data stays
-    /// the same, and a fingerprint of the aggregate would skip that row on every run. The patient and
-    /// sample rows are the very objects the upsert sends, so what is hashed is what is sent.
+    /// the same, and a fingerprint of the aggregate would skip that row on every run. The patient,
+    /// sample and sequencing rows are the very objects the upsert sends, so what is hashed is what is
+    /// sent.
     /// </summary>
-    private static Fingerprint PayloadFingerprint(
-        object aggregate,
-        PatientPayloads payloads,
-        PatientPseudonyms pseudonyms) =>
+    private static Fingerprint PayloadFingerprint(object aggregate, PatientPayloads payloads) =>
         aggregate switch
         {
             PatientAggregate => Fingerprint.Of(payloads.Patient),
             SampleAggregate sample => Fingerprint.Of(payloads.Sample(sample)),
-
-            // Still rebuilt from the aggregate, by the same helper the upsert uses.
-            SequencingAggregate sequencing => Fingerprint.Of(SequencingPayload(sequencing, pseudonyms)),
+            SequencingAggregate sequencing => Fingerprint.Of(payloads.Sequencing(sequencing)),
 
             // ponytail: no catalogue row exists for these until WSI and radiology are pseudonymized,
             // and their upserts are refused, so the aggregate is all there is to compare.
@@ -327,11 +333,6 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Unreachable: the planner only fingerprints the five aggregates above.
             _ => throw new InvalidOperationException($"No fingerprint for {aggregate.GetType().Name}"),
         };
-
-    private static CatalogueSequencingPayload SequencingPayload(
-        SequencingAggregate sequencing,
-        PatientPseudonyms pseudonyms) =>
-        CatalogueMapper.ToPayload(sequencing, pseudonyms.Sample(sequencing.SampleId));
 
     /// <summary>
     /// Removes one aggregate's rows from the catalogue. The planner already ordered the operations
@@ -472,6 +473,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
         var sampled = new List<(SampleDto Dto, SampleAggregate Sample)>();
         var sequenced = new List<(SequencingId Id, SampleDto Dto, SampleAggregate Sample)>();
+        var sequencingResponses = new List<(SequencingDto Dto, SequencingAggregate Sequencing)>();
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
@@ -527,22 +529,20 @@ internal sealed class RunCatalogueSyncCommandHandler
             }
 
             // A predictive number the sequencing API does not know answers 200 with an empty sample
-            // list. That is a normal answer, not a failure: no aggregate, no counter moved.
-            else if (fetched.Value is { Samples.Count: > 0 } sequencingDto)
+            // list, and one sequenced only for MammaPrint has nothing for the catalogue either. Both
+            // are normal answers, not failures: no aggregate and no counter moved, so the planner
+            // deletes this number's published sequencing rows while the samples themselves stay.
+            else if (fetched.Value is { } sequencingDto && CatalogueSequencingMapper.HasPreparations(sequencingDto))
             {
                 var owner = SequencingOwner.Choose(shared.Select(entry => (entry.Dto, entry.Sample)));
-                var sequencingResult = SequencingMapper.ToSequencing(sequencingDto, shared.Key, owner.Id);
+                var sequencingResult = CatalogueSequencingMapper.ToSequencing(shared.Key, owner.Id);
                 if (sequencingResult.IsError)
                 {
                     return sequencingResult.Errors;
                 }
 
-                // Only MammaPrint runs: nothing for the catalogue. No aggregate, so the planner deletes
-                // this number's published sequencing rows; the samples themselves stay.
-                if (sequencingResult.Value.Preparations.Count > 0)
-                {
-                    sequencings.Add(sequencingResult.Value);
-                }
+                sequencings.Add(sequencingResult.Value);
+                sequencingResponses.Add((sequencingDto, sequencingResult.Value));
             }
         }
 
@@ -585,16 +585,57 @@ internal sealed class RunCatalogueSyncCommandHandler
             ImagingComplete = imagingComplete,
         };
 
-        return new AssembledPatient(data, sampled);
+        return new AssembledPatient(data, sampled, sequencingResponses);
     }
 
     /// <summary>
-    /// The planner's input for one patient, and the biobank record each sample aggregate was built
-    /// from - which is what its catalogue rows are built from once the pseudonyms are known.
+    /// The planner's input for one patient, and the source record each sample and sequencing aggregate
+    /// was built from - which is what its catalogue rows are built from once the pseudonyms are known.
     /// </summary>
     private sealed record AssembledPatient(
         PatientCatalogueData Data,
-        IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> Samples);
+        IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> Samples,
+        IReadOnlyList<(SequencingDto Dto, SequencingAggregate Sequencing)> Sequencings);
+
+    /// <summary>
+    /// One patient's catalogue rows - the patient's, each sample's and the sequencing's - built once
+    /// per run by <see cref="BuildPayloads"/>, after the patient's pseudonyms are resolved.
+    /// <para>
+    /// It exists because the planner hands back operations that name aggregates, not rows. This is how
+    /// the handler gets from an aggregate back to the row it built for it, so the object
+    /// <see cref="PayloadFingerprint"/> hashes is the very object <see cref="UpsertAsync"/> sends, and
+    /// the fingerprint the sync state stores describes what the catalogue received. Building the row
+    /// again at upsert time could produce a different one.
+    /// </para>
+    /// <para>
+    /// The rows are keyed by the aggregate object rather than its id, so a sample the source lists
+    /// twice keeps a row per listing, exactly as it gets an operation per listing.
+    /// </para>
+    /// </summary>
+    private sealed record PatientPayloads(
+        CataloguePatientPayload Patient,
+        IReadOnlyDictionary<SampleAggregate, CatalogueSamplePayload> Samples,
+        IReadOnlyDictionary<SequencingAggregate, CatalogueSequencingPayload> Sequencings)
+    {
+        /// <summary>
+        /// The row built for <paramref name="sample"/>. Every sample the planner can upsert came from
+        /// the patient's data and had its row built before planning, so a miss here is a programmer
+        /// error rather than absent source data.
+        /// </summary>
+        public CatalogueSamplePayload Sample(SampleAggregate sample) =>
+            Samples.TryGetValue(sample, out var payload)
+                ? payload
+                : throw new InvalidOperationException($"No payload built for sample {sample.Id.Value}.");
+
+        /// <summary>
+        /// The row built for <paramref name="sequencing"/>. As with <see cref="Sample"/>, a miss here is
+        /// a programmer error.
+        /// </summary>
+        public CatalogueSequencingPayload Sequencing(SequencingAggregate sequencing) =>
+            Sequencings.TryGetValue(sequencing, out var payload)
+                ? payload
+                : throw new InvalidOperationException($"No payload built for sequencing {sequencing.Id.Value}.");
+    }
 }
 
 /// <summary>

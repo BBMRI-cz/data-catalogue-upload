@@ -13,7 +13,7 @@ tests/
 ├── BiobankApi.IntegrationTests      ApiTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
-├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMapperTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueSequencingMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
 ├── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
 └── TrainingSeeder.IntegrationTests  TrainingSeederTests (the seeder through both APIs' repositories on SQLite: edge cases, same rows per seed, non-empty DB left alone, migrations match the model), PredictiveNumberTests, SeedSettingsTests
 ```
@@ -198,7 +198,7 @@ here: a wire key no DTO property lands on, which turns a whole catalogue row or 
 a pair of tests, one per half of that failure.** `BiobankFetchTests` and `SequencingFetchTests` start from a
 recorded response body instead of a built DTO, drive it through the real `HttpSourceDataGateway` (internal,
 reachable via `InternalsVisibleTo`) with a stub `HttpMessageHandler`, and assert what comes out: the patient and sample rows for the biobank, the
-assembled aggregate for sequencing.
+sequencing rows for sequencing.
 `BiobankContractParityTests` and `SequencingContractParityTests` compare the served keys against the DTO
 property names (converted with `JsonNamingPolicy.SnakeCaseLower.ConvertName`) **in both directions** via the
 shared `ContractParity.AssertKeysMatch<T>`, so a rename fails as one missing key plus one orphaned property and

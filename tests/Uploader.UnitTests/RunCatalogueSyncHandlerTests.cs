@@ -293,7 +293,7 @@ public sealed class RunCatalogueSyncHandlerTests
     /// The re-send is decided on the row the catalogue receives, not on the aggregate behind it. Only
     /// the study id changes between these runs - the source data is identical - and the patient row
     /// names the study, so it has to go out again. A fingerprint of the aggregate skipped it, which is
-    /// also how a fix in <c>CatalogueMapper</c> never reached a published patient.
+    /// also how a fix to a patient's catalogue row never reached a published patient.
     /// </summary>
     [Fact]
     public async Task ARowThatChangesWithoutItsSourceIsSentAgain()
@@ -342,10 +342,18 @@ public sealed class RunCatalogueSyncHandlerTests
                         AvailableSamplesNo = 2,
                         CutTime = new DateTime(2020, 1, 2),
                         FreezeTime = new DateTime(2020, 1, 2),
+                        PredictiveNumber = "PRED1",
                     },
                 ],
             },
         ]);
+        source.Sequencing["PRED1"] = SequencingWithOneRun(new SequencingRunDto
+        {
+            RunId = "R1",
+            Platform = "Illumina",
+            InstrumentId = "M02340",
+            Analyses = [new AnalysisDto { PipelineName = "NextGENe", ReferenceGenome = "GRCh37" }],
+        });
         var catalogue = new FakeCatalogueGateway();
         var state = new InMemorySyncStateRepository();
 
@@ -357,6 +365,9 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.Equal(
             Fingerprint.Of(Assert.Single(catalogue.SamplePayloads)).Value,
             state.Samples["S1"].SourceFingerprint);
+        Assert.Equal(
+            Fingerprint.Of(Assert.Single(catalogue.SequencingPayloads)).Value,
+            state.Sequencing["PRED1"].SourceFingerprint);
     }
 
     [Fact]

@@ -182,10 +182,10 @@ would otherwise transpose silently).
 return their own model in snake_case and the uploader maps to the FAIR shape on its side. Do not shape a
 source endpoint after `Uploader.Application/Dtos`.
 
-**Uploader change detection hashes the row the catalogue receives.** The sync handler builds the patient and sample
-rows once per run straight from the biobank response (`CataloguePatientMapper`, `CatalogueSampleMapper`), the
-sequencing row with `CatalogueMapper`, and hashes each (`PayloadFingerprint`, SHA-256 over canonical JSON via
-`Fingerprint.Of(...)`); the upsert sends the same patient and sample objects that were hashed.
+**Uploader change detection hashes the row the catalogue receives.** The sync handler builds the patient, sample
+and sequencing rows once per run straight from the source responses (`CataloguePatientMapper`,
+`CatalogueSampleMapper`, `CatalogueSequencingMapper`), and hashes each (`PayloadFingerprint`, SHA-256 over
+canonical JSON via `Fingerprint.Of(...)`); the upsert sends the same objects that were hashed.
 `FingerprintSyncPlanner` only compares fingerprints to decide CREATE/UPDATE/SKIP/DELETE. Hashing the row rather
 than the aggregate is what re-sends a mapping fix or a config change. Reuse `Fingerprint.Of` - don't hand-roll
 hashing. (WSI and imaging studies have no row yet and still hash their aggregate.)

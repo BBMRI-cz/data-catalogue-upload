@@ -3,8 +3,9 @@ namespace Uploader.Application.Dtos;
 /// <summary>
 /// EMX2 <c>SamplePreparation</c> row. <see cref="SampleprepIdentifier"/> arrives already
 /// pseudonymized - it derives from the sequencing API's sample id, which is the run tree's
-/// <c>mmci_predictive_&lt;uuid&gt;</c> folder name. Only <see cref="BelongsToBiospecimen"/> needs
-/// substituting: it points at the biobank's stored sample, whose id is real.
+/// <c>mmci_predictive_&lt;uuid&gt;</c> folder name. Only <see cref="BelongsToBiospecimen"/> does not:
+/// it points at the biobank's stored sample, whose id is real, so it is derived from the sample's
+/// pseudonym instead.
 /// </summary>
 public sealed record SamplePreparationRecord
 {

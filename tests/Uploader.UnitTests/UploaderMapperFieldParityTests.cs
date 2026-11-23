@@ -7,9 +7,9 @@ using Xunit;
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// Full-field parity guards for the hand-written Uploader mappers: the patient and sample payload
-/// mappers (biobank response straight to catalogue rows) and the per-aggregate Sequencing/Wsi/
-/// ImagingStudy mappers. A dropped or mis-sourced field is no longer a compile error, so every
+/// Full-field parity guards for the hand-written Uploader mappers: the patient, sample and sequencing
+/// payload mappers (source response straight to catalogue rows) and the per-aggregate Wsi/ImagingStudy
+/// mappers. A dropped or mis-sourced field is no longer a compile error, so every
 /// catalogue-row and value-object field is asserted here.
 /// The all-scalar imaging-series records (no collection members) are compared by record value
 /// equality, which checks every field in one assertion; the list-bearing value objects are checked
@@ -261,15 +261,15 @@ public sealed class UploaderMapperFieldParityTests
     };
 
     [Fact]
-    public void SamplePreparationSequencingRunAndAnalysisMapEveryField()
+    public void SamplePreparationSequencingAndAnalysisMapEveryField()
     {
-        var sequencing = SequencingMapper
-            .ToSequencing(FullyPopulatedSequencing(), new SequencingId("PRED1"), new SampleId("S1"))
-            .Value;
+        var sequencing = CatalogueSequencingMapper.ToPayload(FullyPopulatedSequencing(), SamplePseudonym);
+        Assert.Equal(SamplePseudonym, sequencing.ExternalId);
+        Assert.Equal(SamplePseudonym, sequencing.SampleId);
 
-        var prep = Assert.Single(sequencing.Preparations);
+        var prep = Assert.Single(sequencing.SamplePreparations);
         Assert.Equal("sampleprep_p0001_R1", prep.SampleprepIdentifier);
-        Assert.Equal("biospecimen_S1", prep.BelongsToBiospecimen);
+        Assert.Equal("mmci_biospecimen_S-T", prep.BelongsToBiospecimen);
         Assert.Equal(100, prep.InputAmount);
         Assert.Equal("KitA", prep.LibraryPreparationKit);
         Assert.True(prep.PcrFree);

@@ -12,7 +12,7 @@ namespace Uploader.IntegrationTests;
 /// <para>
 /// The DTO carries every served field. Which of them the mapper deliberately leaves behind (the
 /// run-sample's files, the panel's identity, <c>sample_type</c>, <c>analysis_type</c>, …) is stated on
-/// <c>SequencingMapper</c> and asserted in the uploader's mapper tests.
+/// <c>CatalogueSequencingMapper</c> and asserted in the uploader's mapper tests.
 /// </para>
 /// <para>
 /// The comparison goes through the fixture rather than reflecting over the sequencing API's own
