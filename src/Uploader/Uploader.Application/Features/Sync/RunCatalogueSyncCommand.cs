@@ -596,6 +596,46 @@ internal sealed class RunCatalogueSyncCommandHandler
         PatientCatalogueData Data,
         IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> Samples,
         IReadOnlyList<(SequencingDto Dto, SequencingAggregate Sequencing)> Sequencings);
+
+    /// <summary>
+    /// One patient's catalogue rows - the patient's, each sample's and the sequencing's - built once
+    /// per run by <see cref="BuildPayloads"/>, after the patient's pseudonyms are resolved.
+    /// <para>
+    /// It exists because the planner hands back operations that name aggregates, not rows. This is how
+    /// the handler gets from an aggregate back to the row it built for it, so the object
+    /// <see cref="PayloadFingerprint"/> hashes is the very object <see cref="UpsertAsync"/> sends, and
+    /// the fingerprint the sync state stores describes what the catalogue received. Building the row
+    /// again at upsert time could produce a different one.
+    /// </para>
+    /// <para>
+    /// The rows are keyed by the aggregate object rather than its id, so a sample the source lists
+    /// twice keeps a row per listing, exactly as it gets an operation per listing.
+    /// </para>
+    /// </summary>
+    private sealed record PatientPayloads(
+        CataloguePatientPayload Patient,
+        IReadOnlyDictionary<SampleAggregate, CatalogueSamplePayload> Samples,
+        IReadOnlyDictionary<SequencingAggregate, CatalogueSequencingPayload> Sequencings)
+    {
+        /// <summary>
+        /// The row built for <paramref name="sample"/>. Every sample the planner can upsert came from
+        /// the patient's data and had its row built before planning, so a miss here is a programmer
+        /// error rather than absent source data.
+        /// </summary>
+        public CatalogueSamplePayload Sample(SampleAggregate sample) =>
+            Samples.TryGetValue(sample, out var payload)
+                ? payload
+                : throw new InvalidOperationException($"No payload built for sample {sample.Id.Value}.");
+
+        /// <summary>
+        /// The row built for <paramref name="sequencing"/>. As with <see cref="Sample"/>, a miss here is
+        /// a programmer error.
+        /// </summary>
+        public CatalogueSequencingPayload Sequencing(SequencingAggregate sequencing) =>
+            Sequencings.TryGetValue(sequencing, out var payload)
+                ? payload
+                : throw new InvalidOperationException($"No payload built for sequencing {sequencing.Id.Value}.");
+    }
 }
 
 /// <summary>
