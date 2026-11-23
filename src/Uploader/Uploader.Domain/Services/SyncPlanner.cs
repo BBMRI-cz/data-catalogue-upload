@@ -139,8 +139,7 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
         bool eligible,
         Func<object, Fingerprint> fingerprintOf)
     {
-        var fingerprint = fingerprintOf(patient).Value;
-
+        // An ineligible patient's row is never sent, so it is never fingerprinted either.
         if (!eligible)
         {
             return prior is { IsDeleted: false, WasPublished: true }
@@ -153,6 +152,7 @@ public sealed class FingerprintSyncPlanner : ISyncPlanner
                 : null;
         }
 
+        var fingerprint = fingerprintOf(patient).Value;
         return new PatientOperation
         {
             Op = Decide(fingerprint, prior),

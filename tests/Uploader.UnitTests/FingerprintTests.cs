@@ -1,3 +1,4 @@
+using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain;
 using Uploader.Domain.Common;
@@ -10,38 +11,38 @@ public sealed class FingerprintTests
     [Fact]
     public void IsDeterministicForEqualInput()
     {
-        var a = new Personal { PersonalIdentifier = "P1", YearOfBirth = 1980 };
-        var b = new Personal { PersonalIdentifier = "P1", YearOfBirth = 1980 };
+        var a = new PersonalRecord { PersonalIdentifier = "P1", YearOfBirth = 1980 };
+        var b = new PersonalRecord { PersonalIdentifier = "P1", YearOfBirth = 1980 };
         Assert.Equal(Fingerprint.Of(a), Fingerprint.Of(b));
     }
 
     [Fact]
     public void ChangesWhenInputChanges()
     {
-        var a = new Personal { PersonalIdentifier = "P1", YearOfBirth = 1980 };
-        var b = new Personal { PersonalIdentifier = "P1", YearOfBirth = 1981 };
+        var a = new PersonalRecord { PersonalIdentifier = "P1", YearOfBirth = 1980 };
+        var b = new PersonalRecord { PersonalIdentifier = "P1", YearOfBirth = 1981 };
         Assert.NotEqual(Fingerprint.Of(a), Fingerprint.Of(b));
     }
 
     [Fact]
     public void IgnoresNullArguments()
     {
-        var personal = new Personal { PersonalIdentifier = "P1" };
+        var personal = new PersonalRecord { PersonalIdentifier = "P1" };
         Assert.Equal(Fingerprint.Of(personal), Fingerprint.Of(personal, null));
     }
 
     [Fact]
     public void IsOrderSensitiveAcrossArguments()
     {
-        var personal = new Personal { PersonalIdentifier = "P1" };
-        var clinical = new Clinical { ClinicalIdentifier = "C1" };
+        var personal = new PersonalRecord { PersonalIdentifier = "P1" };
+        var clinical = new ClinicalRecord { ClinicalIdentifier = "C1" };
         Assert.NotEqual(Fingerprint.Of(personal, clinical), Fingerprint.Of(clinical, personal));
     }
 
     [Fact]
     public void ReturnsHexSha256()
     {
-        var hash = Fingerprint.Of(new Personal { PersonalIdentifier = "P1" }).Value;
+        var hash = Fingerprint.Of(new PersonalRecord { PersonalIdentifier = "P1" }).Value;
         Assert.Equal(64, hash.Length);
         Assert.All(hash, character => Assert.Contains(character, "0123456789abcdef"));
     }
@@ -49,12 +50,12 @@ public sealed class FingerprintTests
     [Fact]
     public void PatientRowFingerprintReflectsContent()
     {
-        var unchanged = PatientAggregate.Create("P1", new Personal { YearOfBirth = 1980 }, null).Value;
-        var changed = PatientAggregate.Create("P1", new Personal { YearOfBirth = 1990 }, null).Value;
+        var unchanged = new PatientDto { PatientId = "P1", BirthYear = 1980 };
+        var changed = unchanged with { BirthYear = 1990 };
 
         Assert.NotEqual(
-            Fingerprint.Of(CatalogueMapper.ToPayload(unchanged, "mmci_patient_P1", "study")),
-            Fingerprint.Of(CatalogueMapper.ToPayload(changed, "mmci_patient_P1", "study")));
+            Fingerprint.Of(CataloguePatientMapper.ToPayload(unchanged, "mmci_patient_P1", "study")),
+            Fingerprint.Of(CataloguePatientMapper.ToPayload(changed, "mmci_patient_P1", "study")));
     }
 
     [Fact]

@@ -4,7 +4,7 @@ namespace Uploader.Application.Dtos;
 /// EMX2 <c>Personal</c> row. <see cref="PersonalIdentifier"/> is the table's key and every other
 /// table's reference to this person, so it carries the patient's pseudonym.
 /// <see cref="ParticipatesInStudy"/> is not source data - it points at the one configured study
-/// this deployment publishes under, which is why it appears here and not on the domain value object.
+/// this deployment publishes under.
 /// </summary>
 public sealed record PersonalRecord
 {

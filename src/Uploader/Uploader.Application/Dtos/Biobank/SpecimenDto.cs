@@ -2,7 +2,7 @@ namespace Uploader.Application.Dtos;
 
 /// <summary>
 /// Raw diagnostic specimen: material consumed during diagnosis rather than archived for research.
-/// Only its diagnosis is carried into the patient record — see <c>PatientMapper</c>.
+/// Only its diagnosis is carried into the patient record — see <c>CataloguePatientMapper</c>.
 /// </summary>
 public sealed record SpecimenDto
 {

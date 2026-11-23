@@ -19,7 +19,7 @@ or command, **open the real thing and confirm it still exists** with that name.
 | `AGENTS.md` | conventions + commands. **`CLAUDE.md` only contains the text `AGENTS.md`** and mirrors it - edit `AGENTS.md`, never duplicate content into `CLAUDE.md`. |
 | `docs/deployment.md` | the compose files, the services in each, the env keys they substitute, and the ports |
 | `docs/catalogue-api-contract.md` | the live EMX2 schema and `Emx2*` classes in `Uploader.Infrastructure/Http/`. **Never name a real token, its claims, or its scope here** - this file ships to production; state the requirement, not the disclosure |
-| `docs/pseudonymization.md` | `CatalogueMapper` + `BiobankMapping`, one row per published catalogue column |
+| `docs/pseudonymization.md` | `CataloguePatientMapper`, `CatalogueSampleMapper`, `CatalogueMapper` + `BiobankMapping`, one row per published catalogue column |
 | `.claude/skills/*/SKILL.md` | each skill's frontmatter `description` and its body |
 
 > The available-skills list the harness shows is built from each skill's frontmatter `description:`. That
@@ -43,8 +43,9 @@ Cross-check each item against the live code/config:
    `dotnet-tools.json`, and a doc must not describe a package the code doesn't reference. (FluentValidation
    is referenced now - it backs the application-level `ValidationBehavior` - so it is no longer a dead claim.)
 6. **Type & service names.** Domain services, aggregates, ports, and helpers named in docs/skills must exist
-   (`FingerprintSyncPlanner`, `Fingerprint.Of`, the sync handler's `PayloadFingerprint`, the uploader's per-source mappers
-   in `Mapping/` (there is no single `SourceMapper` any more), `XmlValueReader`,
+   (`FingerprintSyncPlanner`, `Fingerprint.Of`, the sync handler's `PayloadFingerprint`, the uploader's mappers
+   in `Mapping/` - `CataloguePatientMapper`/`CatalogueSampleMapper` for the biobank, one per other source (there is
+   no single `SourceMapper` any more), `XmlValueReader`,
    the `I*Gateway`/`I*Repository` ports). The biobank has no domain "cleaning service"; the uploader has no
    "FingerprintCalculator" - don't reintroduce names that aren't in the code.
 7. **No Python residue.** No `pytest`, `mypy`, `ruff`, `uv`, `dataclass`, `Protocol`, `apps/`, `alembic`,

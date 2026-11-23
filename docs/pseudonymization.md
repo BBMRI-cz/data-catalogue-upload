@@ -6,7 +6,10 @@ Written for [#81](https://github.com/BBMRI-cz/data-catalogue-upload/issues/81).
 **The rule: the local sync database keeps the real identifiers; nothing real crosses to the
 catalogue.** Sync state and fingerprints stay keyed on the biobank's own ids — that database never
 leaves the host, and keeping it real is what lets a later run recognise the same patient. The
-substitution happens once, in `CatalogueMapper`, on the way out.
+substitution happens once, on the way out, in the mappers that build the catalogue rows:
+`CataloguePatientMapper` and `CatalogueSampleMapper` build the patient's and samples' rows straight
+from the biobank response, swapping in the pseudonyms as they place each value, and `CatalogueMapper`
+builds the sequencing rows. No catalogue-shaped object ever holds a real id.
 
 ## The two minted pseudonyms
 
@@ -98,8 +101,8 @@ Configuration, not patient data, and the one table here that carries no pseudony
 
 **Only two identifiers are minted.** Everything else either derives from them or arrives
 pseudonymous. `BiobankMapping.ClinicalIdentifier`, handed `mmci_patient_<uuid>`, answers
-`mmci_clinical_<uuid>` — the same helper the inbound mapper uses, called with a pseudonym instead of
-a real id. It was written for this.
+`mmci_clinical_<uuid>`; the consent and biospecimen identifiers are derived the same way. It was
+written for this.
 
 **The sequencing chain needs no work.** `SequencingMapping` derives its three identifiers from the
 sequencing API's `samples[].sample_id`, which *is* the run tree's `mmci_predictive_<uuid>` folder
@@ -113,7 +116,7 @@ cannot be written to.
 **A reference is derived, never copied.** A FAIR Genomes reference stores the referenced row's
 `UniqueID` value, so a reference that stops matching the key it points at breaks the catalogue's
 graph without anything failing. `Material.BelongsToDiagnosis` is therefore produced by the same
-call that produces `Clinical.ClinicalIdentifier`, not copied from the domain.
+call that produces `Clinical.ClinicalIdentifier`, not copied.
 
 **File paths are no longer published at all.** v1 put the analysis output paths in
 `AbstractDataLocation`, and they were pseudonymous because they sat under

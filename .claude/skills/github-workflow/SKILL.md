@@ -1,6 +1,6 @@
 ---
 name: github-workflow
-description: GitHub CI, pull request, and issue conventions for the data-catalogue-upload repository. Use when pushing to GitHub, opening or describing a pull request, filing an issue, or investigating a failing CI run. Covers what CI checks run (dotnet restore/format/build/test), reproducing them locally, fixing common failures, and PR/issue templates plus the project-board workflow.
+description: GitHub CI, pull request, and issue conventions for the data-catalogue-upload repository. Use when pushing to GitHub, opening or describing a pull request, filing an issue, or investigating a failing CI run. Covers what CI checks run (dotnet restore/format/build/test), reproducing them locally, fixing common failures, the PR rules (target, assignee, board exclusion), issue templates, and the project-board workflow.
 ---
 
 # GitHub workflow (data-catalogue-upload)
@@ -32,19 +32,9 @@ Reproduce CI locally before pushing by running those four commands. If they pass
 
 ## Pull requests
 
-Keep PRs focused and small. Use this description template:
-
-```markdown
-## Summary
-What this PR does, in 1-2 sentences.
-
-## Motivation
-Why the change is needed (link issues with `Closes #<n>`).
-
-## Changes
-- Bullet the key changes.
-
-```
+Keep PRs focused and small. Write the description with the `pr` skill, and add a `Closes #<n>` line for the
+issue it implements - the skill's template has no slot for it, and without it GitHub neither links nor closes
+the issue.
 
 Open PRs against `master`. Prefer the `gh` CLI: `gh pr create`. **Always assign the PR to `mf-16`** (use
 `--assignee mf-16` on `gh pr create`, or `gh pr edit <n> --add-assignee mf-16` afterwards). PRs are **not**

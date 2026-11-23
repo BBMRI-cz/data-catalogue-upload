@@ -1,7 +1,7 @@
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// The computed pieces of the biobank -> domain mapping. Everything else is carried verbatim, so this
+/// The computed pieces of the biobank -> catalogue mapping. Everything else is carried verbatim, so this
 /// is the whole of the mapping's logic: the derived clinical identifier, the ICD-10 dot rule and the
 /// age computation, all three ported from the previous production uploader. The catalogue's
 /// controlled terms live next door in <see cref="CatalogueVocabulary"/>, which is where a biobank

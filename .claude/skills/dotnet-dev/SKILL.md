@@ -143,7 +143,7 @@ lives in a serialized string is order a query cannot restore. JSON columns are r
 structured exception is a run log's error list (`ingest_run.Errors`): written once at the end of an ingest and
 only ever read back whole, so it is a plain text column the repository serializes, not a child table.
 
-**Mapping is hand-written.** DTO -> domain (uploader `Mapping/`, one mapper per source) and domain <-> EF entity
+**Mapping is hand-written.** DTO -> catalogue payload or domain (uploader `Mapping/`) and domain <-> EF entity
 (`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field
 copies. There is no source generator, so a dropped or mis-sourced field is **not** a compile error: keep the
 public mapper signatures stable and cover every field with a round-trip / record-equality test (see the
@@ -182,8 +182,10 @@ would otherwise transpose silently).
 return their own model in snake_case and the uploader maps to the FAIR shape on its side. Do not shape a
 source endpoint after `Uploader.Application/Dtos`.
 
-**Uploader change detection hashes the row the catalogue receives.** The sync handler builds each row with
-`CatalogueMapper` and hashes it (`PayloadFingerprint`, SHA-256 over canonical JSON via `Fingerprint.Of(...)`);
+**Uploader change detection hashes the row the catalogue receives.** The sync handler builds the patient and sample
+rows once per run straight from the biobank response (`CataloguePatientMapper`, `CatalogueSampleMapper`), the
+sequencing row with `CatalogueMapper`, and hashes each (`PayloadFingerprint`, SHA-256 over canonical JSON via
+`Fingerprint.Of(...)`); the upsert sends the same patient and sample objects that were hashed.
 `FingerprintSyncPlanner` only compares fingerprints to decide CREATE/UPDATE/SKIP/DELETE. Hashing the row rather
 than the aggregate is what re-sends a mapping fix or a config change. Reuse `Fingerprint.Of` - don't hand-roll
 hashing. (WSI and imaging studies have no row yet and still hash their aggregate.)

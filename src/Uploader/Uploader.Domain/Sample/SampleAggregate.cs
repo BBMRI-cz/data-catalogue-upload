@@ -4,9 +4,11 @@ using Uploader.Domain.Common;
 namespace Uploader.Domain;
 
 /// <summary>
-/// Sample aggregate root: an archived biobank sample. Sequencing and WSI derived from it are
-/// separate aggregates, referenced here by id (<see cref="SequencingId"/> / <see cref="WsiId"/>)
-/// and linked back via <see cref="PatientId"/>.
+/// Sample aggregate root: an archived biobank sample, as far as the sync planner needs it - its
+/// identity, its patient, and the sequencing and WSI derived from it. Those are separate aggregates,
+/// referenced here by id (<see cref="SequencingId"/> / <see cref="WsiId"/>) and linked back via
+/// <see cref="PatientId"/>. The sample's catalogue rows are built straight from the biobank's record,
+/// outside the domain.
 /// </summary>
 public sealed class SampleAggregate : AggregateRoot<SampleId>
 {
@@ -17,18 +19,12 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
     public PatientId PatientId { get; private init; }
     public SequencingId? SequencingId { get; private init; }
     public WsiId? WsiId { get; private init; }
-    public Material? Material { get; private init; }
-
-    /// <summary>The stored form derived from <see cref="Material"/> - one per sample.</summary>
-    public Biospecimen? Biospecimen { get; private init; }
 
     public static ErrorOr<SampleAggregate> Create(
         string? id,
         PatientId patientId,
         SequencingId? sequencingId,
-        WsiId? wsiId,
-        Material? material,
-        Biospecimen? biospecimen)
+        WsiId? wsiId)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -41,8 +37,6 @@ public sealed class SampleAggregate : AggregateRoot<SampleId>
             PatientId = patientId,
             SequencingId = sequencingId,
             WsiId = wsiId,
-            Material = material,
-            Biospecimen = biospecimen,
         };
     }
 }

@@ -314,6 +314,51 @@ public sealed class RunCatalogueSyncHandlerTests
         Assert.DoesNotContain("sample:mmci_sample_S1", catalogue.Upserts);
     }
 
+    /// <summary>
+    /// Each row is built once per run and that one object is both hashed and sent, so the fingerprint
+    /// the sync state keeps describes exactly what the catalogue received - not a second build of it
+    /// that could differ.
+    /// </summary>
+    [Fact]
+    public async Task TheRowFingerprintedIsTheRowSent()
+    {
+        var source = new FakeSourceDataGateway(
+        [
+            new PatientDto
+            {
+                PatientId = "P1",
+                Biobank = "MOU",
+                Consent = true,
+                Sex = "female",
+                BirthYear = 1970,
+                Samples =
+                [
+                    new SampleDto
+                    {
+                        SampleId = "S1",
+                        Type = "tissue",
+                        MaterialType = "1",
+                        Diagnosis = "C504",
+                        AvailableSamplesNo = 2,
+                        CutTime = new DateTime(2020, 1, 2),
+                        FreezeTime = new DateTime(2020, 1, 2),
+                    },
+                ],
+            },
+        ]);
+        var catalogue = new FakeCatalogueGateway();
+        var state = new InMemorySyncStateRepository();
+
+        await Run(source, catalogue, state);
+
+        Assert.Equal(
+            Fingerprint.Of(Assert.Single(catalogue.PatientPayloads)).Value,
+            state.Patients["P1"].SourceFingerprint);
+        Assert.Equal(
+            Fingerprint.Of(Assert.Single(catalogue.SamplePayloads)).Value,
+            state.Samples["S1"].SourceFingerprint);
+    }
+
     [Fact]
     public async Task SequencingReachesTheAssembledPatientRecord()
     {
