@@ -8,8 +8,9 @@ catalogue.** Sync state and fingerprints stay keyed on the biobank's own ids —
 leaves the host, and keeping it real is what lets a later run recognise the same patient. The
 substitution happens once, on the way out, in the mappers that build the catalogue rows:
 `CataloguePatientMapper` and `CatalogueSampleMapper` build the patient's and samples' rows straight
-from the biobank response, swapping in the pseudonyms as they place each value, and `CatalogueMapper`
-builds the sequencing rows. No catalogue-shaped object ever holds a real id.
+from the biobank response, and `CatalogueSequencingMapper` builds the sequencing rows straight from
+the sequencing response, each swapping in the pseudonyms as it places each value. No
+catalogue-shaped object ever holds a real id.
 
 ## The two minted pseudonyms
 
@@ -106,7 +107,9 @@ written for this.
 
 **The sequencing chain needs no work.** `SequencingMapping` derives its three identifiers from the
 sequencing API's `samples[].sample_id`, which *is* the run tree's `mmci_predictive_<uuid>` folder
-name — renamed in place by the pseudonymizer before the data left for SensitiveCloud.
+name — renamed in place by the pseudonymizer before the data left for SensitiveCloud. The response
+also echoes the real predictive number at its root; `CatalogueSequencingMapper` drops it, and the
+real number stays the sync state's key.
 
 **The pseudonymizer's mapping files are never read.** `predictive.json` maps pseudonym → real, which
 is the sequencing API's job, not ours. `patients.json` and `samples.json` cover only the sequenced

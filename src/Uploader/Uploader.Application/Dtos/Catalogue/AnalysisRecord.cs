@@ -2,8 +2,8 @@ namespace Uploader.Application.Dtos;
 
 /// <summary>
 /// EMX2 <c>Analysis</c> row. Both identity fields already carry pseudonyms, being derived from the
-/// run tree's folder name. <see cref="AlgorithmsUsed"/> is a single text column in the schema, so
-/// the pipeline names are joined on the way out rather than sent as a list.
+/// run tree's folder name. <see cref="AlgorithmsUsed"/> is a single text column in the schema, and
+/// no source states it, so it stays null.
 /// </summary>
 public sealed record AnalysisRecord
 {

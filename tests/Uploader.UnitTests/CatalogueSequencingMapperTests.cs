@@ -1,20 +1,21 @@
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
-using Uploader.Domain;
 using Uploader.Domain.Common;
 using Xunit;
 
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// The sequencing API's model becoming FAIR Genomes: cardinality, the fields that are carried, and the
-/// ones deliberately left behind. The recorded-payload half lives in
-/// <c>Uploader.IntegrationTests.SequencingFetchTests</c>; these start from a built DTO.
+/// The sequencing API's model straight to the catalogue's FAIR Genomes rows: cardinality, the fields
+/// that are carried, the ones deliberately left behind, and the identifiers. The recorded-payload half
+/// lives in <c>Uploader.IntegrationTests.SequencingFetchTests</c>; these start from a built DTO. The
+/// sample pseudonym is the fake map's <c>mmci_sample_&lt;id&gt;</c>, so an assertion on the biospecimen
+/// reference states both that it was substituted and which sample it was substituted from.
 /// </summary>
-public sealed class SequencingMapperTests
+public sealed class CatalogueSequencingMapperTests
 {
-    private static readonly SequencingId PredictiveNumber = new("PRED1");
-    private static readonly SampleId BiobankSample = new("S1");
+    private const string SamplePseudonym = "mmci_sample_S1";
+    private const string BiospecimenPseudonym = "mmci_biospecimen_S1";
 
     [Fact]
     public void SeveralSamplesAndRunsEachBecomeAPreparation()
@@ -28,7 +29,7 @@ public sealed class SequencingMapperTests
             ],
         };
 
-        var preparations = Map(dto).Preparations;
+        var preparations = Map(dto).SamplePreparations;
 
         // Two samples sequenced twice each: four preparations, none collapsed onto another. Note R1 is
         // shared, so the run alone would not tell the first sample's from the second's.
@@ -42,15 +43,13 @@ public sealed class SequencingMapperTests
     [Fact]
     public void EmptySamplesProducesNoPreparations()
     {
-        // A predictive number the source does not know. The aggregate is still valid — it just holds
-        // nothing — rather than the empty placeholder preparation the previous mapper manufactured.
-        var mapped = SequencingMapper.ToSequencing(
-            new SequencingDto { PredictiveNumber = "PRED1", Samples = [] },
-            PredictiveNumber,
-            BiobankSample);
+        // A predictive number the source does not know. It has nothing for the catalogue - no
+        // aggregate, so nothing is planned for it - rather than the empty placeholder preparation the
+        // previous mapper manufactured.
+        var dto = new SequencingDto { PredictiveNumber = "PRED1", Samples = [] };
 
-        Assert.False(mapped.IsError);
-        Assert.Empty(mapped.Value.Preparations);
+        Assert.False(CatalogueSequencingMapper.HasPreparations(dto));
+        Assert.Empty(Map(dto).SamplePreparations);
     }
 
     [Theory]
@@ -62,9 +61,26 @@ public sealed class SequencingMapperTests
         var mammaPrint = Run("R2") with { SourceClass = sourceClass, ExperimentName = experimentName };
 
         var preparations = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"), mammaPrint)] })
-            .Preparations;
+            .SamplePreparations;
 
         Assert.Equal(["sampleprep_p0001_R1"], preparations.Select(prep => prep.SampleprepIdentifier));
+    }
+
+    /// <summary>
+    /// A number sequenced only for MammaPrint has nothing for the catalogue, so the handler builds no
+    /// aggregate for it and the planner deletes what an earlier run published under it.
+    /// </summary>
+    [Fact]
+    public void ANumberSequencedOnlyForMammaPrintHasNoPreparations()
+    {
+        var dto = new SequencingDto
+        {
+            Samples = [Sample("p0001", Run("R1") with { SourceClass = "mamma-print" })],
+        };
+
+        Assert.False(CatalogueSequencingMapper.HasPreparations(dto));
+        Assert.True(CatalogueSequencingMapper.HasPreparations(
+            new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }));
     }
 
     [Theory]
@@ -75,7 +91,7 @@ public sealed class SequencingMapperTests
     {
         var run = Run("R1") with { SourceClass = sourceClass, ExperimentName = experimentName };
 
-        Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
+        Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations);
     }
 
     [Fact]
@@ -107,7 +123,7 @@ public sealed class SequencingMapperTests
         Assert.Null(prep.PartiallySequencedGenes);
     }
 
-    private static SamplePreparation PreparationWithGenes(params string[] genes)
+    private static SamplePreparationRecord PreparationWithGenes(params string[] genes)
     {
         var run = Run("R1") with
         {
@@ -117,7 +133,7 @@ public sealed class SequencingMapperTests
             },
         };
 
-        return Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
+        return Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations);
     }
 
     [Theory]
@@ -130,7 +146,7 @@ public sealed class SequencingMapperTests
         var quality = served is null ? null : new QualityMetricsDto { MedianReadDepth = served };
         var run = Run("R1") with { Analyses = [new AnalysisDto { PipelineName = "NextGENe", Quality = quality }] };
 
-        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations);
+        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations);
 
         Assert.Equal(expected, prep.Sequencing!.MedianReadDepth);
     }
@@ -151,7 +167,7 @@ public sealed class SequencingMapperTests
             ],
         };
 
-        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations)
+        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations)
             .Sequencing!;
 
         Assert.Equal(120, sequencing.MedianReadDepth);
@@ -170,7 +186,7 @@ public sealed class SequencingMapperTests
             ],
         };
 
-        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations)
+        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations)
             .Sequencing!;
 
         Assert.Equal(2, sequencing.Analyses.Count);
@@ -206,7 +222,7 @@ public sealed class SequencingMapperTests
         };
 
         var analysis = Assert.Single(
-            Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).Preparations)
+            Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }).SamplePreparations)
                 .Sequencing!.Analyses);
 
         // v2 has nowhere to put a file path, so a file survives only as its format - and both vcf
@@ -231,7 +247,7 @@ public sealed class SequencingMapperTests
         var withFiles = Map(new SequencingDto { Samples = [Sample("p0001", run)] });
         var without = Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] });
 
-        Assert.Equal(Fingerprint.Of(without.Preparations), Fingerprint.Of(withFiles.Preparations));
+        Assert.Equal(Fingerprint.Of(without), Fingerprint.Of(withFiles));
     }
 
     [Fact]
@@ -265,19 +281,19 @@ public sealed class SequencingMapperTests
 
         // Only the genes cross over: everything else the panel and the run-sample state has no FAIR slot.
         Assert.Equal(
-            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", bare)] }).Preparations),
-            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", identified)] }).Preparations));
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", bare)] })),
+            Fingerprint.Of(Map(new SequencingDto { Samples = [Sample("p0001", identified)] })));
     }
 
     [Fact]
     public void MissingLibraryPreparationLeavesPrepFieldsNull()
     {
-        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).Preparations);
+        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).SamplePreparations);
 
         // The preparation still exists and is identified — the run happened, the library table just did
         // not resolve.
         Assert.Equal("sampleprep_p0001_R1", prep.SampleprepIdentifier);
-        Assert.Equal("biospecimen_S1", prep.BelongsToBiospecimen);
+        Assert.Equal(BiospecimenPseudonym, prep.BelongsToBiospecimen);
         Assert.Null(prep.InputAmount);
         Assert.Null(prep.LibraryPreparationKit);
         Assert.Null(prep.TargetEnrichmentKit);
@@ -291,7 +307,7 @@ public sealed class SequencingMapperTests
     {
         // Samples reference runs by identity with no foreign key, so the source can serve a run it holds
         // no metadata for. Only the id is guaranteed.
-        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).Preparations);
+        var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).SamplePreparations);
 
         var sequencing = prep.Sequencing!;
         Assert.Equal("p0001_R1", sequencing.SequencingIdentifier);
@@ -307,7 +323,7 @@ public sealed class SequencingMapperTests
     [Fact]
     public void FieldsWithNoSourceStayNull()
     {
-        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).Preparations)
+        var sequencing = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).SamplePreparations)
             .Sequencing!;
 
         // FAIR Genomes names these; MMCI's sources state none of them.
@@ -315,8 +331,45 @@ public sealed class SequencingMapperTests
         Assert.Null(sequencing.PercentageTr20);
     }
 
-    private static SequencingAggregate Map(SequencingDto dto) =>
-        SequencingMapper.ToSequencing(dto, PredictiveNumber, BiobankSample).Value;
+    /// <summary>
+    /// The sequencing API's sample id is the run tree's <c>mmci_predictive_&lt;uuid&gt;</c> folder
+    /// name, pseudonymous already, so every identifier derived from it is too and is carried as derived.
+    /// </summary>
+    [Fact]
+    public void TheSequencingChainKeepsTheIdentifiersTheSourceAlreadyPseudonymized()
+    {
+        var run = Run("RUN1") with { Analyses = [new AnalysisDto { PipelineName = "NextGENe" }] };
+
+        var payload = Map(new SequencingDto { Samples = [Sample("mmci_predictive_abc", run)] });
+
+        var preparation = Assert.Single(payload.SamplePreparations);
+        Assert.Equal("mmci_sampleprep_abc_RUN1", preparation.SampleprepIdentifier);
+        Assert.Equal("mmci_predictive_abc_RUN1", preparation.Sequencing!.SequencingIdentifier);
+        Assert.Equal("mmci_sampleprep_abc_RUN1", preparation.Sequencing.BelongsToSamplePreparation);
+
+        var analysis = Assert.Single(preparation.Sequencing.Analyses);
+        Assert.Equal("mmci_analysis_abc_RUN1", analysis.AnalysisIdentifier);
+        Assert.Equal("mmci_predictive_abc_RUN1", analysis.BelongsToSequencing);
+    }
+
+    /// <summary>
+    /// The one identifier in the sequencing chain the source cannot pseudonymize: it points at the
+    /// biobank's stored biospecimen, whose id is the biobank's own. It is derived from the owning
+    /// sample's pseudonym rather than copied, so it always equals the biospecimen key the sample
+    /// payload published.
+    /// </summary>
+    [Fact]
+    public void TheSequencingPayloadIsKeyedOnTheSampleAndPointsAtItsBiospecimen()
+    {
+        var payload = Map(new SequencingDto { Samples = [Sample("mmci_predictive_abc", Run("RUN1"))] });
+
+        Assert.Equal(SamplePseudonym, payload.ExternalId);
+        Assert.Equal(SamplePseudonym, payload.SampleId);
+        Assert.Equal(BiospecimenPseudonym, Assert.Single(payload.SamplePreparations).BelongsToBiospecimen);
+    }
+
+    private static CatalogueSequencingPayload Map(SequencingDto dto) =>
+        CatalogueSequencingMapper.ToPayload(dto, SamplePseudonym);
 
     private static SequencingSampleDto Sample(string sampleId, params SequencingRunDto[] runs) =>
         new() { SampleId = sampleId, IdScheme = "mmci_predictive", Runs = runs };

@@ -2,8 +2,6 @@ using System.Text.Json;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
-using Uploader.Domain;
-using Uploader.Domain.Common;
 using Uploader.Infrastructure.Http;
 using Uploader.Infrastructure.Pseudonymization;
 using Xunit;
@@ -54,7 +52,7 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         {
             CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId),
             CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
-            CatalogueMapper.ToPayload(Sequencing(), samplePseudonym),
+            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym),
         };
 
         foreach (var payload in payloads)
@@ -86,10 +84,14 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         var sampleJson = JsonSerializer.Serialize(
             CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
             Emx2Client.PayloadOptions);
+        var sequencingJson = JsonSerializer.Serialize(
+            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym), Emx2Client.PayloadOptions);
 
         Assert.Contains(patientPseudonym, patientJson, StringComparison.Ordinal);
         Assert.Contains(samplePseudonym, sampleJson, StringComparison.Ordinal);
         Assert.Contains(patientPseudonym, sampleJson, StringComparison.Ordinal);
+        Assert.Contains(samplePseudonym, sequencingJson, StringComparison.Ordinal);
+        Assert.Contains("mmci_sampleprep_2f1c_RUN1", sequencingJson, StringComparison.Ordinal);
     }
 
     private const string Biobank = "MOU";
@@ -124,29 +126,37 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         TakingDate = new DateTime(2022, 12, 7),
     };
 
-    private static SequencingAggregate Sequencing() =>
-        SequencingAggregate.Create(
-            RealPredictiveNumber,
-            new SampleId(RealSampleId),
-            [
-                new SamplePreparation
-                {
-                    SampleprepIdentifier = "mmci_sampleprep_2f1c_RUN1",
-                    BelongsToBiospecimen = RealSampleId,
-                    Sequencing = new SequencingRun
+    /// <summary>
+    /// The sequencing API's answer for the real predictive number, which it echoes at the root. Its
+    /// sample id is the run tree's pseudonymized folder name, so everything derived from it is
+    /// pseudonymous already; the echoed number must not ride along into the rows.
+    /// </summary>
+    private static SequencingDto Sequencing() => new()
+    {
+        PredictiveNumber = RealPredictiveNumber,
+        Samples =
+        [
+            new SequencingSampleDto
+            {
+                SampleId = "mmci_predictive_2f1c",
+                IdScheme = "mmci_predictive",
+                Runs =
+                [
+                    new SequencingRunDto
                     {
-                        SequencingIdentifier = "mmci_predictive_2f1c_RUN1",
-                        BelongsToSamplePreparation = "mmci_sampleprep_2f1c_RUN1",
+                        RunId = "RUN1",
+                        Platform = "Illumina",
                         Analyses =
                         [
-                            new Analysis
+                            new AnalysisDto
                             {
-                                AnalysisIdentifier = "mmci_analysis_2f1c_RUN1",
-                                BelongsToSequencing = "mmci_predictive_2f1c_RUN1",
-                                DataFormatsStored = ["VCF"],
+                                PipelineName = "NextGENe",
+                                Files = [new SequencingFileDto { Role = "vcf", Path = "/mmci_predictive_2f1c.vcf" }],
                             },
                         ],
                     },
-                },
-            ]).Value;
+                ],
+            },
+        ],
+    };
 }

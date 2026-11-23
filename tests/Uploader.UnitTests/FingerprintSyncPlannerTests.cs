@@ -398,7 +398,7 @@ public sealed class FingerprintSyncPlannerTests
         {
             Patient = Patient("P1"),
             Samples = [Sample("S1", "P1", sequencing: "PRED1", wsi: "BIO1")],
-            Sequencings = [SequencingAggregate.Create("PRED1", new SampleId("S1"), []).Value],
+            Sequencings = [SequencingAggregate.Create("PRED1", new SampleId("S1")).Value],
             Wsis = [WsiAggregate.Create("BIO1", new SampleId("S1"), null).Value],
         };
 

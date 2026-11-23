@@ -19,7 +19,7 @@ or command, **open the real thing and confirm it still exists** with that name.
 | `AGENTS.md` | conventions + commands. **`CLAUDE.md` only contains the text `AGENTS.md`** and mirrors it - edit `AGENTS.md`, never duplicate content into `CLAUDE.md`. |
 | `docs/deployment.md` | the compose files, the services in each, the env keys they substitute, and the ports |
 | `docs/catalogue-api-contract.md` | the live EMX2 schema and `Emx2*` classes in `Uploader.Infrastructure/Http/`. **Never name a real token, its claims, or its scope here** - this file ships to production; state the requirement, not the disclosure |
-| `docs/pseudonymization.md` | `CataloguePatientMapper`, `CatalogueSampleMapper`, `CatalogueMapper` + `BiobankMapping`, one row per published catalogue column |
+| `docs/pseudonymization.md` | `CataloguePatientMapper`, `CatalogueSampleMapper`, `CatalogueSequencingMapper` + `BiobankMapping`/`SequencingMapping`, one row per published catalogue column |
 | `.claude/skills/*/SKILL.md` | each skill's frontmatter `description` and its body |
 
 > The available-skills list the harness shows is built from each skill's frontmatter `description:`. That

@@ -1,6 +1,5 @@
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
-using Uploader.Domain;
 using Uploader.Domain.Common;
 using Xunit;
 
@@ -63,15 +62,12 @@ public sealed class FingerprintTests
     {
         // A sample resequenced on a second run must read as changed, not as the same record: the
         // preparation list is what change detection has to see.
-        var sampleId = new SampleId("S1");
-        var first = new SamplePreparation { SampleprepIdentifier = "sampleprep_p0001_R1" };
-        var second = new SamplePreparation { SampleprepIdentifier = "sampleprep_p0001_R2" };
-
-        var once = SequencingAggregate.Create("PRED1", sampleId, [first]).Value;
-        var twice = SequencingAggregate.Create("PRED1", sampleId, [first, second]).Value;
+        SequencingRunDto first = new() { RunId = "R1" }, second = new() { RunId = "R2" };
+        SequencingDto Sequenced(params SequencingRunDto[] runs) =>
+            new() { Samples = [new SequencingSampleDto { SampleId = "p0001", Runs = runs }] };
 
         Assert.NotEqual(
-            Fingerprint.Of(CatalogueMapper.ToPayload(once, "mmci_sample_S1")),
-            Fingerprint.Of(CatalogueMapper.ToPayload(twice, "mmci_sample_S1")));
+            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first), "mmci_sample_S1")),
+            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first, second), "mmci_sample_S1")));
     }
 }
