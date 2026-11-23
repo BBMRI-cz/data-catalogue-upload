@@ -104,3 +104,17 @@ dotnet test DataCatalogueUpload.slnx
 - Do not put NuGet versions on individual `PackageReference`s - use central package management.
 - Do not loosen analyzer/format settings to silence errors; fix the code instead.
 - Do not introduce a shared project between the services - keep their domains decoupled.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `BBMRI-cz/data-catalogue-upload`, worked through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, each named after its role (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+None by design: domain knowledge lives in this file, `ARCHITECTURE.md` and `docs/*.md`. Don't create `GLOSSARY.md`, `GLOSSARY-MAP.md` or `docs/adr/`; record a term or decision in those existing docs instead.
