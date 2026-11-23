@@ -4,7 +4,7 @@ using Xunit;
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// The three derived values in the biobank -> domain mapping. Everything else is carried verbatim,
+/// The three derived values in the biobank -> catalogue mapping. Everything else is carried verbatim,
 /// so this covers all of the mapping's logic.
 /// </summary>
 public sealed class BiobankMappingTests

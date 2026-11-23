@@ -7,9 +7,10 @@ using Xunit;
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// Full-field parity guards for the hand-written per-aggregate Uploader mappers (Patient/Sample/
-/// Sequencing/Wsi/ImagingStudy). A dropped or mis-sourced field is no longer a compile error, so
-/// every value-object field is asserted here.
+/// Full-field parity guards for the hand-written Uploader mappers: the patient and sample payload
+/// mappers (biobank response straight to catalogue rows) and the per-aggregate Sequencing/Wsi/
+/// ImagingStudy mappers. A dropped or mis-sourced field is no longer a compile error, so every
+/// catalogue-row and value-object field is asserted here.
 /// The all-scalar imaging-series records (no collection members) are compared by record value
 /// equality, which checks every field in one assertion; the list-bearing value objects are checked
 /// field by field (xUnit compares lists structurally).
@@ -65,18 +66,26 @@ public sealed class UploaderMapperFieldParityTests
         ],
     };
 
-    [Fact]
-    public void PersonalAndClinicalMapEveryField()
-    {
-        var patient = PatientMapper.ToPatient(FullyPopulatedPatient()).Value;
+    private const string PatientPseudonym = "mmci_patient_P1";
+    private const string SamplePseudonym = "mmci_sample_S-T";
+    private const string StudyId = "mmci_biobank";
 
-        var personal = patient.Personal!;
-        Assert.Equal("P1", personal.PersonalIdentifier);
+    [Fact]
+    public void PersonalConsentAndClinicalMapEveryField()
+    {
+        var payload = CataloguePatientMapper.ToPayload(FullyPopulatedPatient(), PatientPseudonym, StudyId);
+        Assert.Equal(PatientPseudonym, payload.ExternalId);
+
+        var personal = payload.Personal!;
+        Assert.Equal(PatientPseudonym, personal.PersonalIdentifier);
         Assert.Equal(1980, personal.YearOfBirth);
 
         // The biobank's "male" becomes the GSSO term the catalogue's ontology actually holds.
         Assert.Equal("assigned male at birth", personal.GenderAtBirth);
         Assert.Equal("Masaryk Memorial Cancer Institute", personal.PrimaryAffiliatedInstitute);
+
+        // Not source data: the one study this deployment publishes under.
+        Assert.Equal([StudyId], personal.ParticipatesInStudy);
 
         // Never served: the export is one hospital's archive and says nothing about where the
         // patient lives, where they were born, their ancestry, or whether they are still alive.
@@ -86,9 +95,22 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Null(personal.Status);
         Assert.Null(personal.AgeAtDeath);
 
-        var clinical = patient.Clinical!;
-        Assert.Equal("clinical_P1", clinical.ClinicalIdentifier);
-        Assert.Equal("P1", clinical.BelongsToPerson);
+        var consent = payload.Consent!;
+        Assert.Equal("mmci_consent_P1", consent.IndividualConsentIdentifier);
+        Assert.Equal(PatientPseudonym, consent.PersonConsenting);
+        Assert.Equal(StudyId, consent.BelongsToStudy);
+
+        // Never served: the export records consent as a boolean, not as a signed form.
+        Assert.Null(consent.SigningDate);
+        Assert.Null(consent.ValidUntil);
+        Assert.Null(consent.CollectedBy);
+        Assert.Null(consent.DataUsePermissions);
+        Assert.Null(consent.DataUseModifiers);
+        Assert.Null(consent.AllowRecontacting);
+
+        var clinical = payload.Clinical!;
+        Assert.Equal("mmci_clinical_P1", clinical.ClinicalIdentifier);
+        Assert.Equal(PatientPseudonym, clinical.BelongsToPerson);
         Assert.Equal(["C50.4", "C77.7"], clinical.Diagnosis);
         Assert.Equal(39, clinical.AgeAtDiagnosis);
 
@@ -101,16 +123,23 @@ public sealed class UploaderMapperFieldParityTests
         Assert.Null(clinical.ResponseToTreatment);
     }
 
+    private static CatalogueSamplePayload FullyPopulatedSamplePayload()
+    {
+        var dto = FullyPopulatedPatient();
+        return CatalogueSampleMapper.ToPayload(dto.Samples![0], SamplePseudonym, PatientPseudonym, dto.Biobank);
+    }
+
     [Fact]
     public void MaterialMapsEveryField()
     {
-        var dto = FullyPopulatedPatient();
-        var sample = SampleMapper.ToSample(dto.Samples![0], new PatientId("P1"), dto.Biobank).Value;
+        var payload = FullyPopulatedSamplePayload();
+        Assert.Equal(SamplePseudonym, payload.ExternalId);
+        Assert.Equal(PatientPseudonym, payload.PatientId);
 
-        var m = sample.Material!;
-        Assert.Equal("S-T", m.MaterialIdentifier);
-        Assert.Equal("P1", m.CollectedFromPerson);
-        Assert.Equal(["clinical_P1"], m.BelongsToDiagnosis);
+        var m = payload.Material!;
+        Assert.Equal(SamplePseudonym, m.MaterialIdentifier);
+        Assert.Equal(PatientPseudonym, m.CollectedFromPerson);
+        Assert.Equal(["mmci_clinical_P1"], m.BelongsToDiagnosis);
 
         // Tissue is dated by when it was cut, and v2 wants a date rather than v1's timestamp.
         Assert.Equal("2020-01-02", m.SamplingDate);
@@ -126,12 +155,9 @@ public sealed class UploaderMapperFieldParityTests
     [Fact]
     public void BiospecimenMapsEveryField()
     {
-        var dto = FullyPopulatedPatient();
-        var sample = SampleMapper.ToSample(dto.Samples![0], new PatientId("P1"), dto.Biobank).Value;
-
-        var b = sample.Biospecimen!;
-        Assert.Equal("biospecimen_S-T", b.BiospecimenIdentifier);
-        Assert.Equal("S-T", b.DerivedFromMaterial);
+        var b = FullyPopulatedSamplePayload().Biospecimen!;
+        Assert.Equal("mmci_biospecimen_S-T", b.BiospecimenIdentifier);
+        Assert.Equal(SamplePseudonym, b.DerivedFromMaterial);
         Assert.Equal("Frozen Tissue", b.BiospecimenForm);
         Assert.Equal("Masaryk Memorial Cancer Institute", b.ManagingBiobank);
 

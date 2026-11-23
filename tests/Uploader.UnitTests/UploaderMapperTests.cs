@@ -1,4 +1,3 @@
-using ErrorOr;
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain.Common;
@@ -8,131 +7,9 @@ namespace Uploader.UnitTests;
 
 public sealed class UploaderMapperTests
 {
-    [Fact]
-    public void MapsPersonalClinicalAndMaterial()
-    {
-        var patient = PatientMapper.ToPatient(new PatientDto
-        {
-            PatientId = "P1",
-            Consent = true,
-            Sex = "male",
-            BirthYear = 1980,
-            Samples =
-            [
-                new SampleDto { SampleId = "S1", Type = "tissue", Diagnosis = "C504" },
-                new SampleDto { SampleId = "S2", Type = "serum", Diagnosis = "C51" },
-            ],
-        }).Value;
-        var sample = SampleMapper.ToSample(
-            new SampleDto { SampleId = "S1", Type = "tissue", MaterialType = "1" },
-            new PatientId("P1"),
-            biobank: "MOU").Value;
-
-        Assert.Equal("P1", patient.Personal!.PersonalIdentifier);
-        Assert.Equal("assigned male at birth", patient.Personal.GenderAtBirth);
-        Assert.Equal(1980, patient.Personal.YearOfBirth);
-        Assert.True(patient.HasConsent);
-        Assert.Equal(["C50.4", "C51"], patient.Clinical!.Diagnosis);
-        Assert.Equal("clinical_P1", patient.Clinical.ClinicalIdentifier);
-        Assert.Equal("S1", sample.Material!.MaterialIdentifier);
-        Assert.Equal("Solid Tissue Specimen", sample.Material.MaterialType);
-        Assert.Equal("Masaryk Memorial Cancer Institute", sample.Biospecimen!.ManagingBiobank);
-    }
-
-    [Fact]
-    public void TissueIsDatedByItsCutWhileOthersAreDatedByTheirTakingDate()
-    {
-        var tissue = SampleMapper.ToSample(
-            new SampleDto
-            {
-                SampleId = "S1",
-                Type = "tissue",
-                CutTime = new DateTime(2020, 1, 2, 3, 4, 5),
-                FreezeTime = new DateTime(2020, 1, 2, 4, 0, 0),
-                TakingDate = new DateTime(1999, 1, 1),
-            },
-            new PatientId("P1")).Value;
-
-        var serum = SampleMapper.ToSample(
-            new SampleDto { SampleId = "S2", Type = "serum", TakingDate = new DateTime(2021, 5, 6, 7, 8, 9) },
-            new PatientId("P1")).Value;
-
-        // v2 keeps one date where v1 had a sampling and a registration timestamp, so the freeze
-        // time has nowhere left to go.
-        Assert.Equal("2020-01-02", tissue.Material!.SamplingDate);
-        Assert.Equal("2021-05-06", serum.Material!.SamplingDate);
-    }
-
-    [Fact]
-    public void GenomeDiagnosisIsLeftOutWhileSpecimenDiagnosisIsCarried()
-    {
-        var patient = PatientMapper.ToPatient(new PatientDto
-        {
-            PatientId = "P1",
-            Samples =
-            [
-                new SampleDto { SampleId = "S1", Type = "genome", Diagnosis = "C999" },
-                new SampleDto { SampleId = "S2", Type = "tissue", Diagnosis = "C504" },
-                new SampleDto { SampleId = "S3", Type = "serum", Diagnosis = "C504" },
-            ],
-            DiagnosticSpecimens = [new SpecimenDto { SpecimenId = "D1", Diagnosis = "C777" }],
-        }).Value;
-
-        // Duplicates collapse and the order is fixed, so the fingerprint doesn't move with the payload.
-        Assert.Equal(["C50.4", "C77.7"], patient.Clinical!.Diagnosis);
-    }
-
-    [Fact]
-    public void AgeAtDiagnosisComesFromTheEarliestSampleEvent()
-    {
-        var patient = PatientMapper.ToPatient(new PatientDto
-        {
-            PatientId = "P1",
-            BirthYear = 1980,
-            BirthMonth = 6,
-            Samples =
-            [
-                new SampleDto { SampleId = "S1", Type = "serum", TakingDate = new DateTime(2021, 5, 6) },
-                new SampleDto
-                {
-                    SampleId = "S2",
-                    Type = "tissue",
-                    FreezeTime = new DateTime(2020, 1, 2),
-                    CutTime = new DateTime(2020, 1, 2),
-                },
-            ],
-        }).Value;
-
-        // Earliest event is 2020-01-02; born 1980-06-01, so the 40th birthday has not happened yet.
-        Assert.Equal(39, patient.Clinical!.AgeAtDiagnosis);
-    }
-
-    [Fact]
-    public void BlankPatientIdIsAValidationError()
-    {
-        var result = PatientMapper.ToPatient(new PatientDto { PatientId = "" });
-
-        Assert.True(result.IsError);
-        Assert.Equal(ErrorType.Validation, result.FirstError.Type);
-    }
-
-    [Fact]
-    public void SampleCarriesTypedReferences()
-    {
-        var sample = SampleMapper.ToSample(
-            new SampleDto { SampleId = "S1", PredictiveNumber = "PRED1", Biopsy = "2023/2872-1" },
-            new PatientId("P1")).Value;
-
-        Assert.Equal(new SampleId("S1"), sample.Id);
-        Assert.Equal(new PatientId("P1"), sample.PatientId);
-        Assert.Equal(new SequencingId("PRED1"), sample.SequencingId);
-
-        // The biobank serves no bioptic number; the WSI link waits for #31.
-        Assert.Null(sample.WsiId);
-    }
-
-    // Sequencing lives in SequencingMapperTests: its source serves a nested list rather than one
-    // record, so its cardinality and drops need a file of their own.
+    // Patient and sample rows live in CataloguePatientMapperTests and CatalogueSampleMapperTests, and
+    // sequencing in SequencingMapperTests: its source serves a nested list rather than one record, so
+    // its cardinality and drops need a file of their own.
 
     [Fact]
     public void WsiReturnsNullFixedBlockWhenNoKeys()

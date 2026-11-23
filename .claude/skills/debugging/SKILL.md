@@ -35,9 +35,9 @@ inner layers are pure and trivial to test.
 
 | Symptom | Most likely layer | First thing to check |
 |---------|-------------------|----------------------|
-| Wrong/missing field on a domain object | `Application/Mapping/` (uploader: `PatientMapper`, `SampleMapper`, …) or `Xml/XmlValueReader` (biobank) | The hand-written mapping / DTO property name vs the source JSON key; `XmlValueReader` normalization. A whole object arriving empty usually means the DTO's property names no longer match the source's - both sides serialize with `SnakeCaseLower`, so the names must agree; `Uploader.IntegrationTests`' `BiobankContractParityTests` names the offending key. |
+| Wrong/missing field on a catalogue row or domain object | `Application/Mapping/` (uploader: `CataloguePatientMapper`, `CatalogueSampleMapper`, `SequencingMapper`, …) or `Xml/XmlValueReader` (biobank) | The hand-written mapping / DTO property name vs the source JSON key; `XmlValueReader` normalization. A whole object arriving empty usually means the DTO's property names no longer match the source's - both sides serialize with `SnakeCaseLower`, so the names must agree; `Uploader.IntegrationTests`' `BiobankContractParityTests` names the offending key. |
 | Validation `ErrorOr` you didn't expect | `Domain` aggregate `Create(...)` | Which invariant fired - the `Error.Validation` code points at the field. |
-| Wrong CREATE/UPDATE/SKIP/DELETE decision | `Domain/Services/FingerprintSyncPlanner` + the handler's `PayloadFingerprint` | What `CatalogueMapper` builds for the row (that is what gets hashed), and the prior `SyncStatus`/`IsDeleted`. |
+| Wrong CREATE/UPDATE/SKIP/DELETE decision | `Domain/Services/FingerprintSyncPlanner` + the handler's `PayloadFingerprint` | What the row's mapper builds (`CataloguePatientMapper`/`CatalogueSampleMapper`, or `CatalogueMapper` for sequencing - that is what gets hashed), and the prior `SyncStatus`/`IsDeleted`. |
 | HTTP error, timeout, bad URL, auth | `Infrastructure/Http/*Gateway` | Request URL/params (from `UploaderOptions`) and the source/catalogue response. |
 | DB error, stale state, migration mismatch | `Infrastructure/Persistence/` + EF migrations | EF entity vs migration; whether `dotnet ef database update` (or `RUN_MIGRATIONS`) has been applied. |
 | Crash on startup before any work | host `Program.cs` / env | Options binding; a missing connection produces an EF/Npgsql error. |
@@ -61,8 +61,8 @@ Because Domain and Application have no I/O, reproduce most bugs as **pure unit t
   error from mapping increments `result.Failed` and emits a `LogWarning` (with the patient id) - check the
   logs, not just the summary.
 - **Silent SKIPs** mean the fingerprint didn't change when you expected it to. The fingerprint is taken over the row
-  `CatalogueMapper` builds (`PayloadFingerprint` in the sync handler), so a value that never reaches that row -
-  dropped by a mapper, or left `null` in `CatalogueMapper` - won't trigger an UPDATE.
+  the handler sends (`PayloadFingerprint` in the sync handler), so a value that never reaches that row - dropped
+  or left `null` by its mapper - won't trigger an UPDATE.
 - **Unexpected DELETEs** mean an entity is absent from the current source fetch (matched by
   `predictive_number` / `bioptic_number` / `accession_numbers`). Verify the source payload and the match key
   before assuming the planner is wrong.

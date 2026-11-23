@@ -115,7 +115,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         {
             result.Scanned++;
 
-            ErrorOr<PatientCatalogueData> built;
+            ErrorOr<AssembledPatient> built;
             try
             {
                 built = await BuildPatientDataAsync(rawPatient, result, cancellationToken);
@@ -137,7 +137,7 @@ internal sealed class RunCatalogueSyncCommandHandler
                 continue;
             }
 
-            var data = built.Value;
+            var data = built.Value.Data;
             seenPatientIds.Add(data.Patient.Id);
 
             var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
@@ -145,8 +145,10 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Resolved once per patient, before anything is planned: every payload built below
             // publishes these in place of the real ids, while the sync state keeps the real ones.
             var pseudonyms = await ResolvePseudonymsAsync(data, existing, cancellationToken);
+            var payloads = BuildPayloads(rawPatient, built.Value.Samples, pseudonyms);
 
-            var operations = _planner.Plan(data, existing, aggregate => PayloadFingerprint(aggregate, pseudonyms));
+            var operations = _planner.Plan(
+                data, existing, aggregate => PayloadFingerprint(aggregate, payloads, pseudonyms));
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
             // Still a skip in the summary, as it always was.
@@ -158,7 +160,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             foreach (var operation in operations)
             {
-                await ExecuteAsync(operation, pseudonyms, runId, result, cancellationToken);
+                await ExecuteAsync(operation, payloads, pseudonyms, runId, result, cancellationToken);
             }
         }
 
@@ -192,8 +194,32 @@ internal sealed class RunCatalogueSyncCommandHandler
         return new PatientPseudonyms(patient, samples);
     }
 
+    /// <summary>
+    /// The patient's and samples' catalogue rows, built once from the biobank's records now that the
+    /// pseudonyms are known. The planner fingerprints these objects and the upsert sends the same ones.
+    /// </summary>
+    private PatientPayloads BuildPayloads(
+        PatientDto rawPatient,
+        IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> samples,
+        PatientPseudonyms pseudonyms)
+    {
+        // Keyed by the aggregate object rather than its id, so a sample the source lists twice keeps
+        // a payload per listing, exactly as it gets an operation per listing.
+        var samplePayloads = new Dictionary<SampleAggregate, CatalogueSamplePayload>(ReferenceEqualityComparer.Instance);
+        foreach (var (dto, sample) in samples)
+        {
+            samplePayloads[sample] = CatalogueSampleMapper.ToPayload(
+                dto, pseudonyms.Sample(sample.Id), pseudonyms.Patient, rawPatient.Biobank);
+        }
+
+        return new PatientPayloads(
+            CataloguePatientMapper.ToPayload(rawPatient, pseudonyms.Patient, _study.Identifier),
+            samplePayloads);
+    }
+
     private async Task ExecuteAsync(
         SyncOperation operation,
+        PatientPayloads payloads,
         PatientPseudonyms pseudonyms,
         string runId,
         RunCatalogueSyncCommandResult result,
@@ -227,7 +253,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         result.Changed++;
-        var upserted = await UpsertAsync(operation, pseudonyms, cancellationToken);
+        var upserted = await UpsertAsync(operation, payloads, pseudonyms, cancellationToken);
         if (!upserted.IsError)
         {
             operation.State.CatalogueRemoteId = upserted.Value;
@@ -248,15 +274,16 @@ internal sealed class RunCatalogueSyncCommandHandler
 
     private Task<ErrorOr<string>> UpsertAsync(
         SyncOperation operation,
+        PatientPayloads payloads,
         PatientPseudonyms pseudonyms,
         CancellationToken cancellationToken) =>
         operation switch
         {
-            PatientOperation { Patient: { } patient } => _catalogueGateway.UpsertPatientAsync(
-                PatientPayload(patient, pseudonyms), cancellationToken),
+            PatientOperation { Patient: not null } => _catalogueGateway.UpsertPatientAsync(
+                payloads.Patient, cancellationToken),
 
             SampleOperation { Sample: { } sample } => _catalogueGateway.UpsertSampleAsync(
-                SamplePayload(sample, pseudonyms), cancellationToken),
+                payloads.Sample(sample), cancellationToken),
 
             SequencingOperation { Sequencing: { } sequencing } => _catalogueGateway.UpsertSequencingAsync(
                 SequencingPayload(sequencing, pseudonyms), cancellationToken),
@@ -277,14 +304,19 @@ internal sealed class RunCatalogueSyncCommandHandler
     /// <summary>
     /// What the planner decides a re-send on: the row the catalogue would receive, not the aggregate
     /// it is built from. A mapping fix or a new study id changes the row while the source data stays
-    /// the same, and a fingerprint of the aggregate would skip that row on every run. The row is
-    /// built by the same helper the upsert uses, so what is hashed is what is sent.
+    /// the same, and a fingerprint of the aggregate would skip that row on every run. The patient and
+    /// sample rows are the very objects the upsert sends, so what is hashed is what is sent.
     /// </summary>
-    private Fingerprint PayloadFingerprint(object aggregate, PatientPseudonyms pseudonyms) =>
+    private static Fingerprint PayloadFingerprint(
+        object aggregate,
+        PatientPayloads payloads,
+        PatientPseudonyms pseudonyms) =>
         aggregate switch
         {
-            PatientAggregate patient => Fingerprint.Of(PatientPayload(patient, pseudonyms)),
-            SampleAggregate sample => Fingerprint.Of(SamplePayload(sample, pseudonyms)),
+            PatientAggregate => Fingerprint.Of(payloads.Patient),
+            SampleAggregate sample => Fingerprint.Of(payloads.Sample(sample)),
+
+            // Still rebuilt from the aggregate, by the same helper the upsert uses.
             SequencingAggregate sequencing => Fingerprint.Of(SequencingPayload(sequencing, pseudonyms)),
 
             // ponytail: no catalogue row exists for these until WSI and radiology are pseudonymized,
@@ -295,12 +327,6 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Unreachable: the planner only fingerprints the five aggregates above.
             _ => throw new InvalidOperationException($"No fingerprint for {aggregate.GetType().Name}"),
         };
-
-    private CataloguePatientPayload PatientPayload(PatientAggregate patient, PatientPseudonyms pseudonyms) =>
-        CatalogueMapper.ToPayload(patient, pseudonyms.Patient, _study.Identifier);
-
-    private static CatalogueSamplePayload SamplePayload(SampleAggregate sample, PatientPseudonyms pseudonyms) =>
-        CatalogueMapper.ToPayload(sample, pseudonyms.Sample(sample.Id), pseudonyms.Patient);
 
     private static CatalogueSequencingPayload SequencingPayload(
         SequencingAggregate sequencing,
@@ -421,12 +447,12 @@ internal sealed class RunCatalogueSyncCommandHandler
             "Patient {PatientId} loses its {Source} data: {Error}", patientId, source, error.Description);
     }
 
-    private async Task<ErrorOr<PatientCatalogueData>> BuildPatientDataAsync(
+    private async Task<ErrorOr<AssembledPatient>> BuildPatientDataAsync(
         PatientDto rawPatient,
         RunCatalogueSyncCommandResult result,
         CancellationToken cancellationToken)
     {
-        var patientResult = PatientMapper.ToPatient(rawPatient);
+        var patientResult = CataloguePatientMapper.ToPatient(rawPatient);
         if (patientResult.IsError)
         {
             return patientResult.Errors;
@@ -444,11 +470,12 @@ internal sealed class RunCatalogueSyncCommandHandler
         var wsiComplete = true;
         var imagingComplete = true;
 
+        var sampled = new List<(SampleDto Dto, SampleAggregate Sample)>();
         var sequenced = new List<(SequencingId Id, SampleDto Dto, SampleAggregate Sample)>();
 
         foreach (var rawSample in rawPatient.Samples ?? [])
         {
-            var sampleResult = SampleMapper.ToSample(rawSample, patient.Id, rawPatient.Biobank);
+            var sampleResult = CatalogueSampleMapper.ToSample(rawSample, patient.Id);
             if (sampleResult.IsError)
             {
                 return sampleResult.Errors;
@@ -456,6 +483,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             var sample = sampleResult.Value;
             samples.Add(sample);
+            sampled.Add((rawSample, sample));
 
             if (sample.SequencingId is { } sequencingId)
             {
@@ -545,7 +573,7 @@ internal sealed class RunCatalogueSyncCommandHandler
             }
         }
 
-        return new PatientCatalogueData
+        var data = new PatientCatalogueData
         {
             Patient = patient,
             Samples = samples,
@@ -556,7 +584,17 @@ internal sealed class RunCatalogueSyncCommandHandler
             WsiComplete = wsiComplete,
             ImagingComplete = imagingComplete,
         };
+
+        return new AssembledPatient(data, sampled);
     }
+
+    /// <summary>
+    /// The planner's input for one patient, and the biobank record each sample aggregate was built
+    /// from - which is what its catalogue rows are built from once the pseudonyms are known.
+    /// </summary>
+    private sealed record AssembledPatient(
+        PatientCatalogueData Data,
+        IReadOnlyList<(SampleDto Dto, SampleAggregate Sample)> Samples);
 }
 
 /// <summary>

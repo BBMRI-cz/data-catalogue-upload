@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Uploader.Application.Abstractions;
+using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain;
 using Uploader.Domain.Common;
@@ -51,8 +52,8 @@ public sealed class CataloguePayloadLeakTests : IDisposable
 
         var payloads = new object[]
         {
-            CatalogueMapper.ToPayload(Patient(), patientPseudonym, StudyId),
-            CatalogueMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym),
+            CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId),
+            CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
             CatalogueMapper.ToPayload(Sequencing(), samplePseudonym),
         };
 
@@ -81,9 +82,9 @@ public sealed class CataloguePayloadLeakTests : IDisposable
             PseudonymKind.Sample, RealSampleId, CancellationToken.None);
 
         var patientJson = JsonSerializer.Serialize(
-            CatalogueMapper.ToPayload(Patient(), patientPseudonym, StudyId), Emx2Client.PayloadOptions);
+            CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId), Emx2Client.PayloadOptions);
         var sampleJson = JsonSerializer.Serialize(
-            CatalogueMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym),
+            CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
             Emx2Client.PayloadOptions);
 
         Assert.Contains(patientPseudonym, patientJson, StringComparison.Ordinal);
@@ -91,48 +92,37 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         Assert.Contains(patientPseudonym, sampleJson, StringComparison.Ordinal);
     }
 
-    private static PatientAggregate Patient() =>
-        PatientAggregate.Create(
-            RealPatientId,
-            new Personal
-            {
-                PersonalIdentifier = RealPatientId,
-                YearOfBirth = 1948,
-                GenderAtBirth = "assigned female at birth",
-            },
-            new Clinical
-            {
-                // What the inbound mapper derives from the real patient id - it embeds it, which is
-                // exactly the kind of field a field-by-field test forgets.
-                ClinicalIdentifier = $"clinical_{RealPatientId}",
-                BelongsToPerson = RealPatientId,
-                Diagnosis = ["C50.4"],
-                AgeAtDiagnosis = 74,
-            },
-            hasConsent: true).Value;
+    private const string Biobank = "MOU";
 
-    private static SampleAggregate Sample() =>
-        SampleAggregate.Create(
-            RealSampleId,
-            new PatientId(RealPatientId),
-            new SequencingId(RealPredictiveNumber),
-            new WsiId(RealBiopsyNumber),
-            new Material
-            {
-                MaterialIdentifier = RealSampleId,
-                CollectedFromPerson = RealPatientId,
-                BelongsToDiagnosis = [$"clinical_{RealPatientId}"],
-                SamplingDate = "2022-12-07",
-                MaterialType = "Peripheral Blood",
-            },
-            new Biospecimen
-            {
-                // Derived from the real sample id, so it embeds it - exactly the kind of field the
-                // scan below exists to catch.
-                BiospecimenIdentifier = $"biospecimen_{RealSampleId}",
-                DerivedFromMaterial = RealSampleId,
-                BiospecimenForm = "Serum or Plasma",
-            }).Value;
+    /// <summary>
+    /// The biobank's record as it arrives, real identifiers and all. The mappers derive the clinical,
+    /// consent and biospecimen keys from whatever id they are handed - exactly the kind of field a
+    /// field-by-field test forgets.
+    /// </summary>
+    private static PatientDto Patient() => new()
+    {
+        PatientId = RealPatientId,
+        Biobank = Biobank,
+        Consent = true,
+        Sex = "female",
+        BirthYear = 1948,
+        Samples = [Sample()],
+    };
+
+    /// <summary>
+    /// Carries the real predictive and biopsy numbers too: they are links for the planner, and must
+    /// not ride along into the sample's rows.
+    /// </summary>
+    private static SampleDto Sample() => new()
+    {
+        SampleId = RealSampleId,
+        Type = "serum",
+        MaterialType = "SD",
+        Biopsy = RealBiopsyNumber,
+        PredictiveNumber = RealPredictiveNumber,
+        Diagnosis = "C504",
+        TakingDate = new DateTime(2022, 12, 7),
+    };
 
     private static SequencingAggregate Sequencing() =>
         SequencingAggregate.Create(

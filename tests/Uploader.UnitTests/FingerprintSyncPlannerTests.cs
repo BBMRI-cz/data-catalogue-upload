@@ -16,21 +16,15 @@ public sealed class FingerprintSyncPlannerTests
     /// </summary>
     private static Fingerprint Hash(object aggregate) => Fingerprint.Of(aggregate);
 
-    private static PatientAggregate Patient(
-        string id,
-        Personal? personal = null,
-        Clinical? clinical = null,
-        bool hasConsent = true) =>
-        PatientAggregate.Create(id, personal, clinical, hasConsent).Value;
+    private static PatientAggregate Patient(string id, bool hasConsent = true) =>
+        PatientAggregate.Create(id, hasConsent).Value;
 
     private static SampleAggregate Sample(string id, string patientId, string? sequencing = null, string? wsi = null) =>
         SampleAggregate.Create(
             id,
             new PatientId(patientId),
             sequencing is null ? null : new SequencingId(sequencing),
-            wsi is null ? null : new WsiId(wsi),
-            new Material { MaterialIdentifier = id },
-            new Biospecimen { BiospecimenIdentifier = $"biospecimen_{id}" }).Value;
+            wsi is null ? null : new WsiId(wsi)).Value;
 
     private static PatientCatalogueData Data(PatientAggregate patient, params SampleAggregate[] samples) =>
         new() { Patient = patient, Samples = samples };
@@ -38,7 +32,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void NewPatientCreatesPatientThenSampleInOrder()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
+        var data = Data(Patient("P1"), Sample("S1", "P1"));
 
         var ops = _planner.Plan(data, PatientSyncStates.Empty(), Hash);
 
@@ -50,7 +44,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void PatientWithoutSamplesPlansNothing()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }));
+        var data = Data(Patient("P1"));
 
         Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty(), Hash));
     }
@@ -59,7 +53,7 @@ public sealed class FingerprintSyncPlannerTests
     public void PatientWithoutConsentPlansNothingEvenWithSamples()
     {
         var data = Data(
-            Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
+            Patient("P1", hasConsent: false),
             Sample("S1", "P1"));
 
         // Neither the patient nor the sample is planned, so nothing is uploaded and no state is kept.
@@ -69,7 +63,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void UnchangedFingerprintIsSkipped()
     {
-        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var patient = Patient("P1");
         var data = Data(patient, Sample("S1", "P1"));
         var existing = new PatientSyncStates
         {
@@ -91,7 +85,7 @@ public sealed class FingerprintSyncPlannerTests
     public void ChangedFingerprintIsUpdated()
     {
         var data = Data(
-            Patient("P1", new Personal { PersonalIdentifier = "P1", YearOfBirth = 1990 }),
+            Patient("P1"),
             Sample("S1", "P1"));
         var existing = new PatientSyncStates
         {
@@ -112,7 +106,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void SoftDeletedPriorIsRecreated()
     {
-        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var patient = Patient("P1");
         var data = Data(patient, Sample("S1", "P1"));
         var existing = new PatientSyncStates
         {
@@ -133,7 +127,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void UnseenExistingSampleIsDeleted()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
+        var data = Data(Patient("P1"), Sample("S1", "P1"));
         var existing = new PatientSyncStates
         {
             Samples = new Dictionary<SampleId, SampleSyncState>
@@ -166,7 +160,7 @@ public sealed class FingerprintSyncPlannerTests
         var existing = ExistingSequencing("PRED1", "S1");
         var data = new PatientCatalogueData
         {
-            Patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }),
+            Patient = Patient("P1"),
             Samples = [Sample("S1", "P1", sequencing: "PRED1")],
             Sequencings = [],
             SequencingComplete = false,
@@ -181,7 +175,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void SequencingIsDeletedWhenItsSourceReportedItGone()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }), Sample("S1", "P1"));
+        var data = Data(Patient("P1"), Sample("S1", "P1"));
 
         var ops = _planner.Plan(data, ExistingSequencing("PRED1", "S1"), Hash);
 
@@ -197,7 +191,7 @@ public sealed class FingerprintSyncPlannerTests
     public void PatientWhoLosesConsentIsDeletedAfterTheirChildren()
     {
         var data = Data(
-            Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false),
+            Patient("P1", hasConsent: false),
             Sample("S1", "P1"));
         var existing = new PatientSyncStates
         {
@@ -232,11 +226,41 @@ public sealed class FingerprintSyncPlannerTests
         Assert.Null(patientOp.Patient);
     }
 
+    /// <summary>
+    /// An ineligible patient's row is never sent, so it is never fingerprinted - whether the patient is
+    /// being removed or was never published.
+    /// </summary>
+    [Fact]
+    public void AnIneligiblePatientIsNeverFingerprinted()
+    {
+        var published = new PatientSyncStates
+        {
+            Patient = new PatientSyncState
+            {
+                Id = new PatientId("P1"),
+                SourceFingerprint = "x",
+                Status = SyncStatus.Synced,
+                CatalogueRemoteId = "remote-P1",
+            },
+        };
+        Fingerprint Refuse(object aggregate) =>
+            aggregate is PatientAggregate
+                ? throw new InvalidOperationException("An ineligible patient was fingerprinted.")
+                : Hash(aggregate);
+
+        var withdrawn = Data(Patient("P1", hasConsent: false), Sample("S1", "P1"));
+
+        Assert.Empty(_planner.Plan(withdrawn, PatientSyncStates.Empty(), Refuse));
+        Assert.Equal(
+            SyncOp.Delete,
+            Assert.IsType<PatientOperation>(Assert.Single(_planner.Plan(withdrawn, published, Refuse))).Op);
+    }
+
     /// <summary>A patient who was never published has nothing to remove.</summary>
     [Fact]
     public void IneligiblePatientWhoWasNeverPublishedPlansNothing()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+        var data = Data(Patient("P1", hasConsent: false));
 
         Assert.Empty(_planner.Plan(data, PatientSyncStates.Empty(), Hash));
     }
@@ -248,7 +272,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void IneligiblePatientWithAStoredSkipFromAnEarlierRunPlansNothing()
     {
-        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false);
+        var patient = Patient("P1", hasConsent: false);
         var existing = new PatientSyncStates
         {
             Patient = new PatientSyncState
@@ -265,7 +289,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void WithdrawnPatientAlreadyDeletedIsNotDeletedAgain()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+        var data = Data(Patient("P1", hasConsent: false));
         var existing = new PatientSyncStates
         {
             Patient = new PatientSyncState
@@ -285,7 +309,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void IneligiblePatientAfterAFailedUpsertIsDeleted()
     {
-        var data = Data(Patient("P1", new Personal { PersonalIdentifier = "P1" }, hasConsent: false));
+        var data = Data(Patient("P1", hasConsent: false));
         var existing = new PatientSyncStates
         {
             Patient = new PatientSyncState { Id = new PatientId("P1"), SourceFingerprint = "x", Status = SyncStatus.Failed },
@@ -303,7 +327,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void PatientNeverWrittenIsCreatedEvenWhenTheFingerprintMatches()
     {
-        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var patient = Patient("P1");
         var existing = new PatientSyncStates
         {
             Patient = new PatientSyncState
@@ -323,7 +347,7 @@ public sealed class FingerprintSyncPlannerTests
     [Fact]
     public void FailedUploadIsRetriedEvenWhenUnchanged()
     {
-        var patient = Patient("P1", new Personal { PersonalIdentifier = "P1" });
+        var patient = Patient("P1");
         var sample = Sample("S1", "P1");
         var existing = new PatientSyncStates
         {
@@ -372,7 +396,7 @@ public sealed class FingerprintSyncPlannerTests
     {
         var data = new PatientCatalogueData
         {
-            Patient = Patient("P1", new Personal { PersonalIdentifier = "P1" }),
+            Patient = Patient("P1"),
             Samples = [Sample("S1", "P1", sequencing: "PRED1", wsi: "BIO1")],
             Sequencings = [SequencingAggregate.Create("PRED1", new SampleId("S1"), []).Value],
             Wsis = [WsiAggregate.Create("BIO1", new SampleId("S1"), null).Value],

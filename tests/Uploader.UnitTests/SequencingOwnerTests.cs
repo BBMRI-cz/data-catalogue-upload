@@ -113,6 +113,6 @@ public sealed class SequencingOwnerTests
             EventNumber = eventNumber,
             PredictiveNumber = "2023/1052",
         };
-        return (dto, SampleMapper.ToSample(dto, new PatientId("P1")).Value);
+        return (dto, CatalogueSampleMapper.ToSample(dto, new PatientId("P1")).Value);
     }
 }
