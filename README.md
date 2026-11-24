@@ -47,7 +47,9 @@ curl http://localhost:8003/admin/sync               # {"running": ..., "last_run
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the
 design, [`docs/catalogue-api-contract.md`](docs/catalogue-api-contract.md) for what the catalogue
-accepts, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the biobank XML format.
+accepts, [`docs/ontology-mapping.md`](docs/ontology-mapping.md) for how a source value becomes one
+of its ontology terms, and [`docs/patient-data-report.md`](docs/patient-data-report.md) for the
+biobank XML format.
 
 There is one compose file per stack — `compose.biobank.yml`, `compose.sequencing.yml` and
 `compose.uploader.yml` — because the two source services each read a directory that exists on only
