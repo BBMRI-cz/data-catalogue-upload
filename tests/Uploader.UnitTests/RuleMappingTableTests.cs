@@ -39,10 +39,19 @@ public sealed class RuleMappingTableTests
     public void ABiobankCodeBecomesItsInstitute(string code, string term) =>
         Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.PrimaryAffiliatedInstitute, code));
 
+    /// <summary>The managing biobank shares the patient's institute list, keyed on the same code.</summary>
+    [Theory]
+    [InlineData("MOU", "Masaryk Memorial Cancer Institute")]
+    [InlineData("bbm", "Bank of Biological Material, Masaryk Memorial Cancer Institute")]
+    public void ABiobankCodeBecomesTheManagingBiobank(string code, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.ManagingBiobank, code));
+
     /// <summary>Not guessed at, and no longer silently dropped: it lands on the unmapped list.</summary>
-    [Fact]
-    public void AnUnknownBiobankCodeIsNotFound() =>
-        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.PrimaryAffiliatedInstitute, "XYZ"));
+    [Theory]
+    [InlineData("Personal", "primaryAffiliatedInstitute")]
+    [InlineData("Biospecimens", "managingBiobank")]
+    public void AnUnknownBiobankCodeIsNotFound(string table, string column) =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(new OntologyField(table, column), "XYZ"));
 
     /// <summary>The biobank exports ICD-10 without the dot; the Diagnosis ontology spells it out.</summary>
     [Theory]
@@ -61,6 +70,153 @@ public sealed class RuleMappingTableTests
     [InlineData("C5091")]    // five characters: no rule says where the dot goes
     public void ADiagnosisTheDotRuleLeavesAloneIsNotFound(string code) =>
         Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.Diagnosis, code));
+
+    private static MappingAnswer Material(OntologyField field, string sampleType, string code) =>
+        Rules.Lookup(field, code, TermContext.Material(sampleType, label: null));
+
+    /// <summary>
+    /// Why the material code carries its sample type: one code says something different in each of
+    /// its four columns, and the same code on another sample type is another material altogether.
+    /// </summary>
+    [Fact]
+    public void OneCodeResolvesPerColumnAndPerSampleType()
+    {
+        Assert.Equal(MappingAnswer.Mapped("Solid Tissue Specimen"), Material(OntologyFields.MaterialType, "tissue", "53"));
+        Assert.Equal(MappingAnswer.Mapped("Tumor"), Material(OntologyFields.PathologicalState, "tissue", "53"));
+        Assert.Equal(MappingAnswer.Mapped("Frozen Tissue"), Material(OntologyFields.BiospecimenForm, "tissue", "53"));
+        Assert.Equal(MappingAnswer.NoTerm, Material(OntologyFields.StorageConditions, "tissue", "53"));
+
+        Assert.Equal(MappingAnswer.Mapped("Serum or Plasma"), Material(OntologyFields.BiospecimenForm, "serum", "PS"));
+        Assert.Equal(MappingAnswer.Mapped("Whole Blood"), Material(OntologyFields.BiospecimenForm, "genome", "PS"));
+    }
+
+    /// <summary>
+    /// What was taken from the patient. Tissue is excised and everything blood-derived is a blood
+    /// draw - including the mononuclear cells, which are filed as tissue but were never cut out.
+    /// </summary>
+    [Theory]
+    [InlineData("tissue", "1", "Solid Tissue Specimen")]
+    [InlineData("tissue", "56", "Solid Tissue Specimen")]
+    [InlineData("tissue", "7", "Peripheral Blood")]
+    [InlineData("serum", "SD", "Peripheral Blood")]
+    [InlineData("genome", "gD", "Peripheral Blood")]
+    public void AMaterialCodeBecomesWhatWasCollected(string sampleType, string code, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Material(OntologyFields.MaterialType, sampleType, code));
+
+    /// <summary>A primary cell culture is grown, not collected, so it has no material type on purpose.</summary>
+    [Fact]
+    public void APrimaryCellCultureHasNoMaterialTypeOnPurpose() =>
+        Assert.Equal(MappingAnswer.NoTerm, Material(OntologyFields.MaterialType, "serum", "PR"));
+
+    [Fact]
+    public void AMaterialCodeOfAnUnknownSampleTypeIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Material(OntologyFields.MaterialType, "plasma", "SD"));
+
+    [Theory]
+    [InlineData("1", "Tumor")]     // malignant tumour
+    [InlineData("53", "Tumor")]    // malignant tumour, RNAlater
+    [InlineData("2", "Tumor")]     // metastasis
+    [InlineData("55", "Tumor")]
+    [InlineData("4", "Normal")]    // healthy tissue
+    [InlineData("54", "Normal")]
+    public void ATissueCodeBecomesItsPathologicalState(string code, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Material(OntologyFields.PathologicalState, "tissue", code));
+
+    /// <summary>
+    /// The ontology offers only Normal, Tumor, Organoid and Tumoroid. Calling benign or premalignant
+    /// tissue "Tumor" would assert a malignancy the biobank did not record, and a blood draw records
+    /// no pathological state at all - each a decision, so none of them is reported as unmapped.
+    /// </summary>
+    [Theory]
+    [InlineData("tissue", "3")]    // benign tumour
+    [InlineData("tissue", "56")]   // benign tumour, RNAlater
+    [InlineData("tissue", "5")]    // premalignant
+    [InlineData("tissue", "7")]    // mononuclear cells
+    [InlineData("serum", "SD")]
+    [InlineData("genome", "PK")]
+    public void APathologicalStateTheOntologyCannotSayHonestlyIsNoTerm(string sampleType, string code) =>
+        Assert.Equal(MappingAnswer.NoTerm, Material(OntologyFields.PathologicalState, sampleType, code));
+
+    [Theory]
+    [InlineData("tissue", "8")]    // a tissue code nobody has seen
+    [InlineData("plasma", "1")]    // a sample type nobody has seen
+    public void APathologicalStateNoRuleKnowsIsNotFound(string sampleType, string code) =>
+        Assert.Equal(MappingAnswer.NotFound, Material(OntologyFields.PathologicalState, sampleType, code));
+
+    /// <summary>
+    /// The form the biobank stores. Tissue is frozen - the export carries a freeze time for every
+    /// tissue sample - and the plasma and serum codes differ only in what the ontology does not tell
+    /// apart.
+    /// </summary>
+    [Theory]
+    [InlineData("tissue", "1", "Frozen Tissue")]
+    [InlineData("tissue", "53", "Frozen Tissue")]
+    [InlineData("serum", "SD", "Serum or Plasma")]
+    [InlineData("serum", "K", "Serum or Plasma")]
+    [InlineData("genome", "gD", "Blood DNA")]
+    [InlineData("genome", "PK", "Whole Blood")]
+    public void AMaterialCodeBecomesTheFormTheBiobankStores(string sampleType, string code, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Material(OntologyFields.BiospecimenForm, sampleType, code));
+
+    [Theory]
+    [InlineData("tissue", "7")]    // mononuclear cells are not a listed form
+    [InlineData("serum", "PR")]    // primary cell cultures
+    public void AFormTheOntologyDoesNotListIsNoTerm(string sampleType, string code) =>
+        Assert.Equal(MappingAnswer.NoTerm, Material(OntologyFields.BiospecimenForm, sampleType, code));
+
+    [Fact]
+    public void AFormOfAnUnknownSampleTypeIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Material(OntologyFields.BiospecimenForm, "plasma", "SD"));
+
+    private const string Cryotube = "Cryotube 1–2mL Programmable freezing to <-135°C";
+    private const string PpTube = "PP tube 0.5–2mL (-35) to (-18)°C";
+
+    /// <summary>
+    /// The ontology names a tube and a temperature together and the export names neither, so this is
+    /// the previous uploader's mapping from the material code. The terms carry an en dash, not a
+    /// hyphen.
+    /// </summary>
+    [Theory]
+    [InlineData("tissue", "1", Cryotube)]
+    [InlineData("tissue", "2", Cryotube)]
+    [InlineData("tissue", "3", Cryotube)]
+    [InlineData("tissue", "4", Cryotube)]
+    [InlineData("tissue", "5", Cryotube)]
+    [InlineData("tissue", "7", Cryotube)]
+    [InlineData("serum", "C", Cryotube)]
+    [InlineData("serum", "K", Cryotube)]
+    [InlineData("serum", "L", Cryotube)]
+    [InlineData("serum", "PD", Cryotube)]
+    [InlineData("serum", "SD", Cryotube)]
+    [InlineData("serum", "T", Cryotube)]
+    [InlineData("serum", "PR", Cryotube)]
+    [InlineData("genome", "gD", PpTube)]
+    [InlineData("genome", "PK", PpTube)]
+    public void StorageConditionsFollowThePreviousUploadersMapping(string sampleType, string code, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Material(OntologyFields.StorageConditions, sampleType, code));
+
+    /// <summary>RNAlater tissue: the previous uploader deliberately named no tube for it.</summary>
+    [Theory]
+    [InlineData("53")]
+    [InlineData("54")]
+    [InlineData("55")]
+    [InlineData("56")]
+    public void RnaLaterStorageIsNoTerm(string code) =>
+        Assert.Equal(MappingAnswer.NoTerm, Material(OntologyFields.StorageConditions, "tissue", code));
+
+    /// <summary>
+    /// Codes the previous uploader never named a tube for and nobody has decided on since - which
+    /// is what the unmapped list is for.
+    /// </summary>
+    [Theory]
+    [InlineData("serum", "S")]
+    [InlineData("serum", "PS")]
+    [InlineData("genome", "PS")]
+    [InlineData("genome", "X")]
+    [InlineData("tissue", "8")]
+    [InlineData("plasma", "1")]
+    public void StorageNobodyHasDecidedOnIsNotFound(string sampleType, string code) =>
+        Assert.Equal(MappingAnswer.NotFound, Material(OntologyFields.StorageConditions, sampleType, code));
 
     /// <summary>Loading does nothing: every run is handed the rules' one snapshot.</summary>
     [Fact]

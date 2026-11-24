@@ -127,7 +127,8 @@ public sealed class UploaderMapperFieldParityTests
     private static CatalogueSamplePayload FullyPopulatedSamplePayload()
     {
         var dto = FullyPopulatedPatient();
-        return CatalogueSampleMapper.ToPayload(dto.Samples![0], SamplePseudonym, PatientPseudonym, dto.Biobank);
+        return CatalogueSampleMapper.ToPayload(
+            dto.Samples![0], SamplePseudonym, PatientPseudonym, dto.Biobank, LiveTerms.Resolver(), []);
     }
 
     [Fact]

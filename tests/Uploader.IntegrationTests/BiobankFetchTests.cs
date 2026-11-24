@@ -63,7 +63,12 @@ public sealed class BiobankFetchTests
                 sample => (
                     Sample: CatalogueSampleMapper.ToSample(sample, patientId).Value,
                     Payload: CatalogueSampleMapper.ToPayload(
-                        sample, $"mmci_sample_{sample.SampleId}", PatientPseudonym, dto.Biobank)));
+                        sample,
+                        $"mmci_sample_{sample.SampleId}",
+                        PatientPseudonym,
+                        dto.Biobank,
+                        LiveTerms.Resolver(),
+                        [])));
 
         Assert.Equal(3, samples.Count);
 

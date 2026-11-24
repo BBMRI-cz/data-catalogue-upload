@@ -154,8 +154,11 @@ internal sealed class FakeMappingTable : IMappingTable, IMappingSnapshot
 {
     public Dictionary<(OntologyField Field, string Value), MappingAnswer> Answers { get; } = [];
 
-    /// <summary>Every lookup, in order, so a test can tell whether the table was asked at all.</summary>
-    public List<(OntologyField Field, string Value)> Lookups { get; } = [];
+    /// <summary>
+    /// Every lookup, in order, with the context it was asked in, so a test can tell whether the table
+    /// was asked at all and about what.
+    /// </summary>
+    public List<(OntologyField Field, string Value, TermContext Context)> Lookups { get; } = [];
 
     public Error? LoadError { get; init; }
 
@@ -166,7 +169,7 @@ internal sealed class FakeMappingTable : IMappingTable, IMappingSnapshot
 
     public MappingAnswer Lookup(OntologyField field, string value, TermContext context)
     {
-        Lookups.Add((field, value));
+        Lookups.Add((field, value, context));
         return Answers.GetValueOrDefault((field, value), MappingAnswer.NotFound);
     }
 }
