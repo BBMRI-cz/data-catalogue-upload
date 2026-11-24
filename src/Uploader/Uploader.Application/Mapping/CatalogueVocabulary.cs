@@ -3,10 +3,11 @@ using System.Collections.Frozen;
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// The biobank's codes translated into the terms the catalogue's ontology tables actually contain.
+/// The sequencing API's values translated into the terms the catalogue's ontology tables actually
+/// contain.
 /// <para>
 /// EMX2 enforces these as foreign keys: a term that is not already in the ontology rejects the
-/// whole row, transactionally (see <c>docs/catalogue-api-contract.md</c>). So a code only appears
+/// whole row, transactionally (see <c>docs/catalogue-api-contract.md</c>). So a value only appears
 /// here when there is a term that genuinely means the same thing. Everything else maps to
 /// <c>null</c> and the column is omitted - an absent value is honest, and a wrong one would be a
 /// clinical claim nobody made.
@@ -17,107 +18,13 @@ namespace Uploader.Application.Mapping;
 /// costs one column rather than the row.
 /// </para>
 /// <para>
-/// The patient's terms are no longer translated here: they go through the run's
-/// <see cref="TermResolver"/>, with their rules in <see cref="RuleMappingSnapshot"/>. What is left is the
-/// sample's and the sequencing's.
+/// The patient's and the sample's terms are no longer translated here: they go through the run's
+/// <see cref="TermResolver"/>, with their rules in <see cref="RuleMappingSnapshot"/>. What is left is
+/// the sequencing's, which follows in #121.
 /// </para>
 /// </summary>
 public static class CatalogueVocabulary
 {
-    private const string SolidTissue = "Solid Tissue Specimen";
-    private const string PeripheralBlood = "Peripheral Blood";
-
-    /// <summary>
-    /// <c>Material.MaterialType</c>: what was taken from the patient, before any processing.
-    /// Tissue codes are all surgical tissue; every blood-derived code is a blood draw, and which
-    /// fraction was kept is <see cref="BiospecimenForm"/>'s business, not this column's.
-    /// </summary>
-    public static string? MaterialType(string? sampleType, string? code) => (sampleType, code) switch
-    {
-        (BiobankMapping.TissueType, "7") => PeripheralBlood, // mononuclear cells, drawn not excised
-        (BiobankMapping.TissueType, _) => SolidTissue,
-
-        // "Primary cell cultures" is not a collected material and has no term; the rest are blood.
-        (BiobankMapping.SerumType, "PR") => null,
-        (BiobankMapping.SerumType, _) => PeripheralBlood,
-        (BiobankMapping.GenomeType, _) => PeripheralBlood,
-        _ => null,
-    };
-
-    /// <summary>
-    /// <c>Material.PathologicalState</c>. The ontology offers only Normal, Tumor, Organoid and
-    /// Tumoroid, so benign and premalignant tissue have nowhere to go: calling either of them
-    /// "Tumor" would assert a malignancy the biobank did not record.
-    /// </summary>
-    public static string? PathologicalState(string? sampleType, string? code) =>
-        sampleType == BiobankMapping.TissueType
-            ? code switch
-            {
-                "1" or "53" => "Tumor",   // malignant tumour, plain and RNAlater
-                "2" or "55" => "Tumor",   // metastasis
-                "4" or "54" => "Normal",  // healthy tissue
-                _ => null,                // benign (3, 56), premalignant (5), PBMNC (7)
-            }
-            : null;
-
-    /// <summary>
-    /// <c>Biospecimens.BiospecimenForm</c>: the form the biobank actually stores.
-    /// <para>
-    /// Tissue is frozen - the export carries a freeze time for every tissue sample, which is the
-    /// evidence for it. The plasma and serum codes differ in anticoagulant, which the ontology does
-    /// not distinguish below "Serum or Plasma".
-    /// </para>
-    /// </summary>
-    public static string? BiospecimenForm(string? sampleType, string? code) => (sampleType, code) switch
-    {
-        (BiobankMapping.TissueType, "7") => null, // mononuclear cells are not a listed form
-        (BiobankMapping.TissueType, _) => "Frozen Tissue",
-
-        (BiobankMapping.SerumType, "PR") => null, // primary cell cultures
-        (BiobankMapping.SerumType, _) => "Serum or Plasma",
-
-        (BiobankMapping.GenomeType, "gD") => "Blood DNA",
-        (BiobankMapping.GenomeType, _) => "Whole Blood",
-        _ => null,
-    };
-
-    private const string Cryotube = "Cryotube 1–2mL Programmable freezing to <-135°C";
-    private const string PpTube = "PP tube 0.5–2mL (-35) to (-18)°C";
-
-    /// <summary>
-    /// <c>Biospecimens.StorageConditions</c>. The ontology names a tube and a temperature together
-    /// and the export names neither, so this is the previous uploader's mapping from the material
-    /// code, taken over as it was (<c>miseq_sample_metadata_collector.py</c>). The terms carry an en
-    /// dash (<c>1–2mL</c>), not a hyphen.
-    /// </summary>
-    public static string? StorageConditions(string? sampleType, string? code) => (sampleType, code) switch
-    {
-        (BiobankMapping.TissueType, "1" or "2" or "3" or "4" or "5" or "7") => Cryotube,
-        (BiobankMapping.SerumType, "C" or "K" or "L" or "PD" or "SD" or "T" or "PR") => Cryotube,
-        (BiobankMapping.GenomeType, "gD" or "PK") => PpTube,
-
-        // RNAlater tissue (53-56) and serum S/PS: the previous uploader named no tube for them.
-        _ => null,
-    };
-
-    /// <summary>
-    /// <c>Biospecimens.Availability</c>, from the count of units still on the shelf. The export
-    /// distinguishes only "some left" from "none left", so Reserved and Destroyed never apply.
-    /// </summary>
-    public static string? Availability(int? availableSamples) => availableSamples switch
-    {
-        null => null,
-        0 => "Depleted",
-        _ => "Available",
-    };
-
-    /// <summary>
-    /// <c>Biospecimens.ManagingBiobank</c>. The institute list is shared with
-    /// <c>Personal.PrimaryAffiliatedInstitute</c>, which is resolved through the mapping table, so
-    /// the list lives in <see cref="RuleMappingSnapshot"/>.
-    /// </summary>
-    public static string? Institute(string? biobank) => RuleMappingSnapshot.Institute(biobank);
-
     /// <summary>
     /// <c>Sequencing.SequencingMethod</c>. The source has no method field - the sample sheet's assay
     /// names a kit or an index set - and every MMCI run is Illumina sequencing by synthesis, so this

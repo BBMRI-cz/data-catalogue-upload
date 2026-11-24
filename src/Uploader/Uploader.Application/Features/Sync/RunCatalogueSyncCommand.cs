@@ -226,7 +226,8 @@ internal sealed class RunCatalogueSyncCommandHandler
     /// <summary>
     /// Logs each value the resolver could not place, the first time the run meets it rather than once
     /// per row, and says whether the mapping table had no answer or answered a term the live list
-    /// does not have.
+    /// does not have. A value looked up in a context - a material code, with its sample type - is
+    /// logged with it, since the code alone does not say which material it is.
     /// </summary>
     private void ReportMisses(
         IEnumerable<UnmappedValue> misses,
@@ -240,20 +241,23 @@ internal sealed class RunCatalogueSyncCommandHandler
                 continue;
             }
 
+            var context = miss.Context == TermContext.Empty ? string.Empty : $" ({miss.Context})";
             if (resolver.MappingAnswerFor(miss) is { Outcome: MappingOutcome.Term, Term: { } term })
             {
                 _logger.LogWarning(
-                    "No term for {Field} '{Value}': the mapping table answers '{Term}', which is not a live term",
+                    "No term for {Field} '{Value}'{Context}: the mapping table answers '{Term}', which is not a live term",
                     miss.Field,
                     miss.Value,
+                    context,
                     term);
             }
             else
             {
                 _logger.LogWarning(
-                    "No term for {Field} '{Value}': it is not a live term and the mapping table has no answer for it",
+                    "No term for {Field} '{Value}'{Context}: it is not a live term and the mapping table has no answer for it",
                     miss.Field,
-                    miss.Value);
+                    miss.Value,
+                    context);
             }
         }
     }
@@ -302,7 +306,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         foreach (var (dto, sample) in assembled.Samples)
         {
             samplePayloads[sample] = CatalogueSampleMapper.ToPayload(
-                dto, pseudonyms.Sample(sample.Id), pseudonyms.Patient, rawPatient.Biobank);
+                dto, pseudonyms.Sample(sample.Id), pseudonyms.Patient, rawPatient.Biobank, terms, misses);
         }
 
         // Published under the owning sample's pseudonym, which keys the rows and the biospecimen link.

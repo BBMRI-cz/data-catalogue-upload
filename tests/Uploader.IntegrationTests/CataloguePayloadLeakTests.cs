@@ -51,7 +51,8 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         var payloads = new object[]
         {
             CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId, LiveTerms.Resolver(), []),
-            CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
+            CatalogueSampleMapper.ToPayload(
+                Sample(), samplePseudonym, patientPseudonym, Biobank, LiveTerms.Resolver(), []),
             CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym),
         };
 
@@ -82,7 +83,8 @@ public sealed class CataloguePayloadLeakTests : IDisposable
         var patientJson = JsonSerializer.Serialize(
             CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId, LiveTerms.Resolver(), []), Emx2Client.PayloadOptions);
         var sampleJson = JsonSerializer.Serialize(
-            CatalogueSampleMapper.ToPayload(Sample(), samplePseudonym, patientPseudonym, Biobank),
+            CatalogueSampleMapper.ToPayload(
+                Sample(), samplePseudonym, patientPseudonym, Biobank, LiveTerms.Resolver(), []),
             Emx2Client.PayloadOptions);
         var sequencingJson = JsonSerializer.Serialize(
             CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym), Emx2Client.PayloadOptions);

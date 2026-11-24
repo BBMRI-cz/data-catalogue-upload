@@ -40,13 +40,17 @@ public sealed class TermResolutionTests
         string id,
         string? sex = null,
         string? diagnosis = null,
-        bool consent = true) =>
+        bool consent = true,
+        SampleDto? sample = null) =>
         new()
         {
             PatientId = id,
             Consent = consent,
             Sex = sex,
-            Samples = [new SampleDto { SampleId = $"S-{id}", Type = "tissue", Diagnosis = diagnosis }],
+            Samples =
+            [
+                (sample ?? new SampleDto { Type = "tissue" }) with { SampleId = $"S-{id}", Diagnosis = diagnosis },
+            ],
         };
 
     private static async Task<ErrorOr<RunCatalogueSyncCommandResult>> Run(
@@ -242,4 +246,112 @@ public sealed class TermResolutionTests
         Assert.Equal(1, result.Value.Skipped);
         Assert.Equal("assigned female at birth", Assert.Single(catalogue.PatientPayloads).Personal!.GenderAtBirth);
     }
+
+    /// <summary>
+    /// A bare material code means nothing without its sample type, so the one warning a run logs for
+    /// it says which sample type and label it came with - the same context it is looked up in.
+    /// </summary>
+    [Fact]
+    public async Task AnUnknownMaterialCodeIsReportedOncePerFieldWithItsContext()
+    {
+        var logger = new RecordingLogger<RunCatalogueSyncCommandHandler>();
+        var unknown = new SampleDto { Type = "tissue", MaterialType = "9" };
+
+        await Run(CreateHandler(
+            new FakeSourceDataGateway([Patient("P1", sample: unknown), Patient("P2", sample: unknown)]),
+            new FakeCatalogueGateway(),
+            logger: logger));
+
+        // Tissue is tissue whatever the code, so only the two columns that read the code itself miss.
+        Assert.Equal(2, logger.Warnings.Count);
+        Assert.Single(logger.Warnings, warning =>
+            warning.Contains("Material.pathologicalState '9' (sampleType: tissue, label: -)", StringComparison.Ordinal));
+        Assert.Single(logger.Warnings, warning =>
+            warning.Contains("Biospecimens.storageConditions '9' (sampleType: tissue, label: -)", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheSamplesRawValuesReachThePayloadAsTerms()
+    {
+        var catalogue = new FakeCatalogueGateway();
+        var sample = new SampleDto { Type = "tissue", MaterialType = "1", AvailableSamplesNo = 0 };
+
+        await Run(CreateHandler(
+            new FakeSourceDataGateway([Patient("P1", sample: sample) with { Biobank = "MOU" }]), catalogue));
+
+        var payload = Assert.Single(catalogue.SamplePayloads);
+        Assert.Equal("Solid Tissue Specimen", payload.Material!.MaterialType);
+        Assert.Equal("Tumor", payload.Material.PathologicalState);
+        Assert.Equal("Frozen Tissue", payload.Biospecimen!.BiospecimenForm);
+        Assert.Equal("Cryotube 1–2mL Programmable freezing to <-135°C", payload.Biospecimen.StorageConditions);
+        Assert.Equal("Depleted", payload.Biospecimen.Availability);
+        Assert.Equal("Masaryk Memorial Cancer Institute", payload.Biospecimen.ManagingBiobank);
+    }
+
+    /// <summary>
+    /// The mapping table's key is the field, the value and the whole context, so each of the four
+    /// columns asks about the code together with the sample type and the biobank API's label.
+    /// </summary>
+    [Fact]
+    public async Task TheMaterialCodeIsLookedUpWithItsSampleTypeAndLabel()
+    {
+        var mapping = new FakeMappingTable();
+        var sample = new SampleDto { Type = "serum", MaterialType = "SD", MaterialTypeLabel = "Serum, nitrogen-stored" };
+
+        await Run(CreateHandler(
+            new FakeSourceDataGateway([Patient("P1", sample: sample)]), new FakeCatalogueGateway(), mapping));
+
+        var lookups = mapping.Lookups.Where(lookup => lookup.Value == "SD").ToList();
+        Assert.Equal(
+            [
+                OntologyFields.MaterialType,
+                OntologyFields.PathologicalState,
+                OntologyFields.BiospecimenForm,
+                OntologyFields.StorageConditions,
+            ],
+            lookups.Select(lookup => lookup.Field).Distinct());
+        Assert.All(
+            lookups,
+            lookup => Assert.Equal(TermContext.Material("serum", "Serum, nitrogen-stored"), lookup.Context));
+    }
+
+    /// <summary>
+    /// Resolving the sample before its fingerprint is what lets a newly approved mapping reach a
+    /// published sample: its row changes, so it is sent again, while the patient's row stays skipped.
+    /// </summary>
+    [Fact]
+    public async Task AMappingThatStartsAnsweringForAMaterialCodeUpdatesThePublishedSample()
+    {
+        var source = new FakeSourceDataGateway(
+            [Patient("P1", sample: new SampleDto { Type = "tissue", MaterialType = "9" })]);
+        var state = new InMemorySyncStateRepository();
+        var mapping = new FakeMappingTable();
+        await Run(CreateHandler(source, new FakeCatalogueGateway(), mapping, state));
+
+        mapping.Answers[(OntologyFields.StorageConditions, "9")] = MappingAnswer.Mapped(LiveTerms.StorageConditions[0]);
+        var catalogue = new FakeCatalogueGateway();
+        var result = await Run(CreateHandler(source, catalogue, mapping, state));
+
+        Assert.Equal(1, result.Value.Uploaded);
+        Assert.Equal(1, result.Value.Skipped);
+        Assert.Equal(
+            LiveTerms.StorageConditions[0],
+            Assert.Single(catalogue.SamplePayloads).Biospecimen!.StorageConditions);
+    }
+
+    /// <summary>A patient without consent never leaves the uploader - nor do their samples' codes.</summary>
+    [Fact]
+    public async Task AnIneligiblePatientsSampleValuesAreNeverReported()
+    {
+        var logger = new RecordingLogger<RunCatalogueSyncCommandHandler>();
+        var unknown = new SampleDto { Type = "tissue", MaterialType = "9" };
+
+        await Run(CreateHandler(
+            new FakeSourceDataGateway([Patient("P1", consent: false, sample: unknown) with { Biobank = "XYZ" }]),
+            new FakeCatalogueGateway(),
+            logger: logger));
+
+        Assert.Empty(logger.Warnings);
+    }
 }
+

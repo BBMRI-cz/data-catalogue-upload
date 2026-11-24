@@ -36,7 +36,20 @@ public sealed class TermResolver
     /// The term <paramref name="value"/> stands for in <paramref name="field"/>, or null to leave the
     /// field out. A value the source did not fill is simply absent, not unmapped.
     /// </summary>
-    public string? Resolve(OntologyField field, string? value, ICollection<UnmappedValue> misses)
+    public string? Resolve(OntologyField field, string? value, ICollection<UnmappedValue> misses) =>
+        Resolve(field, value, TermContext.Empty, misses);
+
+    /// <summary>
+    /// <see cref="Resolve(OntologyField, string?, ICollection{UnmappedValue})"/> for a value whose
+    /// meaning depends on where it came from: the mapping table is asked about the value in
+    /// <paramref name="context"/>, and a miss is recorded with it. A value that is already a live term
+    /// is used as is whatever its context.
+    /// </summary>
+    public string? Resolve(
+        OntologyField field,
+        string? value,
+        TermContext context,
+        ICollection<UnmappedValue> misses)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -48,7 +61,7 @@ public sealed class TermResolver
             return value;
         }
 
-        var answer = _mapping.Lookup(field, value, TermContext.Empty);
+        var answer = _mapping.Lookup(field, value, context);
         if (answer.Outcome == MappingOutcome.NoTerm)
         {
             return null;
@@ -59,7 +72,7 @@ public sealed class TermResolver
             return term;
         }
 
-        misses.Add(new UnmappedValue(field, value, TermContext.Empty));
+        misses.Add(new UnmappedValue(field, value, context));
         return null;
     }
 

@@ -3,8 +3,7 @@ namespace Uploader.Application.Mapping;
 /// <summary>
 /// The computed pieces of the biobank -> catalogue mapping: the derived identifiers and the age
 /// computation, ported from the previous production uploader. A biobank code becomes an ontology term
-/// elsewhere - through the run's <see cref="TermResolver"/> for the patient's fields, and
-/// <see cref="CatalogueVocabulary"/> for the rest.
+/// elsewhere, through the run's <see cref="TermResolver"/>.
 /// </summary>
 public static class BiobankMapping
 {

@@ -31,12 +31,31 @@ public interface IMappingSnapshot
 /// <summary>
 /// What the mapping table is told about a value besides its field: one source value can stand for
 /// different terms in different settings, so the lookup key is the field, the value and its whole
-/// context. None of the patient's fields needs one, so every value resolved today carries
-/// <see cref="Empty"/>.
+/// context. A biobank material code (<c>2</c>, <c>PS</c>) means one thing on a tissue sample and
+/// another on a serum one, so the four material-code fields carry <see cref="Material"/>; every other
+/// field carries <see cref="Empty"/>.
 /// </summary>
 public sealed record TermContext
 {
     public static TermContext Empty { get; } = new();
+
+    /// <summary>The biobank's sample type (<c>tissue</c>, <c>serum</c>, <c>genome</c>), which says which code list the code is from.</summary>
+    public string? SampleType { get; private init; }
+
+    /// <summary>
+    /// The biobank API's English meaning of the code (<c>Malignant tumour (RNAlater)</c>), or null for
+    /// a code it does not know. Today's rules key on the code alone; it is here for whoever maps a
+    /// value without the biobank's code book to hand.
+    /// </summary>
+    public string? Label { get; private init; }
+
+    /// <summary>The context of a biobank material code.</summary>
+    public static TermContext Material(string? sampleType, string? label) =>
+        new() { SampleType = sampleType, Label = label };
+
+    /// <summary>For a log line: nothing for an empty context, the keys that are set otherwise.</summary>
+    public override string ToString() =>
+        this == Empty ? string.Empty : $"sampleType: {SampleType ?? "-"}, label: {Label ?? "-"}";
 }
 
 /// <summary>The three things the mapping table can say about a value.</summary>
