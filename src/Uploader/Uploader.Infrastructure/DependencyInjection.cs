@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Uploader.Application.Abstractions;
+using Uploader.Application.Mapping;
 using Uploader.Infrastructure.Configuration;
 using Uploader.Infrastructure.Http;
 using Uploader.Infrastructure.Persistence;
@@ -33,6 +34,10 @@ public static class DependencyInjection
             options.PseudonymPrefix));
 
         services.AddSingleton(new CatalogueStudy(options.CatalogueStudyId, options.CatalogueStudyName));
+
+        // Today's hand-written rules stand in for the ontology-mapping student's approved table.
+        // Switching to it is a swap of this one registration; see docs/ontology-mapping.md.
+        services.AddSingleton<IMappingTable, RuleMappingTable>();
 
         services.AddScoped<ISyncStateRepository, SyncStateRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();

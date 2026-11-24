@@ -145,6 +145,31 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
             : Task.FromResult<ErrorOr<string>>(key);
 }
 
+/// <summary>
+/// A mapping table a test writes its answers into. Anything it was not told is not found, so a test
+/// states exactly what the table knows.
+/// </summary>
+internal sealed class FakeMappingTable : IMappingTable, IMappingSnapshot
+{
+    public Dictionary<(OntologyField Field, string Value), MappingAnswer> Answers { get; } = [];
+
+    /// <summary>Every lookup, in order, so a test can tell whether the table was asked at all.</summary>
+    public List<(OntologyField Field, string Value)> Lookups { get; } = [];
+
+    public Error? LoadError { get; init; }
+
+    public Task<ErrorOr<IMappingSnapshot>> LoadAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(LoadError is { } error
+            ? (ErrorOr<IMappingSnapshot>)error
+            : ErrorOrFactory.From<IMappingSnapshot>(this));
+
+    public MappingAnswer Lookup(OntologyField field, string value, TermContext context)
+    {
+        Lookups.Add((field, value));
+        return Answers.GetValueOrDefault((field, value), MappingAnswer.NotFound);
+    }
+}
+
 internal sealed class InMemorySyncStateRepository : ISyncStateRepository
 {
     public Dictionary<string, PatientSyncState> Patients { get; } = [];
