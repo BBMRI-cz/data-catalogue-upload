@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Features.Sync;
+using Uploader.Application.Mapping;
 using Uploader.Domain.Services;
 using Uploader.Domain.Sync;
 using Xunit;
@@ -23,6 +24,7 @@ public sealed class AbsentSourceTests
         new(
             source,
             catalogue,
+            new RuleMappingTable(),
             state,
             runs,
             new FingerprintSyncPlanner(),

@@ -13,8 +13,8 @@ tests/
 ├── BiobankApi.IntegrationTests      ApiTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
-├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueSequencingMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMappingTests, RunCatalogueSyncHandlerTests
-├── Uploader.IntegrationTests        SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueSequencingMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMappingTests, RunCatalogueSyncHandlerTests, TermResolutionTests, RuleMappingTableTests
+├── Uploader.IntegrationTests        Emx2CatalogueGatewayTests, SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
 └── TrainingSeeder.IntegrationTests  TrainingSeederTests (the seeder through both APIs' repositories on SQLite: edge cases, same rows per seed, non-empty DB left alone, migrations match the model), PredictiveNumberTests, SeedSettingsTests
 ```
 
@@ -77,13 +77,17 @@ it guards (a malformed request must be a 400, not an empty 200) is also asserted
 ## Faking the ports (uploader)
 
 The application depends on interfaces (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`,
-`ISyncRunRepository`), so tests use the hand-written fakes in `tests/Uploader.UnitTests/Fakes.cs` - no mocking
+`ISyncRunRepository`, `IMappingTable`), so tests use the hand-written fakes in `tests/Uploader.UnitTests/Fakes.cs` - no mocking
 framework:
 
 - `FakeSourceDataGateway(IReadOnlyList<PatientDto>)` - returns canned source data.
 - `FakeCatalogueGateway` - records `Upserts`/`Deletes`; add an entity type to `FailUpsertTypes` to make that
   upsert return an `Error.Failure` (this is how `RunCatalogueSyncHandlerTests` exercises the `Failed` path
-  and the `SyncStatus.Failed` + `LastError` recording).
+  and the `SyncStatus.Failed` + `LastError` recording). It answers the run's term-list read with `Terms`
+  (default `LiveTerms.Lists()`), records each read in `TermListReads`, and fails it with `TermListsError`.
+- `FakeMappingTable` - the mapping table a test writes `Answers` into (anything else is not found); records
+  `Lookups`, and fails to load with `LoadError`. Tests that do not care pass the real `RuleMappingTable`.
+- `RecordingLogger<T>` - keeps what was logged, for asserting what a run reports (`Warnings`) and how often.
 - `InMemorySyncStateRepository` - dictionaries of `*SyncState` keyed by id; implements the subtree load and
   the soft-delete/mark-missing behaviour.
 - `FakeSyncRunRepository` - records the id the run started under (`Started`) and captures the finished
@@ -92,6 +96,12 @@ framework:
 
 Inject these where the composition root would inject the real adapters; a class that implements the interface
 is all that's needed.
+
+**The term resolver is never faked.** `LiveTerms` (one per test project) builds a real `TermResolver` from small
+hand-written term lists holding every term a test expects to see published, over `RuleMappingSnapshot` (today's
+rules) unless the test passes its own mapping snapshot. Keep a list honest: a term a test asserts is *left out* must still be in the
+list if the leaving-out is meant to come from the mapper (that is why `C99.9` is there), or the test passes
+because the term is missing rather than because the mapper is right.
 
 ## Integration tests: EF Core repositories
 

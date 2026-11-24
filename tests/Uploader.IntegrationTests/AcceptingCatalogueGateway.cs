@@ -4,11 +4,21 @@ using Uploader.Application.Dtos;
 
 namespace Uploader.IntegrationTests;
 
-/// <summary>A catalogue that accepts everything, so the host tests never leave the process.</summary>
+/// <summary>
+/// A catalogue that accepts everything, so the host tests never leave the process. Its ontologies are
+/// empty: every value a run resolves is left out, which the host tests, asserting on runs rather than
+/// terms, do not mind.
+/// </summary>
 internal sealed class AcceptingCatalogueGateway : ICatalogueGateway
 {
     public Task<ErrorOr<string>> UpsertStudyAsync(StudyRecord study, CancellationToken cancellationToken) =>
         Accepted(study.Identifier);
+
+    public Task<ErrorOr<TermLists>> ReadTermListsAsync(
+        IReadOnlyCollection<OntologyField> fields,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<ErrorOr<TermLists>>(
+            new TermLists(fields.ToDictionary(field => field, _ => (IReadOnlySet<string>)new HashSet<string>())));
 
     public Task<ErrorOr<string>> UpsertPatientAsync(CataloguePatientPayload payload, CancellationToken cancellationToken) =>
         Accepted(payload.ExternalId);

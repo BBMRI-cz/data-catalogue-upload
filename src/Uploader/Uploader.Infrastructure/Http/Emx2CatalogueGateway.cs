@@ -36,6 +36,11 @@ internal sealed class Emx2CatalogueGateway : ICatalogueGateway
     public Task<ErrorOr<string>> UpsertStudyAsync(StudyRecord study, CancellationToken cancellationToken) =>
         SaveAsync(study.Identifier, cancellationToken, (Emx2Tables.Study, study));
 
+    public Task<ErrorOr<TermLists>> ReadTermListsAsync(
+        IReadOnlyCollection<OntologyField> fields,
+        CancellationToken cancellationToken) =>
+        _schema.TermListsAsync(fields, cancellationToken);
+
     public Task<ErrorOr<string>> UpsertPatientAsync(
         CataloguePatientPayload payload,
         CancellationToken cancellationToken) =>

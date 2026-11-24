@@ -64,7 +64,12 @@ public sealed class CatalogueSampleMapperTests
     public void TheDiagnosisReferenceEqualsTheClinicalKeyItPointsAt()
     {
         var clinicalKey = CataloguePatientMapper
-            .ToPayload(new PatientDto { PatientId = "271801", Samples = [Sample()] }, PatientPseudonym, "study")
+            .ToPayload(
+                new PatientDto { PatientId = "271801", Samples = [Sample()] },
+                PatientPseudonym,
+                "study",
+                LiveTerms.Resolver(),
+                [])
             .Clinical!.ClinicalIdentifier!;
         var reference = Payload(Sample()).Material!.BelongsToDiagnosis;
 

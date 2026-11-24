@@ -63,6 +63,14 @@ Because Domain and Application have no I/O, reproduce most bugs as **pure unit t
 - **Silent SKIPs** mean the fingerprint didn't change when you expected it to. The fingerprint is taken over the row
   the handler sends (`PayloadFingerprint` in the sync handler), so a value that never reaches that row - dropped
   or left `null` by its mapper - won't trigger an UPDATE.
+- **A term missing from a published row** is usually an unmapped value, not a lost one: the resolver leaves a
+  value out when it is neither a live term nor answered by the mapping table, and logs one
+  `No term for <Table.column> '<value>'` warning per distinct value per run. The warning says whether the
+  mapping table had no answer (add a rule to `RuleMappingSnapshot`) or answered a term the live list lacks (the
+  catalogue dropped or renamed it). See `docs/ontology-mapping.md`.
+- **A run that ends before any patient with a term-list `failure`** means a field in `OntologyFields` is not an
+  ontology column in the live schema (renamed, or turned into text) or the catalogue could not be read. It
+  stops on purpose: going on would erase that field's published terms.
 - **Unexpected DELETEs** mean an entity is absent from the current source fetch (matched by
   `predictive_number` / `bioptic_number` / `accession_numbers`). Verify the source payload and the match key
   before assuming the planner is wrong.

@@ -16,6 +16,11 @@ namespace Uploader.Application.Mapping;
 /// re-checks them at run time against the live ontology, so a schema that drops or renames a term
 /// costs one column rather than the row.
 /// </para>
+/// <para>
+/// The patient's terms are no longer translated here: they go through the run's
+/// <see cref="TermResolver"/>, with their rules in <see cref="RuleMappingSnapshot"/>. What is left is the
+/// sample's and the sequencing's.
+/// </para>
 /// </summary>
 public static class CatalogueVocabulary
 {
@@ -96,17 +101,6 @@ public static class CatalogueVocabulary
     };
 
     /// <summary>
-    /// <c>Personal.GenderAtBirth</c>. The biobank records a sex; the ontology is GSSO, which spells
-    /// it as an assignment at birth.
-    /// </summary>
-    public static string? GenderAtBirth(string? sex) => sex?.ToLowerInvariant() switch
-    {
-        "male" => "assigned male at birth",
-        "female" => "assigned female at birth",
-        _ => null,
-    };
-
-    /// <summary>
     /// <c>Biospecimens.Availability</c>, from the count of units still on the shelf. The export
     /// distinguishes only "some left" from "none left", so Reserved and Destroyed never apply.
     /// </summary>
@@ -117,20 +111,12 @@ public static class CatalogueVocabulary
         _ => "Available",
     };
 
-    private static readonly FrozenDictionary<string, string> Institutes =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["BBM"] = "Bank of Biological Material, Masaryk Memorial Cancer Institute",
-            ["MOU"] = "Masaryk Memorial Cancer Institute",
-            ["MMCI"] = "Masaryk Memorial Cancer Institute",
-        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>
-    /// <c>Personal.PrimaryAffiliatedInstitute</c> and <c>Biospecimens.ManagingBiobank</c>, which
-    /// share one institute list. An unrecognised biobank code is left out rather than guessed at.
+    /// <c>Biospecimens.ManagingBiobank</c>. The institute list is shared with
+    /// <c>Personal.PrimaryAffiliatedInstitute</c>, which is resolved through the mapping table, so
+    /// the list lives in <see cref="RuleMappingSnapshot"/>.
     /// </summary>
-    public static string? Institute(string? biobank) =>
-        biobank is not null && Institutes.TryGetValue(biobank, out var name) ? name : null;
+    public static string? Institute(string? biobank) => RuleMappingSnapshot.Institute(biobank);
 
     /// <summary>
     /// <c>Sequencing.SequencingMethod</c>. The source has no method field - the sample sheet's assay

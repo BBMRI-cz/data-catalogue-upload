@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using ErrorOr;
 using Microsoft.Extensions.Logging;
+using Uploader.Application.Abstractions;
 
 namespace Uploader.Infrastructure.Http;
 
@@ -89,6 +90,47 @@ internal sealed class Emx2Schema
         }
 
         return Result.Success;
+    }
+
+    /// <summary>
+    /// The live term list of each field, from the ontology its column references. The lists are the
+    /// ones <see cref="PrepareAsync"/> checks values against, so the run's resolver and this safety
+    /// net share one read. A field that is not an ontology column in the live schema is an error.
+    /// </summary>
+    public async Task<ErrorOr<TermLists>> TermListsAsync(
+        IEnumerable<OntologyField> fields,
+        CancellationToken cancellationToken)
+    {
+        var loaded = await EnsureLoadedAsync(cancellationToken);
+        if (loaded.IsError)
+        {
+            return loaded.Errors;
+        }
+
+        var lists = new Dictionary<OntologyField, IReadOnlySet<string>>();
+        foreach (var field in fields)
+        {
+            if (!_columns.TryGetValue(field.Table, out var columns) || !columns.TryGetValue(field.Column, out var column))
+            {
+                return Error.Failure("Catalogue.UnknownColumn", $"The catalogue has no column {field}.");
+            }
+
+            if (!column.Kind.StartsWith("ONTOLOGY", StringComparison.Ordinal) || column.RefTable is null)
+            {
+                return Error.Failure(
+                    "Catalogue.NotAnOntologyColumn", $"{field} is a {column.Kind} column, not an ontology.");
+            }
+
+            var terms = await TermsAsync(column.RefTable, cancellationToken);
+            if (terms.IsError)
+            {
+                return terms.Errors;
+            }
+
+            lists[field] = terms.Value;
+        }
+
+        return new TermLists(lists);
     }
 
     /// <summary>Returns the value to store, or null to drop the column.</summary>

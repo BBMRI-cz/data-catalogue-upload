@@ -1,11 +1,10 @@
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// The computed pieces of the biobank -> catalogue mapping. Everything else is carried verbatim, so this
-/// is the whole of the mapping's logic: the derived clinical identifier, the ICD-10 dot rule and the
-/// age computation, all three ported from the previous production uploader. The catalogue's
-/// controlled terms live next door in <see cref="CatalogueVocabulary"/>, which is where a biobank
-/// code becomes an ontology term.
+/// The computed pieces of the biobank -> catalogue mapping: the derived identifiers and the age
+/// computation, ported from the previous production uploader. A biobank code becomes an ontology term
+/// elsewhere - through the run's <see cref="TermResolver"/> for the patient's fields, and
+/// <see cref="CatalogueVocabulary"/> for the rest.
 /// </summary>
 public static class BiobankMapping
 {
@@ -68,21 +67,6 @@ public static class BiobankMapping
         return id.Contains(from, StringComparison.Ordinal)
             ? id.Replace(from, to, StringComparison.Ordinal)
             : $"{to}_{id}";
-    }
-
-    /// <summary>
-    /// The biobank exports ICD-10 dot-less (<c>C504</c>); the catalogue's code lists spell the
-    /// subcategory out (<c>C50.4</c>). Only a 4-character code has a subcategory to separate.
-    /// </summary>
-    public static string? Diagnosis(string? code)
-    {
-        var trimmed = code?.Trim();
-        if (string.IsNullOrEmpty(trimmed))
-        {
-            return null;
-        }
-
-        return trimmed.Length == 4 ? $"{trimmed[..3]}.{trimmed[3]}" : trimmed;
     }
 
     /// <summary>

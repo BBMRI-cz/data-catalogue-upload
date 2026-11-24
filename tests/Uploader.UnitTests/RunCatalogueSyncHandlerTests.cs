@@ -2,6 +2,7 @@ using ErrorOr;
 using Microsoft.Extensions.Logging.Abstractions;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Features.Sync;
+using Uploader.Application.Mapping;
 using Uploader.Application.Dtos;
 using Uploader.Domain.Common;
 using Uploader.Domain.Services;
@@ -21,6 +22,7 @@ public sealed class RunCatalogueSyncHandlerTests
         new(
             source,
             catalogue,
+            new RuleMappingTable(),
             state,
             runs,
             new FingerprintSyncPlanner(),

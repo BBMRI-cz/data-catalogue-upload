@@ -1,4 +1,5 @@
 using ErrorOr;
+using Microsoft.Extensions.Logging;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Features.Sync;
@@ -74,6 +75,26 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
     public List<CatalogueSequencingPayload> SequencingPayloads { get; } = [];
     public List<StudyRecord> Studies { get; } = [];
 
+    /// <summary>The live term lists this catalogue answers with.</summary>
+    public TermLists Terms { get; init; } = LiveTerms.Lists();
+
+    /// <summary>
+    /// Set to make reading the term lists fail, as an unreachable catalogue or a field that is not an
+    /// ontology column in the live schema would.
+    /// </summary>
+    public Error? TermListsError { get; init; }
+
+    /// <summary>Each term-list read: the fields asked for, and the upserts made before it.</summary>
+    public List<(IReadOnlyList<OntologyField> Fields, IReadOnlyList<string> UpsertsSoFar)> TermListReads { get; } = [];
+
+    public Task<ErrorOr<TermLists>> ReadTermListsAsync(
+        IReadOnlyCollection<OntologyField> fields,
+        CancellationToken cancellationToken)
+    {
+        TermListReads.Add(([.. fields], [.. Upserts]));
+        return Task.FromResult(TermListsError is { } error ? (ErrorOr<TermLists>)error : Terms);
+    }
+
     public Task<ErrorOr<string>> UpsertPatientAsync(CataloguePatientPayload payload, CancellationToken ct)
     {
         PatientPayloads.Add(payload);
@@ -123,6 +144,53 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
         FailUpsertTypes.Contains(type)
             ? Task.FromResult<ErrorOr<string>>(Error.Failure(description: $"{type} failed"))
             : Task.FromResult<ErrorOr<string>>(key);
+}
+
+/// <summary>
+/// A mapping table a test writes its answers into. Anything it was not told is not found, so a test
+/// states exactly what the table knows.
+/// </summary>
+internal sealed class FakeMappingTable : IMappingTable, IMappingSnapshot
+{
+    public Dictionary<(OntologyField Field, string Value), MappingAnswer> Answers { get; } = [];
+
+    /// <summary>Every lookup, in order, so a test can tell whether the table was asked at all.</summary>
+    public List<(OntologyField Field, string Value)> Lookups { get; } = [];
+
+    public Error? LoadError { get; init; }
+
+    public Task<ErrorOr<IMappingSnapshot>> LoadAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(LoadError is { } error
+            ? (ErrorOr<IMappingSnapshot>)error
+            : ErrorOrFactory.From<IMappingSnapshot>(this));
+
+    public MappingAnswer Lookup(OntologyField field, string value, TermContext context)
+    {
+        Lookups.Add((field, value));
+        return Answers.GetValueOrDefault((field, value), MappingAnswer.NotFound);
+    }
+}
+
+/// <summary>Keeps what was logged, so a test can assert on what a run reports and how often.</summary>
+internal sealed class RecordingLogger<T> : ILogger<T>
+{
+    public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+    public List<string> Warnings =>
+        [.. Entries.Where(entry => entry.Level == LogLevel.Warning).Select(entry => entry.Message)];
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(
+        LogLevel logLevel,
+        EventId eventId,
+        TState state,
+        Exception? exception,
+        Func<TState, Exception?, string> formatter) =>
+        Entries.Add((logLevel, formatter(state, exception)));
 }
 
 internal sealed class InMemorySyncStateRepository : ISyncStateRepository
