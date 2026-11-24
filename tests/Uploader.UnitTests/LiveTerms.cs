@@ -39,4 +39,8 @@ internal static class LiveTerms
 
         return new TermLists(lists);
     }
+
+    /// <summary>A real resolver over <see cref="Lists"/> and, unless told otherwise, today's rules.</summary>
+    public static TermResolver Resolver(IMappingSnapshot? mapping = null) =>
+        new(Lists(), mapping ?? new RuleMappingSnapshot());
 }

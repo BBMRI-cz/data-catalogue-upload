@@ -73,7 +73,8 @@ public sealed class UploaderMapperFieldParityTests
     [Fact]
     public void PersonalConsentAndClinicalMapEveryField()
     {
-        var payload = CataloguePatientMapper.ToPayload(FullyPopulatedPatient(), PatientPseudonym, StudyId);
+        var payload = CataloguePatientMapper.ToPayload(
+            FullyPopulatedPatient(), PatientPseudonym, StudyId, LiveTerms.Resolver(), []);
         Assert.Equal(PatientPseudonym, payload.ExternalId);
 
         var personal = payload.Personal!;

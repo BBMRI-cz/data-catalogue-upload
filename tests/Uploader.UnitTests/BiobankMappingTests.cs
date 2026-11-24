@@ -4,20 +4,11 @@ using Xunit;
 namespace Uploader.UnitTests;
 
 /// <summary>
-/// The three derived values in the biobank -> catalogue mapping. Everything else is carried verbatim,
-/// so this covers all of the mapping's logic.
+/// The derived values in the biobank -> catalogue mapping: identifiers and the age. The ICD-10 dot rule
+/// is a mapping-table rule now, covered in <see cref="RuleMappingTableTests"/>.
 /// </summary>
 public sealed class BiobankMappingTests
 {
-    [Theory]
-    [InlineData("C504", "C50.4")]      // four characters: the last one is the subcategory
-    [InlineData("C50", "C50")]         // three: nothing to separate
-    [InlineData(" C774 ", "C77.4")]    // trimmed first
-    [InlineData("", null)]
-    [InlineData(null, null)]
-    public void DiagnosisAppliesTheIcd10DotRule(string? code, string? expected) =>
-        Assert.Equal(expected, BiobankMapping.Diagnosis(code));
-
     [Theory]
     [InlineData("247", "clinical_247")]
     [InlineData("mmci_patient_abc", "mmci_clinical_abc")]

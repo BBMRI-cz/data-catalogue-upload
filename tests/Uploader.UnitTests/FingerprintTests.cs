@@ -53,8 +53,8 @@ public sealed class FingerprintTests
         var changed = unchanged with { BirthYear = 1990 };
 
         Assert.NotEqual(
-            Fingerprint.Of(CataloguePatientMapper.ToPayload(unchanged, "mmci_patient_P1", "study")),
-            Fingerprint.Of(CataloguePatientMapper.ToPayload(changed, "mmci_patient_P1", "study")));
+            Fingerprint.Of(CataloguePatientMapper.ToPayload(unchanged, "mmci_patient_P1", "study", LiveTerms.Resolver(), [])),
+            Fingerprint.Of(CataloguePatientMapper.ToPayload(changed, "mmci_patient_P1", "study", LiveTerms.Resolver(), [])));
     }
 
     [Fact]

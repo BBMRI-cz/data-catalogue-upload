@@ -47,6 +47,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 {
     private readonly ISourceDataGateway _sourceGateway;
     private readonly ICatalogueGateway _catalogueGateway;
+    private readonly IMappingTable _mappingTable;
     private readonly ISyncStateRepository _stateRepository;
     private readonly ISyncRunRepository _runRepository;
     private readonly ISyncPlanner _planner;
@@ -58,6 +59,7 @@ internal sealed class RunCatalogueSyncCommandHandler
     public RunCatalogueSyncCommandHandler(
         ISourceDataGateway sourceGateway,
         ICatalogueGateway catalogueGateway,
+        IMappingTable mappingTable,
         ISyncStateRepository stateRepository,
         ISyncRunRepository runRepository,
         ISyncPlanner planner,
@@ -68,6 +70,7 @@ internal sealed class RunCatalogueSyncCommandHandler
     {
         _sourceGateway = sourceGateway;
         _catalogueGateway = catalogueGateway;
+        _mappingTable = mappingTable;
         _stateRepository = stateRepository;
         _runRepository = runRepository;
         _planner = planner;
@@ -97,6 +100,13 @@ internal sealed class RunCatalogueSyncCommandHandler
             return study.Errors;
         }
 
+        var resolver = await LoadResolverAsync(result, cancellationToken);
+        if (resolver.IsError)
+        {
+            await _runRepository.FinishAsync(result, cancellationToken);
+            return resolver.Errors;
+        }
+
         var fetched = await _sourceGateway.FetchPatientsAsync(cancellationToken);
         if (fetched.IsError)
         {
@@ -110,6 +120,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         var seenPatientIds = new HashSet<PatientId>();
+        var reportedMisses = new HashSet<UnmappedValue>();
 
         foreach (var rawPatient in fetched.Value)
         {
@@ -145,10 +156,18 @@ internal sealed class RunCatalogueSyncCommandHandler
             // Resolved once per patient, before anything is planned: every payload built below
             // publishes these in place of the real ids, while the sync state keeps the real ones.
             var pseudonyms = await ResolvePseudonymsAsync(data, existing, cancellationToken);
-            var payloads = BuildPayloads(rawPatient, built.Value, pseudonyms);
+            var misses = new List<UnmappedValue>();
+            var payloads = BuildPayloads(rawPatient, built.Value, pseudonyms, resolver.Value, misses);
 
             var operations = _planner.Plan(
                 data, existing, aggregate => PayloadFingerprint(aggregate, payloads));
+
+            // Only a patient who may be published reports what could not be placed: one without
+            // consent never leaves the uploader, not even as an unmapped value.
+            if (data.IsUploadEligible)
+            {
+                ReportMisses(misses, reportedMisses, resolver.Value);
+            }
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
             // Still a skip in the summary, as it always was.
@@ -167,6 +186,76 @@ internal sealed class RunCatalogueSyncCommandHandler
         await DeleteMissingPatientsAsync(seenPatientIds, runId, result, cancellationToken);
         await _runRepository.FinishAsync(result, cancellationToken);
         return result;
+    }
+
+    /// <summary>
+    /// The run's resolver, from the live term list of every ontology field the uploader fills and the
+    /// mapping table as it stands now. Both are read once, here, before the first patient, so a lookup
+    /// never waits on either. When either cannot be had the run ends before syncing anything and says
+    /// why: resolving against a missing list would leave every value of that field out, and a save
+    /// replaces the whole row, so the run would erase the terms already published.
+    /// </summary>
+    private async Task<ErrorOr<TermResolver>> LoadResolverAsync(
+        RunCatalogueSyncCommandResult result,
+        CancellationToken cancellationToken)
+    {
+        var terms = await _catalogueGateway.ReadTermListsAsync(OntologyFields.All, cancellationToken);
+        if (terms.IsError)
+        {
+            return Stop(result, "Cannot read the catalogue's term lists", terms.Errors);
+        }
+
+        var mapping = await _mappingTable.LoadAsync(cancellationToken);
+        if (mapping.IsError)
+        {
+            return Stop(result, "Cannot load the mapping table", mapping.Errors);
+        }
+
+        return new TermResolver(terms.Value, mapping.Value);
+    }
+
+    /// <summary>Records why a run ends before its first patient, and hands back what stopped it.</summary>
+    private List<Error> Stop(RunCatalogueSyncCommandResult result, string reason, List<Error> errors)
+    {
+        result.Failed++;
+        result.Failure = $"{reason}: {errors[0].Description}";
+        _logger.LogError("{Reason}: {Error}", reason, errors[0].Description);
+        return errors;
+    }
+
+    /// <summary>
+    /// Logs each value the resolver could not place, the first time the run meets it rather than once
+    /// per row, and says whether the mapping table had no answer or answered a term the live list
+    /// does not have.
+    /// </summary>
+    private void ReportMisses(
+        IEnumerable<UnmappedValue> misses,
+        ISet<UnmappedValue> reported,
+        TermResolver resolver)
+    {
+        foreach (var miss in misses)
+        {
+            if (!reported.Add(miss))
+            {
+                continue;
+            }
+
+            if (resolver.MappingAnswerFor(miss) is { Outcome: MappingOutcome.Term, Term: { } term })
+            {
+                _logger.LogWarning(
+                    "No term for {Field} '{Value}': the mapping table answers '{Term}', which is not a live term",
+                    miss.Field,
+                    miss.Value,
+                    term);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No term for {Field} '{Value}': it is not a live term and the mapping table has no answer for it",
+                    miss.Field,
+                    miss.Value);
+            }
+        }
     }
 
     /// <summary>
@@ -197,12 +286,15 @@ internal sealed class RunCatalogueSyncCommandHandler
     /// <summary>
     /// The patient's, samples' and sequencing's catalogue rows, built once from the source records now
     /// that the pseudonyms are known. The planner fingerprints these objects and the upsert sends the
-    /// same ones.
+    /// same ones, so the terms resolved here are the terms both hashed and sent.
     /// </summary>
+    /// <param name="misses">Where the values the resolver could not place are recorded.</param>
     private PatientPayloads BuildPayloads(
         PatientDto rawPatient,
         AssembledPatient assembled,
-        PatientPseudonyms pseudonyms)
+        PatientPseudonyms pseudonyms,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
         // Keyed by the aggregate object rather than its id, so a sample the source lists twice keeps
         // a payload per listing, exactly as it gets an operation per listing.
@@ -223,7 +315,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         return new PatientPayloads(
-            CataloguePatientMapper.ToPayload(rawPatient, pseudonyms.Patient, _study.Identifier),
+            CataloguePatientMapper.ToPayload(rawPatient, pseudonyms.Patient, _study.Identifier, terms, misses),
             samplePayloads,
             sequencingPayloads);
     }

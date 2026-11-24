@@ -33,7 +33,7 @@ public sealed class BiobankFetchTests
 
         var dto = Assert.Single(dtos, p => p.PatientId == "P1");
         var patient = CataloguePatientMapper.ToPatient(dto).Value;
-        var payload = CataloguePatientMapper.ToPayload(dto, PatientPseudonym, "study_1");
+        var payload = CataloguePatientMapper.ToPayload(dto, PatientPseudonym, "study_1", LiveTerms.Resolver(), []);
 
         Assert.Equal(new PatientId("P1"), patient.Id);
         Assert.True(patient.HasConsent);

@@ -1,4 +1,5 @@
 using ErrorOr;
+using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain.Common;
@@ -42,8 +43,10 @@ public sealed class CataloguePatientMapperTests
         ],
     };
 
-    private static CataloguePatientPayload Payload(PatientDto dto) =>
-        CataloguePatientMapper.ToPayload(dto, PatientPseudonym, StudyId);
+    private static CataloguePatientPayload Payload(PatientDto dto) => Payload(dto, []);
+
+    private static CataloguePatientPayload Payload(PatientDto dto, List<UnmappedValue> misses) =>
+        CataloguePatientMapper.ToPayload(dto, PatientPseudonym, StudyId, LiveTerms.Resolver(), misses);
 
     [Fact]
     public void PersonalCarriesThePatientPseudonymAsItsKey()
@@ -143,6 +146,100 @@ public sealed class CataloguePatientMapperTests
 
         // Duplicates collapse and the order is fixed, so the fingerprint doesn't move with the payload.
         Assert.Equal(["C50.4", "C77.7"], payload.Clinical!.Diagnosis);
+    }
+
+    /// <summary>
+    /// Every ontology value reaches the resolver as the biobank served it. One with no term is left
+    /// out of a row that still goes out, and recorded as the biobank spelled it - which is what the
+    /// mapping table would have to be keyed on to fill it.
+    /// </summary>
+    [Fact]
+    public void AValueWithNoTermIsLeftOutOfTheRowAndRecordedAsServed()
+    {
+        var misses = new List<UnmappedValue>();
+
+        var payload = Payload(
+            Patient() with
+            {
+                Sex = "unknown",
+                Biobank = "XYZ",
+                Samples =
+                [
+                    new SampleDto { SampleId = "S1", Type = "tissue", Diagnosis = "C504" },
+                    new SampleDto { SampleId = "S2", Type = "tissue", Diagnosis = "C5091" },
+                ],
+            },
+            misses);
+
+        Assert.Null(payload.Personal!.GenderAtBirth);
+        Assert.Null(payload.Personal.PrimaryAffiliatedInstitute);
+        Assert.Equal(["C50.4"], payload.Clinical!.Diagnosis);
+        Assert.Equal(1948, payload.Personal.YearOfBirth);
+        Assert.Equal(
+            [
+                new UnmappedValue(OntologyFields.GenderAtBirth, "unknown", TermContext.Empty),
+                new UnmappedValue(OntologyFields.PrimaryAffiliatedInstitute, "XYZ", TermContext.Empty),
+                new UnmappedValue(OntologyFields.Diagnosis, "C5091", TermContext.Empty),
+            ],
+            misses);
+    }
+
+    [Fact]
+    public void ResolvedPatientValuesAreNoMiss()
+    {
+        var misses = new List<UnmappedValue>();
+
+        var payload = Payload(Patient() with { Biobank = "MOU" }, misses);
+
+        Assert.Equal("Masaryk Memorial Cancer Institute", payload.Personal!.PrimaryAffiliatedInstitute);
+        Assert.Empty(misses);
+    }
+
+    [Fact]
+    public void AnAbsentValueIsNoMiss()
+    {
+        var misses = new List<UnmappedValue>();
+
+        var payload = Payload(new PatientDto { PatientId = "P1", Samples = [new SampleDto { SampleId = "S1" }] }, misses);
+
+        Assert.Null(payload.Personal!.GenderAtBirth);
+        Assert.Null(payload.Personal.PrimaryAffiliatedInstitute);
+        Assert.Empty(misses);
+    }
+
+    /// <summary>
+    /// Resolved element by element, then de-duplicated and ordered: a code already spelled the
+    /// ontology's way and one the dot rule spells for it are the same diagnosis, and the order must
+    /// not follow the source's, or the fingerprint would.
+    /// </summary>
+    [Fact]
+    public void ADiagnosisSpelledEitherWayIsOneEntry()
+    {
+        var payload = Payload(new PatientDto
+        {
+            PatientId = "P1",
+            Samples =
+            [
+                new SampleDto { SampleId = "S1", Type = "tissue", Diagnosis = "C51" },
+                new SampleDto { SampleId = "S2", Type = "tissue", Diagnosis = "C50.4" },
+                new SampleDto { SampleId = "S3", Type = "serum", Diagnosis = "C504" },
+            ],
+        });
+
+        Assert.Equal(["C50.4", "C51"], payload.Clinical!.Diagnosis);
+    }
+
+    /// <summary>
+    /// A patient with no diagnosis to publish still sends an empty list, as before the resolver: the
+    /// gateway leaves an empty ontology array out of the row, so only the fingerprint could tell the
+    /// two apart, and changing it would re-send every such patient for nothing.
+    /// </summary>
+    [Fact]
+    public void APatientWithNoDiagnosisKeepsAnEmptyList()
+    {
+        var payload = Payload(new PatientDto { PatientId = "P1", Samples = [new SampleDto { SampleId = "S1" }] });
+
+        Assert.Equal([], payload.Clinical!.Diagnosis);
     }
 
     [Fact]

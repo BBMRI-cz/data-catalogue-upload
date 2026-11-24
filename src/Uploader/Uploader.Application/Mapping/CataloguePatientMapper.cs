@@ -1,4 +1,5 @@
 using ErrorOr;
+using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Domain;
 
@@ -10,10 +11,11 @@ namespace Uploader.Application.Mapping;
 /// planner keeps them under. Placing a value and swapping in the pseudonym happen in one step: the
 /// aggregate holds the real id the sync state is keyed on, and the payload holds only the pseudonym.
 /// <para>
-/// The biobank's sex and institute code become ontology terms via <see cref="CatalogueVocabulary"/>;
-/// the clinical and consent identifiers, the ICD-10 dot rule and the age come from
-/// <see cref="BiobankMapping"/>. Identifiers are derived from the pseudonym rather than copied, so a
-/// reference cannot drift from the key it points at.
+/// The sex, the institute code and the diagnosis codes go to the run's <see cref="TermResolver"/>
+/// exactly as the biobank served them (<c>female</c>, <c>MOU</c>, <c>C504</c>), and a value it cannot
+/// place is left out of a row that still goes out. The clinical and consent identifiers and the age
+/// come from <see cref="BiobankMapping"/>. Identifiers are derived from the pseudonym rather than
+/// copied, so a reference cannot drift from the key it points at.
 /// </para>
 /// <para>
 /// Deliberately dropped, because no catalogue column takes them: <c>birth_month</c> (it only sharpens
@@ -28,19 +30,23 @@ public static class CataloguePatientMapper
     public static ErrorOr<PatientAggregate> ToPatient(PatientDto dto) =>
         PatientAggregate.Create(dto.PatientId, HasConsent(dto));
 
+    /// <param name="misses">Where the values the resolver could not place are recorded.</param>
     public static CataloguePatientPayload ToPayload(
         PatientDto dto,
         string patientPseudonym,
-        string studyIdentifier) =>
+        string studyIdentifier,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses) =>
         new()
         {
             ExternalId = patientPseudonym,
             Personal = new PersonalRecord
             {
                 PersonalIdentifier = patientPseudonym,
-                GenderAtBirth = CatalogueVocabulary.GenderAtBirth(dto.Sex),
+                GenderAtBirth = terms.Resolve(OntologyFields.GenderAtBirth, dto.Sex, misses),
                 YearOfBirth = dto.BirthYear,
-                PrimaryAffiliatedInstitute = CatalogueVocabulary.Institute(dto.Biobank),
+                PrimaryAffiliatedInstitute = terms.Resolve(
+                    OntologyFields.PrimaryAffiliatedInstitute, dto.Biobank, misses),
 
                 // Not source data: the one study this deployment publishes under.
                 ParticipatesInStudy = [studyIdentifier],
@@ -53,7 +59,7 @@ public static class CataloguePatientMapper
                 BelongsToPerson = patientPseudonym,
 
                 // ICD-10, which the catalogue's Diagnosis ontology carries alongside Orphanet.
-                Diagnosis = Diagnoses(dto),
+                Diagnosis = terms.ResolveAll(OntologyFields.Diagnosis, DiagnosisCodes(dto), misses),
                 AgeAtDiagnosis = BiobankMapping.AgeInYears(dto.BirthYear, dto.BirthMonth, EarliestEvent(dto)),
             },
         };
@@ -80,22 +86,16 @@ public static class CataloguePatientMapper
             : null;
 
     /// <summary>
-    /// Every distinct ICD-10 code the patient's samples and diagnostic specimens carry, with the dot
-    /// put in (<c>C50.9</c>), which is how the Diagnosis ontology spells them. A genome sample's
-    /// diagnosis describes the blood draw rather than a diagnosed condition, so it is left out. The
-    /// order is fixed so the row's fingerprint does not change with the source order.
+    /// The ICD-10 codes the patient's samples and diagnostic specimens carry, as the biobank exports
+    /// them - without the dot, which the mapping table puts in. A genome sample's diagnosis describes
+    /// the blood draw rather than a diagnosed condition, so it is left out. The resolver de-duplicates
+    /// and orders what it makes of them.
     /// </summary>
-    private static IReadOnlyList<string> Diagnoses(PatientDto dto)
-    {
-        var codes = (dto.Samples ?? [])
+    private static IEnumerable<string?> DiagnosisCodes(PatientDto dto) =>
+        (dto.Samples ?? [])
             .Where(sample => !BiobankMapping.IsGenome(sample.Type))
             .Select(sample => sample.Diagnosis)
-            .Concat((dto.DiagnosticSpecimens ?? []).Select(specimen => specimen.Diagnosis))
-            .Select(BiobankMapping.Diagnosis)
-            .OfType<string>();
-
-        return [.. codes.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
-    }
+            .Concat((dto.DiagnosticSpecimens ?? []).Select(specimen => specimen.Diagnosis));
 
     /// <summary>
     /// The earliest sample collection moment, which is as close as the export gets to a diagnosis
