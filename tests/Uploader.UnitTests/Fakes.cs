@@ -74,6 +74,26 @@ internal sealed class FakeCatalogueGateway : ICatalogueGateway
     public List<CatalogueSequencingPayload> SequencingPayloads { get; } = [];
     public List<StudyRecord> Studies { get; } = [];
 
+    /// <summary>The live term lists this catalogue answers with.</summary>
+    public TermLists Terms { get; init; } = LiveTerms.Lists();
+
+    /// <summary>
+    /// Set to make reading the term lists fail, as an unreachable catalogue or a field that is not an
+    /// ontology column in the live schema would.
+    /// </summary>
+    public Error? TermListsError { get; init; }
+
+    /// <summary>Each term-list read: the fields asked for, and the upserts made before it.</summary>
+    public List<(IReadOnlyList<OntologyField> Fields, IReadOnlyList<string> UpsertsSoFar)> TermListReads { get; } = [];
+
+    public Task<ErrorOr<TermLists>> ReadTermListsAsync(
+        IReadOnlyCollection<OntologyField> fields,
+        CancellationToken cancellationToken)
+    {
+        TermListReads.Add(([.. fields], [.. Upserts]));
+        return Task.FromResult(TermListsError is { } error ? (ErrorOr<TermLists>)error : Terms);
+    }
+
     public Task<ErrorOr<string>> UpsertPatientAsync(CataloguePatientPayload payload, CancellationToken ct)
     {
         PatientPayloads.Add(payload);
