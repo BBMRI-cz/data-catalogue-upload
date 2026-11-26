@@ -218,6 +218,128 @@ public sealed class RuleMappingTableTests
     public void StorageNobodyHasDecidedOnIsNotFound(string sampleType, string code) =>
         Assert.Equal(MappingAnswer.NotFound, Material(OntologyFields.StorageConditions, sampleType, code));
 
+    /// <summary>The ontology suffixes every vendor; a term must not hinge on the source's casing.</summary>
+    [Theory]
+    [InlineData("Illumina", "Illumina platform")]
+    [InlineData(" illumina ", "Illumina platform")]
+    [InlineData("Ion Torrent", "Ion Torrent platform")]
+    [InlineData("PacBio", "PacBio platform")]
+    public void APlatformBecomesItsOntologyPlatform(string platform, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.SequencingPlatform, platform));
+
+    [Fact]
+    public void APlatformNoRuleKnowsIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.SequencingPlatform, "Oxford Nanopore"));
+
+    /// <summary>
+    /// The model comes from the instrument's serial number. The source's own model is the folder the
+    /// run was filed under (<c>NextSeq</c>), and the ontology has no bare NextSeq: it tells the 500
+    /// from the 550, and so does the serial prefix.
+    /// </summary>
+    [Theory]
+    [InlineData("NB552710", "Illumina NextSeq 550")]
+    [InlineData("nb552710", "Illumina NextSeq 550")]   // the source upper-cases it, but a term must not hinge on that
+    [InlineData("NS500123", "NextSeq 500")]
+    [InlineData("NB501234", "NextSeq 500")]
+    [InlineData(" M02340 ", "MiSeq")]
+    public void AnInstrumentSerialBecomesItsModel(string serial, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.SequencingInstrumentModel, serial));
+
+    /// <summary>A NovaSeq: no rule names a model for its serial, so it is reported rather than guessed.</summary>
+    [Fact]
+    public void ASerialNoRuleKnowsIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.SequencingInstrumentModel, "A00123"));
+
+    /// <summary>
+    /// A file role names what the file is for; the ontology names what it is encoded as, so several
+    /// roles collapse onto one format.
+    /// </summary>
+    [Theory]
+    [InlineData("fastq", "FASTQ")]
+    [InlineData("bam", "BAM")]
+    [InlineData("bam_index", "BAI")]
+    [InlineData("vcf", "VCF")]
+    [InlineData("vcf_filtered", "VCF")]
+    [InlineData("variant_report", "PDF")]
+    [InlineData("coverage_report", "PDF")]
+    [InlineData("summary_report", "PDF")]
+    [InlineData("VCF_Filtered", "VCF")]   // the source writes them lower-case, but a term must not hinge on that
+    public void AFileRoleBecomesTheFormatItIsStoredIn(string role, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.DataFormatsStored, role));
+
+    /// <summary>
+    /// <c>other</c> is the sequencing API's escape hatch for an artifact it does not recognise, so it
+    /// says nothing about how the file is encoded: no format, on purpose.
+    /// </summary>
+    [Fact]
+    public void TheOtherRoleHasNoFormatOnPurpose() =>
+        Assert.Equal(MappingAnswer.NoTerm, Lookup(OntologyFields.DataFormatsStored, "other"));
+
+    [Fact]
+    public void AFileRoleNoRuleKnowsIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.DataFormatsStored, "cram"));
+
+    /// <summary>
+    /// The ontology carries the bare builds, but the pipelines write aliases (<c>hg19</c>,
+    /// <c>hg38</c>) that are not terms.
+    /// </summary>
+    [Theory]
+    [InlineData("hg19", "GRCh37")]
+    [InlineData("grch37", "GRCh37")]
+    [InlineData(" HG38 ", "GRCh38")]
+    [InlineData("GRCh38", "GRCh38")]
+    public void AReferenceGenomeAliasBecomesItsBuild(string alias, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(OntologyFields.ReferenceGenomeUsed, alias));
+
+    [Fact]
+    public void AReferenceGenomeNoRuleKnowsIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.ReferenceGenomeUsed, "T2T-CHM13"));
+
+    /// <summary>
+    /// The libraries table stars a gene whose coding regions are all covered, and the sequencing API
+    /// keeps the star in the symbol. Which list the gene goes to is the mapper's business; the star
+    /// itself is not part of the HGNC symbol, so the table takes it off.
+    /// </summary>
+    [Theory]
+    [InlineData("SamplePreparation", "fullySequencedGenes", "BRCA1*", "BRCA1")]
+    [InlineData("SamplePreparation", "fullySequencedGenes", " ALK* ", "ALK")]
+    [InlineData("SamplePreparation", "partiallySequencedGenes", "TP53*", "TP53")]
+    public void AStarredGeneBecomesItsSymbol(string table, string column, string gene, string term) =>
+        Assert.Equal(MappingAnswer.Mapped(term), Lookup(new OntologyField(table, column), gene));
+
+    /// <summary>
+    /// A symbol with no star has nothing for the rule to take off: if it is a term the resolver already
+    /// used it as one, and if it is not, saying otherwise would only hide it.
+    /// </summary>
+    [Theory]
+    [InlineData("SamplePreparation", "fullySequencedGenes")]
+    [InlineData("SamplePreparation", "partiallySequencedGenes")]
+    public void AGeneTheStarRuleLeavesAloneIsNotFound(string table, string column) =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(new OntologyField(table, column), "NOTAGENE1"));
+
+    [Fact]
+    public void AStrayStarIsNotAGene() =>
+        Assert.Equal(MappingAnswer.NoTerm, Lookup(OntologyFields.FullySequencedGenes, "*"));
+
+    /// <summary>
+    /// Kit names have no rule: there is no code list to translate them from, so a kit is used only
+    /// when it is already a live term, and any other is reported.
+    /// </summary>
+    [Theory]
+    [InlineData("SamplePreparation", "libraryPreparationKit", "KAPA HyperPlus Kit")]
+    [InlineData("SamplePreparation", "libraryPreparationKit", "TruSight Oncology 500 Assay")]
+    [InlineData("SamplePreparation", "targetEnrichmentKit", "KAPA HyperCap")]
+    public void AKitIsNotFound(string table, string column, string kit) =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(new OntologyField(table, column), kit));
+
+    /// <summary>
+    /// The sequencing method is a constant our code computes rather than a source value, so the table
+    /// has nothing to say about it.
+    /// </summary>
+    [Fact]
+    public void TheSequencingMethodIsNotFound() =>
+        Assert.Equal(MappingAnswer.NotFound, Lookup(OntologyFields.SequencingMethod, "Illumina Sequencing"));
+
     /// <summary>Loading does nothing: every run is handed the rules' one snapshot.</summary>
     [Fact]
     public async Task LoadingHandsBackTheRules()
