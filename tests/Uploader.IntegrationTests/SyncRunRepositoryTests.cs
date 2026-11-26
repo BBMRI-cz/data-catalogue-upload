@@ -78,6 +78,7 @@ public sealed class SyncRunRepositoryTests
                 Skipped = 5,
                 Failed = 6,
                 SourceUnavailable = 7,
+                Unmapped = 8,
                 Failure = "Cannot list patients: biobank is unavailable",
             },
             default);
@@ -96,7 +97,8 @@ public sealed class SyncRunRepositoryTests
                 Deleted: 4,
                 Skipped: 5,
                 Failed: 6,
-                SourceUnavailable: 7),
+                SourceUnavailable: 7,
+                Unmapped: 8),
             latest);
     }
 }

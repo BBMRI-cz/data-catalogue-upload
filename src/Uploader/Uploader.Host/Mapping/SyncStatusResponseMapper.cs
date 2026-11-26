@@ -21,5 +21,6 @@ internal static class SyncStatusResponseMapper
         run.Deleted,
         run.Skipped,
         run.Failed,
-        run.SourceUnavailable);
+        run.SourceUnavailable,
+        run.Unmapped);
 }

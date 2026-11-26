@@ -27,6 +27,7 @@ public sealed class AbsentSourceTests
             new RuleMappingTable(),
             state,
             runs,
+            new FakeUnmappedValueRepository(),
             new FingerprintSyncPlanner(),
             new FakePseudonymMap(),
             new CatalogueStudy("study_1", "Test Study"),

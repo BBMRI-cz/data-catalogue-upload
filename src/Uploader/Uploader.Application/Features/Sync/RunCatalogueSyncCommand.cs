@@ -36,6 +36,12 @@ public sealed class RunCatalogueSyncCommandResult
     public int SourceUnavailable { get; set; }
 
     /// <summary>
+    /// Distinct values the term resolver could not fill a field from this run - by field, value and
+    /// context - among upload-eligible patients. Each is on the unmapped list, with its row count.
+    /// </summary>
+    public int Unmapped { get; set; }
+
+    /// <summary>
     /// Why the run ended before it could sync anything, or null when it ran to the end. Per-record
     /// problems are counted above, not reported here.
     /// </summary>
@@ -50,6 +56,7 @@ internal sealed class RunCatalogueSyncCommandHandler
     private readonly IMappingTable _mappingTable;
     private readonly ISyncStateRepository _stateRepository;
     private readonly ISyncRunRepository _runRepository;
+    private readonly IUnmappedValueRepository _unmappedValueRepository;
     private readonly ISyncPlanner _planner;
     private readonly IPseudonymMap _pseudonyms;
     private readonly CatalogueStudy _study;
@@ -62,6 +69,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         IMappingTable mappingTable,
         ISyncStateRepository stateRepository,
         ISyncRunRepository runRepository,
+        IUnmappedValueRepository unmappedValueRepository,
         ISyncPlanner planner,
         IPseudonymMap pseudonyms,
         CatalogueStudy study,
@@ -73,6 +81,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         _mappingTable = mappingTable;
         _stateRepository = stateRepository;
         _runRepository = runRepository;
+        _unmappedValueRepository = unmappedValueRepository;
         _planner = planner;
         _pseudonyms = pseudonyms;
         _study = study;
@@ -120,7 +129,11 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         var seenPatientIds = new HashSet<PatientId>();
-        var reportedMisses = new HashSet<UnmappedValue>();
+
+        // Each distinct miss of the run, with the number of catalogue rows that held it, and whether
+        // the run heard from every source - which decides whether those misses are the whole list.
+        var runMisses = new Dictionary<UnmappedValue, int>();
+        var everySourceAnswered = true;
 
         foreach (var rawPatient in fetched.Value)
         {
@@ -150,6 +163,7 @@ internal sealed class RunCatalogueSyncCommandHandler
 
             var data = built.Value.Data;
             seenPatientIds.Add(data.Patient.Id);
+            everySourceAnswered &= data.SequencingComplete && data.WsiComplete && data.ImagingComplete;
 
             var existing = await _stateRepository.GetAllForPatientAsync(data.Patient.Id, cancellationToken);
 
@@ -166,7 +180,7 @@ internal sealed class RunCatalogueSyncCommandHandler
             // consent never leaves the uploader, not even as an unmapped value.
             if (data.IsUploadEligible)
             {
-                ReportMisses(misses, reportedMisses, resolver.Value);
+                CountMisses(misses, runMisses, resolver.Value);
             }
 
             // An ineligible patient who was never published: nothing to send and nothing to record.
@@ -184,6 +198,8 @@ internal sealed class RunCatalogueSyncCommandHandler
         }
 
         await DeleteMissingPatientsAsync(seenPatientIds, runId, result, cancellationToken);
+        await RecordUnmappedAsync(runId, runMisses, everySourceAnswered, cancellationToken);
+        result.Unmapped = runMisses.Count;
         await _runRepository.FinishAsync(result, cancellationToken);
         return result;
     }
@@ -224,19 +240,38 @@ internal sealed class RunCatalogueSyncCommandHandler
     }
 
     /// <summary>
-    /// Logs each value the resolver could not place, the first time the run meets it rather than once
-    /// per row, and says whether the mapping table had no answer or answered a term the live list
-    /// does not have. A value looked up in a context - a material code, with its sample type - is
-    /// logged with it, since the code alone does not say which material it is.
+    /// Writes the run's misses to the unmapped list. A run that heard from every source met every value
+    /// there is, so its misses become the list and a value that left the sources drops off it. One that
+    /// a source did not answer, for any patient, only adds and updates: the values that source would
+    /// have served are hidden, not gone, and the student's job may be reading them.
     /// </summary>
-    private void ReportMisses(
+    private Task RecordUnmappedAsync(
+        string runId,
+        IReadOnlyDictionary<UnmappedValue, int> runMisses,
+        bool everySourceAnswered,
+        CancellationToken cancellationToken) =>
+        everySourceAnswered
+            ? _unmappedValueRepository.ReplaceAsync(runId, runMisses, cancellationToken)
+            : _unmappedValueRepository.MergeAsync(runId, runMisses, cancellationToken);
+
+    /// <summary>
+    /// Counts one patient's misses into the run's, one per catalogue row that held the value - the
+    /// resolver records a miss once per row, an array field included. Each value is logged the first
+    /// time the run meets it rather than once per row, saying whether the mapping table had no answer
+    /// or answered a term the live list does not have. A value looked up in a context - a material
+    /// code, with its sample type - is logged with it, since the code alone does not say which
+    /// material it is.
+    /// </summary>
+    private void CountMisses(
         IEnumerable<UnmappedValue> misses,
-        ISet<UnmappedValue> reported,
+        Dictionary<UnmappedValue, int> runMisses,
         TermResolver resolver)
     {
         foreach (var miss in misses)
         {
-            if (!reported.Add(miss))
+            var rows = runMisses.GetValueOrDefault(miss);
+            runMisses[miss] = rows + 1;
+            if (rows > 0)
             {
                 continue;
             }

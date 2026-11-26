@@ -36,7 +36,8 @@ public sealed record SyncStatusResponse(bool Running, SyncRunResponse? LastRun);
 
 /// <summary>
 /// One sync run. <c>finished_at</c> is null while it runs, and stays null if it never finished;
-/// <c>failure</c> says why a run ended before syncing anything.
+/// <c>failure</c> says why a run ended before syncing anything; <c>unmapped</c> is how many distinct
+/// values it left unmapped, which <c>GET /admin/ontology/unmapped</c> lists.
 /// </summary>
 public sealed record SyncRunResponse(
     string RunId,
@@ -49,4 +50,5 @@ public sealed record SyncRunResponse(
     int Deleted,
     int Skipped,
     int Failed,
-    int SourceUnavailable);
+    int SourceUnavailable,
+    int Unmapped);

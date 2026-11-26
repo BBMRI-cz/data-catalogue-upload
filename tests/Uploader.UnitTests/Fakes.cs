@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Features.Sync;
+using Uploader.Application.Mapping;
 using Uploader.Domain;
 using Uploader.Domain.Common;
 using Uploader.Domain.Sync;
@@ -303,6 +304,37 @@ internal sealed class FakeSyncRunRepository : ISyncRunRepository
 
     public Task<SyncRun?> GetLatestAsync(CancellationToken cancellationToken) =>
         throw new NotSupportedException("The handler never reads runs back.");
+}
+
+/// <summary>
+/// Keeps each write a run makes to the unmapped list - whether it replaced the list or merged into it,
+/// and the counts it wrote - so a test asserts on what crossed the port. What replacing and merging do
+/// to the stored list is the real repository's job, tested on SQLite.
+/// </summary>
+internal sealed class FakeUnmappedValueRepository : IUnmappedValueRepository
+{
+    public List<(bool Replaced, IReadOnlyDictionary<UnmappedValue, int> Misses)> Writes { get; } = [];
+
+    public Task ReplaceAsync(
+        string runId,
+        IReadOnlyDictionary<UnmappedValue, int> misses,
+        CancellationToken cancellationToken)
+    {
+        Writes.Add((true, misses));
+        return Task.CompletedTask;
+    }
+
+    public Task MergeAsync(
+        string runId,
+        IReadOnlyDictionary<UnmappedValue, int> misses,
+        CancellationToken cancellationToken)
+    {
+        Writes.Add((false, misses));
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<UnmappedListEntry>> GetAllAsync(CancellationToken cancellationToken) =>
+        throw new NotSupportedException("The handler never reads the list back.");
 }
 
 /// <summary>

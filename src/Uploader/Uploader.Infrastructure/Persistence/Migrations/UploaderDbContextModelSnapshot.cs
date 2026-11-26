@@ -260,6 +260,9 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("UnmappedCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("UploadedCount")
                         .HasColumnType("integer");
 

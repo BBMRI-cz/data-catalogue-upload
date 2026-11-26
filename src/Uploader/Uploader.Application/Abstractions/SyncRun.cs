@@ -15,4 +15,5 @@ public sealed record SyncRun(
     int Deleted,
     int Skipped,
     int Failed,
-    int SourceUnavailable);
+    int SourceUnavailable,
+    int Unmapped);

@@ -7,7 +7,7 @@ using Xunit;
 namespace Uploader.IntegrationTests;
 
 /// <summary>
-/// The status mapper copies a run by hand, seven of its fields consecutive <c>int</c>s, so a dropped
+/// The status mapper copies a run by hand, eight of its fields consecutive <c>int</c>s, so a dropped
 /// or transposed one is not a compile error - it is <c>GET /admin/sync</c> quietly misreporting a run.
 /// </summary>
 public sealed class SyncStatusResponseMapperTests
@@ -31,7 +31,8 @@ public sealed class SyncStatusResponseMapperTests
                 Deleted: 4,
                 Skipped: 5,
                 Failed: 6,
-                SourceUnavailable: 7)));
+                SourceUnavailable: 7,
+                Unmapped: 8)));
 
         Assert.Equal(
             new SyncStatusResponse(
@@ -47,7 +48,8 @@ public sealed class SyncStatusResponseMapperTests
                     Deleted: 4,
                     Skipped: 5,
                     Failed: 6,
-                    SourceUnavailable: 7)),
+                    SourceUnavailable: 7,
+                    Unmapped: 8)),
             response);
     }
 

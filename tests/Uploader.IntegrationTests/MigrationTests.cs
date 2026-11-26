@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Uploader.Application.Abstractions;
+using Uploader.Application.Features.Sync;
 using Uploader.Application.Mapping;
 using Uploader.Infrastructure.Persistence;
 using Xunit;
@@ -37,5 +38,18 @@ public sealed class MigrationTests
         var entry = Assert.Single(
             await new SqlUnmappedValueRepository(db.NewMigratedContext(), TimeProvider.System).GetAllAsync(default));
         Assert.Equal(new UnmappedListEntry(miss.Field, "9", miss.Context, 3, Now), entry);
+    }
+
+    [Fact]
+    public async Task TheMigratedSchemaHoldsTheRunsUnmappedCount()
+    {
+        using var db = new SqliteDatabase();
+        var runs = new SyncRunRepository(db.NewMigratedContext(), new SettableClock(Now));
+        await runs.StartAsync("run-1", default);
+        await runs.FinishAsync(new RunCatalogueSyncCommandResult("run-1") { Unmapped = 4 }, default);
+
+        var latest = await new SyncRunRepository(db.NewMigratedContext(), TimeProvider.System).GetLatestAsync(default);
+
+        Assert.Equal(4, latest!.Unmapped);
     }
 }
