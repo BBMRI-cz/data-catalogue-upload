@@ -11,15 +11,13 @@ namespace Uploader.IntegrationTests;
 /// </summary>
 public sealed class AdminSyncEndpointTests
 {
-    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
-
     [Fact]
     public async Task BeforeTheFirstSyncThereIsNothingToReport()
     {
         using var factory = new UploaderWebApplicationFactory(new HeldSourceDataGateway());
         using var client = factory.CreateClientWithSchema();
 
-        using var status = await GetStatusAsync(client);
+        using var status = await AdminSync.GetStatusAsync(client);
 
         Assert.False(status.RootElement.GetProperty("running").GetBoolean());
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("last_run").ValueKind);
@@ -35,7 +33,7 @@ public sealed class AdminSyncEndpointTests
         using var response = await client.PostAsync("/admin/sync", content: null);
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
 
-        using var status = await WaitUntilIdleAsync(client);
+        using var status = await AdminSync.WaitUntilIdleAsync(client);
 
         var run = status.RootElement.GetProperty("last_run");
         Assert.NotEqual(JsonValueKind.Null, run.GetProperty("finished_at").ValueKind);
@@ -51,13 +49,13 @@ public sealed class AdminSyncEndpointTests
         using var client = factory.CreateClientWithSchema();
 
         using var first = await client.PostAsync("/admin/sync", content: null);
-        await source.Fetching.WaitAsync(Patience);
+        await source.Fetching.WaitAsync(AdminSync.Patience);
         using var second = await client.PostAsync("/admin/sync", content: null);
 
         Assert.Equal(HttpStatusCode.Accepted, first.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
 
-        using (var during = await GetStatusAsync(client))
+        using (var during = await AdminSync.GetStatusAsync(client))
         {
             Assert.True(during.RootElement.GetProperty("running").GetBoolean());
             var run = during.RootElement.GetProperty("last_run");
@@ -65,7 +63,7 @@ public sealed class AdminSyncEndpointTests
         }
 
         source.Release();
-        using var after = await WaitUntilIdleAsync(client);
+        using var after = await AdminSync.WaitUntilIdleAsync(client);
 
         Assert.NotEqual(JsonValueKind.Null, after.RootElement.GetProperty("last_run").GetProperty("finished_at").ValueKind);
         Assert.Equal(1, source.Fetches);
@@ -82,7 +80,7 @@ public sealed class AdminSyncEndpointTests
         using var client = factory.CreateClientWithSchema();
 
         using var response = await client.PostAsync("/admin/sync", content: null);
-        using var status = await WaitUntilIdleAsync(client);
+        using var status = await AdminSync.WaitUntilIdleAsync(client);
 
         var run = status.RootElement.GetProperty("last_run");
         Assert.Equal(
@@ -90,29 +88,5 @@ public sealed class AdminSyncEndpointTests
             run.GetProperty("failure").GetString());
         Assert.Equal(1, run.GetProperty("source_unavailable").GetInt32());
         Assert.NotEqual(JsonValueKind.Null, run.GetProperty("finished_at").ValueKind);
-    }
-
-    private static async Task<JsonDocument> GetStatusAsync(HttpClient client)
-    {
-        using var response = await client.GetAsync("/admin/sync");
-        response.EnsureSuccessStatusCode();
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-    }
-
-    /// <summary>Poll <c>GET /admin/sync</c> until no sync is running, and return that answer.</summary>
-    private static async Task<JsonDocument> WaitUntilIdleAsync(HttpClient client)
-    {
-        using var timeout = new CancellationTokenSource(Patience);
-        while (true)
-        {
-            var status = await GetStatusAsync(client);
-            if (!status.RootElement.GetProperty("running").GetBoolean())
-            {
-                return status;
-            }
-
-            status.Dispose();
-            await Task.Delay(TimeSpan.FromMilliseconds(50), timeout.Token);
-        }
     }
 }

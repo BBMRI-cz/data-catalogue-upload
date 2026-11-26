@@ -43,6 +43,7 @@ RUN_MIGRATIONS=true ASPNETCORE_URLS=http://localhost:8003 \
   dotnet run --project src/Uploader/Uploader.Host
 curl -X POST http://localhost:8003/admin/sync       # 202: started in the background
 curl http://localhost:8003/admin/sync               # {"running": ..., "last_run": {...}}
+curl http://localhost:8003/admin/ontology/unmapped  # values no ontology term was found for
 ```
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for full setup, [`ARCHITECTURE.md`](ARCHITECTURE.md) for the

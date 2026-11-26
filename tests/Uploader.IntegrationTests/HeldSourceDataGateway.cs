@@ -5,8 +5,8 @@ using Uploader.Application.Dtos;
 namespace Uploader.IntegrationTests;
 
 /// <summary>
-/// A biobank with no patients whose answer a test can hold back, so a sync stays in progress for
-/// exactly as long as the test needs it to.
+/// A biobank - with no patients unless a test gives it some - whose answer a test can hold back, so a
+/// sync stays in progress for exactly as long as the test needs it to.
 /// </summary>
 internal sealed class HeldSourceDataGateway : ISourceDataGateway
 {
@@ -33,6 +33,9 @@ internal sealed class HeldSourceDataGateway : ISourceDataGateway
     /// <summary>The error the biobank answers with instead of its patients, if any.</summary>
     public Error? Failure { get; init; }
 
+    /// <summary>The patients the biobank lists; none by default.</summary>
+    public IReadOnlyList<PatientDto> Patients { get; init; } = [];
+
     public void Release() => _released.TrySetResult();
 
     public async Task<ErrorOr<IReadOnlyList<PatientDto>>> FetchPatientsAsync(CancellationToken cancellationToken)
@@ -42,7 +45,7 @@ internal sealed class HeldSourceDataGateway : ISourceDataGateway
         await _released.Task.WaitAsync(cancellationToken);
         return Failure is { } failure
             ? failure
-            : ErrorOrFactory.From<IReadOnlyList<PatientDto>>(Array.Empty<PatientDto>());
+            : ErrorOrFactory.From(Patients);
     }
 
     public Task<ErrorOr<IReadOnlyList<ImagingStudyDto>>> FetchRadiologyAsync(

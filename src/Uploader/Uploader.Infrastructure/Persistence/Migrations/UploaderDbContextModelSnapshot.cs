@@ -260,12 +260,41 @@ namespace Uploader.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("UnmappedCount")
+                        .HasColumnType("integer");
+
                     b.Property<int>("UploadedCount")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
                     b.ToTable("sync_run", (string)null);
+                });
+
+            modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.UnmappedValueEntity", b =>
+                {
+                    b.Property<string>("Field")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Context")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastRunId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Field", "Value", "Context");
+
+                    b.ToTable("unmapped_value", (string)null);
                 });
 
             modelBuilder.Entity("Uploader.Infrastructure.Persistence.Entities.WsiSyncStateEntity", b =>

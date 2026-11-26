@@ -30,6 +30,7 @@ public sealed class TermResolutionTests
             mapping ?? new RuleMappingTable(),
             state ?? new InMemorySyncStateRepository(),
             runs ?? new FakeSyncRunRepository(),
+            new FakeUnmappedValueRepository(),
             new FingerprintSyncPlanner(),
             new FakePseudonymMap(),
             new CatalogueStudy("study_1", "Test Study"),

@@ -25,6 +25,7 @@ public sealed class RunCatalogueSyncHandlerTests
             new RuleMappingTable(),
             state,
             runs,
+            new FakeUnmappedValueRepository(),
             new FingerprintSyncPlanner(),
             new FakePseudonymMap(),
             study ?? new CatalogueStudy("study_1", "Test Study"),

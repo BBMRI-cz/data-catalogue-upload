@@ -111,10 +111,12 @@ So biobank has `IPatientRepository`; sequencing has `ISampleRepository`, `ISeque
 back aggregates through the mappers, a reader projects in SQL and never round-trips the domain. Keep the two
 in separate interfaces.
 
-**Run logs are the one exception.** `sync_run` (uploader) and `ingest_run` (both APIs) record what a run did,
-not a domain concept, so there is no aggregate behind them. Their port - `ISyncRunRepository`,
-`IIngestRunRepository` - writes the row (`StartAsync` as the run begins, `FinishAsync`/`FailAsync` as it ends)
-and reads back a flat record (`SyncRun`, `IngestRun`) for `GET /admin/...`, and keeps the `Repository` name.
+**Run logs are the one exception.** `sync_run` and `unmapped_value` (uploader) and `ingest_run` (both APIs)
+record what a run did, not a domain concept, so there is no aggregate behind them. Their port -
+`ISyncRunRepository`, `IUnmappedValueRepository`, `IIngestRunRepository` - writes the rows (`StartAsync` as
+the run begins, `FinishAsync`/`FailAsync` as it ends; `ReplaceAsync`/`MergeAsync` for the unmapped list) and
+reads back a flat record (`SyncRun`, `UnmappedListEntry`, `IngestRun`) for `GET /admin/...`, and keeps the
+`Repository` name.
 
 ```csharp
 public interface IPatientRepository
@@ -140,8 +142,10 @@ group that needs a marker to distinguish "not recorded" from "recorded, every fi
 child collection gets rows with an explicit `Position` column (`run_read`), never a JSON blob - order that
 lives in a serialized string is order a query cannot restore. JSON columns are reserved for **scalar** lists
 (`patient.AccessionNumbers`, `panel.Genes`), stored via a `ValueConverter` + `ValueComparer` pair. The one
-structured exception is a run log's error list (`ingest_run.Errors`): written once at the end of an ingest and
-only ever read back whole, so it is a plain text column the repository serializes, not a child table.
+structured exceptions are a run log's error list (`ingest_run.Errors`): written once at the end of an ingest and
+only ever read back whole, so it is a plain text column the repository serializes, not a child table - and an
+unmapped value's context (`unmapped_value.Context`), serialized the same way because it is part of the row's
+key and only read back whole.
 
 **Mapping is hand-written.** DTO -> catalogue payload or domain (uploader `Mapping/`) and domain <-> EF entity
 (`PatientMapper`, `SyncStateMapper`) are plain static/instance classes with explicit `new T { ... }` field

@@ -13,5 +13,6 @@ public sealed class SyncRunEntity
     public int SkippedCount { get; set; }
     public int FailedCount { get; set; }
     public int SourceUnavailableCount { get; set; }
+    public int UnmappedCount { get; set; }
     public string? Failure { get; set; }
 }

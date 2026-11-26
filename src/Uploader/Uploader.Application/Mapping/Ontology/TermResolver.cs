@@ -80,6 +80,11 @@ public sealed class TermResolver
     /// An array field, resolved element by element and then de-duplicated and ordered, so two
     /// spellings of one term are one entry and the row's fingerprint does not follow the source's
     /// order. Nothing resolved is an empty list.
+    /// <para>
+    /// The array is one row, so a value it holds twice - two samples with one diagnosis, two files
+    /// with one role - is resolved once and, when it misses, recorded once: the unmapped list counts
+    /// the rows that hold a value, not its repeats.
+    /// </para>
     /// </summary>
     public IReadOnlyList<string> ResolveAll(
         OntologyField field,
@@ -87,6 +92,7 @@ public sealed class TermResolver
         ICollection<UnmappedValue> misses) =>
     [
         .. values
+            .Distinct(StringComparer.Ordinal)
             .Select(value => Resolve(field, value, misses))
             .OfType<string>()
             .Distinct(StringComparer.Ordinal)

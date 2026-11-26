@@ -13,8 +13,8 @@ tests/
 ├── BiobankApi.IntegrationTests      ApiTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, XmlValueReaderTests, XmlExportParserTests
 ├── SequencingApi.UnitTests          DomainModelsTests, NormalizationTests (aggregates/factories), Mmci*Tests (pure source parsers)
 ├── SequencingApi.IntegrationTests   ApiTests, SequencingEndpointTests, AdminEndpointTests, ScheduledIngestTests, IngestRunRepositoryTests, IngestStatusResponseMapperTests, RepositoryTests, MapperTests, StatsReaderTests, MmciSequencingDataSourceTests, IngestEndToEndTests
-├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueSequencingMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMappingTests, RunCatalogueSyncHandlerTests, TermResolutionTests, RuleMappingTableTests
-├── Uploader.IntegrationTests        Emx2CatalogueGatewayTests, SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, AdminSyncEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
+├── Uploader.UnitTests               FingerprintSyncPlannerTests, FingerprintTests, CataloguePatientMapperTests, CatalogueSampleMapperTests, CatalogueSequencingMapperTests, UploaderMapperTests, UploaderMapperFieldParityTests, BiobankMappingTests, SequencingMappingTests, RunCatalogueSyncHandlerTests, TermResolutionTests, UnmappedListTests, RuleMappingTableTests
+├── Uploader.IntegrationTests        Emx2CatalogueGatewayTests, SyncStateRepositoryTests, SyncStateMappersTests, SyncRunRepositoryTests, UnmappedValueRepositoryTests, MigrationTests, AdminSyncEndpointTests, AdminOntologyEndpointTests, ScheduledSyncTests, SyncStatusResponseMapperTests, UnmappedValuesResponseMapperTests, BiobankFetchTests, BiobankContractParityTests, SequencingFetchTests, SequencingContractParityTests
 └── TrainingSeeder.IntegrationTests  TrainingSeederTests (the seeder through both APIs' repositories on SQLite: edge cases, same rows per seed, non-empty DB left alone, migrations match the model), PredictiveNumberTests, SeedSettingsTests
 ```
 
@@ -77,7 +77,7 @@ it guards (a malformed request must be a 400, not an empty 200) is also asserted
 ## Faking the ports (uploader)
 
 The application depends on interfaces (`ISourceDataGateway`, `ICatalogueGateway`, `ISyncStateRepository`,
-`ISyncRunRepository`, `IMappingTable`), so tests use the hand-written fakes in `tests/Uploader.UnitTests/Fakes.cs` - no mocking
+`ISyncRunRepository`, `IUnmappedValueRepository`, `IMappingTable`), so tests use the hand-written fakes in `tests/Uploader.UnitTests/Fakes.cs` - no mocking
 framework:
 
 - `FakeSourceDataGateway(IReadOnlyList<PatientDto>)` - returns canned source data.
@@ -93,6 +93,9 @@ framework:
 - `FakeSyncRunRepository` - records the id the run started under (`Started`) and captures the finished
   `RunCatalogueSyncCommandResult` (`Finished`), so a test can assert a run was recorded before any work and
   what `Failure` it ended with.
+- `FakeUnmappedValueRepository` - records each write to the unmapped list in `Writes`: whether it replaced or
+  merged, and the misses with their row counts. What replacing and merging do to the stored list is the
+  real repository's job, tested on SQLite.
 
 Inject these where the composition root would inject the real adapters; a class that implements the interface
 is all that's needed.
@@ -117,7 +120,10 @@ Assert.Equal("P1", Assert.Single(loaded).Id.Value);
 ```
 
 Call `NewContext()` again for the read to prove the round-trip went through the DB, not an in-memory tracked
-graph. The schema only uses column types SQLite supports, so this stays representative of PostgreSQL - SQLite
+graph. The uploader's helper also has `NewMigratedContext()`, which builds the schema by applying the
+migrations instead: `MigrationTests` uses it to prove a migration creates what the repositories write, and
+checks `HasPendingModelChanges()` on an Npgsql context so a model change without its migration fails there
+(the TrainingSeeder does the same for both APIs). The schema only uses column types SQLite supports, so this stays representative of PostgreSQL - SQLite
 also honours `CHECK` constraints and `ON DELETE CASCADE`, so both are worth asserting there. Keep pure mapping
 logic (domain <-> EF entity) in `MapperTests` where it needs no engine.
 
@@ -176,12 +182,13 @@ service tests that the same way:
   then the run is recorded as started), assert `running: true` and the `409` on a second `POST`, then
   `Release()` it. Count its calls (`Fetches`/`Parses`/`Reads`) to prove a refused or skipped trigger ran
   nothing.
-- **Poll, never sleep** - `WaitUntilIdleAsync` / `IngestAndWaitAsync` poll `GET` every 50 ms with a 30 s cap.
+- **Poll, never sleep** - `AdminSync.WaitUntilIdleAsync` / `AdminIngest.IngestAndWaitAsync` poll `GET` every
+  50 ms with a 30 s cap.
 - **The scheduled entry point** (`ScheduledSyncTests`, `ScheduledIngestTests`) resolves the runner from the
   test host and calls `RunIfIdleAsync` directly: it must run to the end when idle and return at once while a
   manual run holds the lock. The Quartz cron itself is not tested; `DisableScheduler=true` keeps Quartz off.
-- **The run tables** (`SyncRunRepositoryTests`, `IngestRunRepositoryTests`) use a `SettableClock` so start
-  and finish get distinct known times. SQLite cannot `ORDER BY` a `DateTimeOffset`, so "latest" is picked in
+- **The run tables** (`SyncRunRepositoryTests`, `UnmappedValueRepositoryTests`, `IngestRunRepositoryTests`)
+  use a `SettableClock` so start and finish - or a value's first and later sighting - get distinct known times. SQLite cannot `ORDER BY` a `DateTimeOffset`, so "latest" is picked in
   memory - always include the case where an older run finishes after a newer one started.
 
 ## Integration tests: the biobank API

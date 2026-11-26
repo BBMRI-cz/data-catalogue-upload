@@ -4,6 +4,7 @@
 #   docker compose -f compose.uploader.yml up -d --build
 #   curl -X POST http://127.0.0.1:8003/admin/sync    # sync now, on top of the schedule
 #   curl http://127.0.0.1:8003/admin/sync            # is one running, and how did the last one go
+#   curl http://127.0.0.1:8003/admin/ontology/unmapped   # values no ontology term was found for
 #
 # One of three stacks, each deployable on its own machine: compose.biobank.yml,
 # compose.sequencing.yml, and this one. See docs/deployment.md for the full runbook.
