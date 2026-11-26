@@ -265,7 +265,8 @@ public sealed class UploaderMapperFieldParityTests
     [Fact]
     public void SamplePreparationSequencingAndAnalysisMapEveryField()
     {
-        var sequencing = CatalogueSequencingMapper.ToPayload(FullyPopulatedSequencing(), SamplePseudonym);
+        var sequencing = CatalogueSequencingMapper.ToPayload(
+            FullyPopulatedSequencing(), SamplePseudonym, LiveTerms.Resolver(), []);
         Assert.Equal(SamplePseudonym, sequencing.ExternalId);
         Assert.Equal(SamplePseudonym, sequencing.SampleId);
 

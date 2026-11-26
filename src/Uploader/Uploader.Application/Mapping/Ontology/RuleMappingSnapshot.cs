@@ -10,9 +10,12 @@ namespace Uploader.Application.Mapping;
 /// <para>
 /// A rule answers a term when it knows one; "no term" where leaving the field empty is a documented
 /// decision (benign and premalignant tissue, mononuclear cells, primary cell cultures, RNAlater
-/// storage, a blood draw's pathological state); and not found for anything else, so a value nobody
-/// has seen before - a new material code, an unknown biobank code - lands on the unmapped list
-/// instead of vanishing. A field with no rule is not found either. Every term below was verified
+/// storage, a blood draw's pathological state, the <c>other</c> file role, a stray gene star); and
+/// not found for anything else, so a value nobody has seen before - a new material code, an unknown
+/// biobank code, a NovaSeq serial - lands on the unmapped list instead of vanishing. A field with no
+/// rule is not found either: the kits, which have no code list to translate from and are published
+/// only when the source already spells them as a term, and the sequencing method, which our code
+/// computes. Every term below was verified
 /// present in <c>FairGenomesTest</c> on 2026-09-08, and the resolver checks each answer against the
 /// live list anyway, so a term the catalogue drops shows up as unmapped rather than failing the row.
 /// </para>
@@ -35,7 +38,16 @@ public sealed class RuleMappingSnapshot : IMappingSnapshot
             [OntologyFields.BiospecimenForm] = (code, context) => BiospecimenForm(context.SampleType, code),
             [OntologyFields.StorageConditions] = (code, context) => StorageConditions(context.SampleType, code),
             [OntologyFields.ManagingBiobank] = (code, _) => Found(Institute(code)),
+            [OntologyFields.FullySequencedGenes] = (gene, _) => Gene(gene),
+            [OntologyFields.PartiallySequencedGenes] = (gene, _) => Gene(gene),
+            [OntologyFields.SequencingPlatform] = (platform, _) => Found(Platform(platform)),
+            [OntologyFields.SequencingInstrumentModel] = (serial, _) => Found(InstrumentModel(serial)),
+            [OntologyFields.DataFormatsStored] = (role, _) => DataFormat(role),
+            [OntologyFields.ReferenceGenomeUsed] = (alias, _) => Found(ReferenceGenome(alias)),
         }.ToFrozenDictionary();
+
+    public MappingAnswer Lookup(OntologyField field, string value, TermContext context) =>
+        Rules.TryGetValue(field, out var rule) ? rule(value, context) : MappingAnswer.NotFound;
 
     private static readonly FrozenDictionary<string, string> Institutes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -44,9 +56,6 @@ public sealed class RuleMappingSnapshot : IMappingSnapshot
             ["MOU"] = "Masaryk Memorial Cancer Institute",
             ["MMCI"] = "Masaryk Memorial Cancer Institute",
         }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
-    public MappingAnswer Lookup(OntologyField field, string value, TermContext context) =>
-        Rules.TryGetValue(field, out var rule) ? rule(value, context) : MappingAnswer.NotFound;
 
     /// <summary>
     /// <c>Personal.PrimaryAffiliatedInstitute</c> and <c>Biospecimens.ManagingBiobank</c> share one
@@ -161,6 +170,91 @@ public sealed class RuleMappingSnapshot : IMappingSnapshot
 
         // Serum S/PS, genome PS and any new code: nobody has named a tube for them yet.
         _ => MappingAnswer.NotFound,
+    };
+
+    /// <summary>
+    /// <c>SamplePreparation.FullySequencedGenes</c> and <c>PartiallySequencedGenes</c>, by the gene
+    /// star: the libraries table marks a gene whose coding regions are all covered with a star
+    /// ("Genes (*all coding regions covered)"), and the sequencing API keeps it in the symbol. Which
+    /// list a gene goes to is placement, and the mapper decides it from the star; the star itself is
+    /// not part of the HGNC symbol (<c>BRCA1*</c> is not a term), so it comes off here. A stray star
+    /// with no symbol is not a gene, on purpose. A symbol the rule would hand back unchanged is not
+    /// found - the resolver has already tried it as a term, and the rule has nothing to add.
+    /// </summary>
+    private static MappingAnswer Gene(string gene)
+    {
+        var symbol = gene.Trim().TrimEnd('*');
+        if (symbol.Length == 0)
+        {
+            return MappingAnswer.NoTerm;
+        }
+
+        return symbol == gene ? MappingAnswer.NotFound : MappingAnswer.Mapped(symbol);
+    }
+
+    private static readonly FrozenDictionary<string, string> Platforms =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["illumina"] = "Illumina platform",
+            ["ion torrent"] = "Ion Torrent platform",
+            ["pacbio"] = "PacBio platform",
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary><c>Sequencing.SequencingPlatform</c>: the ontology suffixes every vendor.</summary>
+    private static string? Platform(string platform) =>
+        Platforms.TryGetValue(platform.Trim(), out var term) ? term : null;
+
+    /// <summary>
+    /// <c>Sequencing.SequencingInstrumentModel</c>, from the instrument's serial number. The source's
+    /// own model is the folder the run was filed under (<c>MiSeq</c>, <c>NextSeq</c>), and the ontology
+    /// has no bare <c>NextSeq</c>: it tells the 500 from the 550, and so does the serial prefix. A
+    /// serial no prefix names - a NovaSeq's <c>A00…</c> - is not found.
+    /// </summary>
+    private static string? InstrumentModel(string serial) => serial.Trim().ToUpperInvariant() switch
+    {
+        { } id when id.StartsWith("NB55", StringComparison.Ordinal) => "Illumina NextSeq 550",
+        { } id when id.StartsWith("NS500", StringComparison.Ordinal)
+            || id.StartsWith("NB501", StringComparison.Ordinal) => "NextSeq 500",
+        { } id when id.StartsWith("M0", StringComparison.Ordinal) => "MiSeq",
+        _ => null,
+    };
+
+    private static readonly FrozenDictionary<string, string> FileFormats =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["fastq"] = "FASTQ",
+            ["bam"] = "BAM",
+            ["bam_index"] = "BAI",
+            ["vcf"] = "VCF",
+            ["vcf_filtered"] = "VCF",
+            ["variant_report"] = "PDF",
+            ["coverage_report"] = "PDF",
+            ["summary_report"] = "PDF",
+        }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>Analysis.DataFormatsStored</c>, from the sequencing API's file roles. A role names what the
+    /// file is for; the ontology names what it is encoded as, so several roles collapse onto one
+    /// format. <c>other</c> is the API's escape hatch for an artifact it does not recognise, which
+    /// says nothing about the encoding, so it has no format on purpose; a role this list does not
+    /// know is not found.
+    /// </summary>
+    private static MappingAnswer DataFormat(string role) => role.Trim() switch
+    {
+        var trimmed when FileFormats.TryGetValue(trimmed, out var format) => MappingAnswer.Mapped(format),
+        var trimmed when trimmed.Equals("other", StringComparison.OrdinalIgnoreCase) => MappingAnswer.NoTerm,
+        _ => MappingAnswer.NotFound,
+    };
+
+    /// <summary>
+    /// <c>Analysis.ReferenceGenomeUsed</c>. The ontology carries the bare builds and their patch
+    /// releases, but the pipelines write aliases (<c>hg19</c>, <c>hg38</c>) that are not terms.
+    /// </summary>
+    private static string? ReferenceGenome(string alias) => alias.Trim().ToLowerInvariant() switch
+    {
+        "grch37" or "hg19" => "GRCh37",
+        "grch38" or "hg38" => "GRCh38",
+        _ => null,
     };
 
     private static MappingAnswer Found(string? term) =>

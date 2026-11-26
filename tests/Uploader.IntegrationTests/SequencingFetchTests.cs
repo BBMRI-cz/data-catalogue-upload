@@ -1,3 +1,4 @@
+using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Infrastructure.Configuration;
@@ -122,6 +123,30 @@ public sealed class SequencingFetchTests
         Assert.Null(analysis.AlgorithmsUsed);
     }
 
+    /// <summary>
+    /// The recorded NextSeq run names its kits <c>TSO500 DNA</c> and <c>TSO500</c>, which are not terms
+    /// of the lists here. They are left out of a preparation that still goes out - its genes and run are
+    /// all there - and recorded exactly as served, before the payload is fingerprinted.
+    /// </summary>
+    [Fact]
+    public async Task AKitThatIsNotATermIsLeftOutAndRecorded()
+    {
+        var misses = new List<UnmappedValue>();
+
+        var prepared = Prepared(await FetchAsync(RecordedResponse.Sequencing(), misses), "240102_NB552710_0064_AHG7L");
+
+        Assert.Null(prepared.LibraryPreparationKit);
+        Assert.Null(prepared.TargetEnrichmentKit);
+        Assert.Equal(["ALK", "EGFR"], prepared.PartiallySequencedGenes);
+        Assert.Equal("Illumina NextSeq 550", prepared.Sequencing!.SequencingInstrumentModel);
+        Assert.Equal(
+            [
+                new UnmappedValue(OntologyFields.LibraryPreparationKit, "TSO500 DNA", TermContext.Empty),
+                new UnmappedValue(OntologyFields.TargetEnrichmentKit, "TSO500", TermContext.Empty),
+            ],
+            misses);
+    }
+
     [Fact]
     public async Task AMammaPrintRunNeverBecomesAPreparation()
     {
@@ -142,11 +167,15 @@ public sealed class SequencingFetchTests
         var response = await FetchResponseAsync(RecordedResponse.EmptySequencing());
 
         Assert.False(CatalogueSequencingMapper.HasPreparations(response));
-        Assert.Empty(CatalogueSequencingMapper.ToPayload(response, SamplePseudonym).SamplePreparations);
+        Assert.Empty(CatalogueSequencingMapper.ToPayload(response, SamplePseudonym, LiveTerms.Resolver(), [])
+            .SamplePreparations);
     }
 
-    private static async Task<CatalogueSequencingPayload> FetchAsync(string recordedBody) =>
-        CatalogueSequencingMapper.ToPayload(await FetchResponseAsync(recordedBody), SamplePseudonym);
+    private static async Task<CatalogueSequencingPayload> FetchAsync(
+        string recordedBody,
+        ICollection<UnmappedValue>? misses = null) =>
+        CatalogueSequencingMapper.ToPayload(
+            await FetchResponseAsync(recordedBody), SamplePseudonym, LiveTerms.Resolver(), misses ?? []);
 
     private static async Task<SequencingDto> FetchResponseAsync(string recordedBody)
     {

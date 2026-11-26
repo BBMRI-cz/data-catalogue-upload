@@ -3,13 +3,23 @@ using System.Globalization;
 namespace Uploader.Application.Mapping;
 
 /// <summary>
-/// The computed pieces of the sequencing -> catalogue mapping: the derived FAIR identifiers and the
-/// packing of the run statistics into <c>OtherQualityMetrics</c>. Apart from the vocabulary lookups,
-/// <see cref="CatalogueSequencingMapper"/> carries everything else verbatim, so this is the whole of
-/// the mapping's own logic.
+/// The computed pieces of the sequencing -> catalogue mapping: the derived FAIR identifiers, the
+/// constant sequencing method and the packing of the run statistics into <c>OtherQualityMetrics</c>.
+/// A served value becomes an ontology term elsewhere, through the run's <see cref="TermResolver"/>;
+/// apart from that, <see cref="CatalogueSequencingMapper"/> carries everything else verbatim, so this
+/// is the whole of the mapping's own logic.
 /// </summary>
 internal static class SequencingMapping
 {
+    /// <summary>
+    /// <c>Sequencing.SequencingMethod</c>, worked out rather than translated, so it is ours to compute
+    /// and not the mapping table's. The source has no method field - the sample sheet's assay names a
+    /// kit or an index set - and every MMCI run is Illumina sequencing by synthesis, so this is the
+    /// constant the previous uploader sent for MiSeq and NextSeq alike. The term still goes through
+    /// the resolver, so a catalogue that drops it shows it as unmapped.
+    /// </summary>
+    public const string SequencingMethod = "Illumina Sequencing";
+
     /// <summary>The word a pseudonymized sample id carries before it is rewritten per FAIR module.</summary>
     private const string PredictiveWord = "predictive";
 

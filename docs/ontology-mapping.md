@@ -4,7 +4,9 @@ How the uploader turns a source value into an ontology term, and where the ontol
 student's approved table plugs in. Specified in
 [#116](https://github.com/BBMRI-cz/data-catalogue-upload/issues/116); the patient's fields went first
 ([#119](https://github.com/BBMRI-cz/data-catalogue-upload/issues/119)), then the sample's
-([#120](https://github.com/BBMRI-cz/data-catalogue-upload/issues/120)).
+([#120](https://github.com/BBMRI-cz/data-catalogue-upload/issues/120)), then the sequencing's
+([#121](https://github.com/BBMRI-cz/data-catalogue-upload/issues/121)), which retired the old
+`CatalogueVocabulary`.
 
 **The rule: every ontology value is resolved while its payload is built, before the payload is
 fingerprinted.** An EMX2 ontology column is a foreign key, so a value that is not already a term
@@ -18,7 +20,8 @@ the next run re-sends.
 
 `TermResolver` (`Uploader.Application/Mapping/Ontology/`, with `OntologyFields`, `UnmappedValue` and the stand-in) is built once per run, from that run's term lists
 and mapping-table snapshot, and handed to the payload mappers. It does no I/O. Each value reaches it
-exactly as the source served it (`C504`, `Female`, `MOU`, `53`), and goes through three steps:
+exactly as the source served it (`C504`, `Female`, `MOU`, `53`, `BRCA1*`, `NB552710`), and goes
+through three steps:
 
 1. A value that is already an exact term of the field's live list is used as is. `C50` or an already
    correct institute name needs no mapping entry.
@@ -28,12 +31,13 @@ exactly as the source served it (`C504`, `Female`, `MOU`, `53`), and goes throug
 3. Anything else leaves the field out and records the value as **unmapped**.
 
 A field left out does not cost the row: the rest of the row is still sent. A value the source did not
-fill (null or blank) is simply absent, not unmapped. An array field (`Clinical.diagnosis`) is resolved
-element by element, then de-duplicated and ordered, so `C504` and `C50.4` are one entry and the
-fingerprint does not follow the source's order. A patient with nothing to publish there still sends
-an empty list rather than none: the gateway leaves an empty ontology array out of the row anyway, so
-only the fingerprint could tell the two apart, and changing it would re-send every such patient for
-nothing.
+fill (null or blank) is simply absent, not unmapped. An array field (`Clinical.diagnosis`, both gene
+lists, `Analysis.dataFormatsStored`) is resolved element by element, then de-duplicated and ordered,
+so `C504` and `C50.4` are one entry, three report files are one `PDF`, and the fingerprint does not
+follow the source's order. A patient with nothing to publish there still sends an empty list rather
+than none, while a sequencing payload leaves an empty gene or format list out (null): the gateway
+leaves an empty ontology array out of the row either way, so only the fingerprint could tell the two
+apart, and each keeps the form it had so that neither is re-sent for nothing.
 
 ## The three answers
 
@@ -83,6 +87,15 @@ A field is a catalogue table and column as EMX2 spells them in a GraphQL mutatio
 | `Biospecimens.storageConditions` | the material code | sample `material_type` | `{sampleType, label}` |
 | `Biospecimens.managingBiobank` | the biobank code (`MOU`, `BBM`) | the patient's `biobank` | none |
 | `Biospecimens.availability` | `Depleted` or `Available`, computed | sample `available_samples_no` | none |
+| `SamplePreparation.libraryPreparationKit` | the kit name (`KAPA HyperPlus Kit`) | sequencing run's `library_preparation.library_prep_kit` | none |
+| `SamplePreparation.targetEnrichmentKit` | the kit name (`KAPA HyperCap`) | sequencing run's `library_preparation.target_enrichment_kit` | none |
+| `SamplePreparation.fullySequencedGenes` | each starred gene symbol, star and all (`BRCA1*`) | sequencing run's `library_preparation.panel.genes` | none |
+| `SamplePreparation.partiallySequencedGenes` | each unstarred gene symbol (`TP53`) | sequencing run's `library_preparation.panel.genes` | none |
+| `Sequencing.sequencingPlatform` | the platform (`Illumina`) | sequencing run's `platform` | none |
+| `Sequencing.sequencingInstrumentModel` | the instrument serial (`NB552710`), not the served model | sequencing run's `instrument_id` | none |
+| `Sequencing.sequencingMethod` | `Illumina Sequencing`, a constant | computed (`SequencingMapping.SequencingMethod`) | none |
+| `Analysis.dataFormatsStored` | each file role (`vcf_filtered`, `bam_index`) | analysis `files[].role` | none |
+| `Analysis.referenceGenomeUsed` | the pipeline's alias (`hg19`, `GRCh37`) | analysis `reference_genome` | none |
 
 **The material code's context** (`TermContext.Material`) is the biobank's sample type (`tissue`,
 `serum`, `genome`) and the biobank API's `material_type_label` (`Malignant tumour (RNAlater)`, or
@@ -96,9 +109,20 @@ for whoever maps a code without the biobank's code book to hand.
 out rather than a translation, but the result still goes through the resolver's live-term check - a
 catalogue that drops one of the two terms shows it as unmapped instead of rejecting the row.
 
-The other fields in `OntologyFields.All` are read at run start but still translated by
-`CatalogueVocabulary`, as before, and their misses are not reported yet: the sequencing's fields move
-to the resolver in #121.
+**The gene star is placement, not translation.** The libraries table stars a gene whose coding
+regions are all covered (`Genes (*all coding regions covered)`) and the sequencing API keeps the star
+in the symbol. `CatalogueSequencingMapper` reads the star only to place the symbol: starred into
+`fullySequencedGenes`, the rest into `partiallySequencedGenes`. The symbol reaches the resolver as
+served, and taking the star off is the mapping table's job - so a starred gene nobody can resolve is
+reported as `BRCA1*`, under the list it was placed in.
+
+**The sequencing method is computed, not mapped**: the source has no method field (the sample sheet's
+`assay` names a kit or an index set), and every MMCI run is Illumina sequencing by synthesis, so it is
+the constant `Illumina Sequencing` (`SequencingMapping`). Like availability, it still goes through
+the live-term check.
+
+Every sequencing field has an empty context: none of their values means something different
+depending on where it came from.
 
 ## The stand-in: `RuleMappingTable`
 
@@ -136,6 +160,23 @@ condition once. The wildcard term rules (any tissue code is `Solid Tissue Specim
 over unchanged - a rule by sample type, so they do not report a new code; its storage condition, and
 for tissue its pathological state, do.
 
+The sequencing's rules (all case-insensitive and trimmed):
+
+| field | term | "no term" | not found |
+|---|---|---|---|
+| `SamplePreparation.libraryPreparationKit`, `targetEnrichmentKit` | - (no rule: a kit is published only when the source already spells it as a term) | - | every kit that is not a live term |
+| `SamplePreparation.fullySequencedGenes`, `partiallySequencedGenes` | the gene star comes off (`BRCA1*` -> `BRCA1`) | a stray star with no symbol (`*`) | a symbol the rule hands back unchanged - no star to take off |
+| `Sequencing.sequencingPlatform` | `Illumina`/`Ion Torrent`/`PacBio` -> `Illumina platform`/`Ion Torrent platform`/`PacBio platform` | - | any other platform |
+| `Sequencing.sequencingInstrumentModel` | by serial prefix: `NB55` -> `Illumina NextSeq 550`, `NS500`/`NB501` -> `NextSeq 500`, `M0` -> `MiSeq` | - | any other serial (a NovaSeq's `A00…`) |
+| `Sequencing.sequencingMethod` | - (computed, never looked up) | - | - |
+| `Analysis.dataFormatsStored` | `fastq` -> `FASTQ`, `bam` -> `BAM`, `bam_index` -> `BAI`, `vcf`/`vcf_filtered` -> `VCF`, `variant_report`/`coverage_report`/`summary_report` -> `PDF` | `other` (the sequencing API's escape hatch for an artifact it does not recognise: it says nothing about the encoding) | any other role |
+| `Analysis.referenceGenomeUsed` | `hg19`/`GRCh37` -> `GRCh37`, `hg38`/`GRCh38` -> `GRCh38` | - | any other build |
+
+The kits are the one place today's values do not resolve: MMCI's libraries table writes
+`KAPA HyperPlus Kit` (2,075 preparations) and `TruSight Oncology 500 Assay` (2,038), and neither is a
+term of the catalogue's list, so each run reports both. An entry for them in the student's table, or
+the terms appearing in the catalogue, publishes them on the next run.
+
 ## Unmapped values
 
 An unmapped value is the field, the value as served, and its context - never an identifier or a
@@ -152,9 +193,9 @@ The list is not kept beyond the run's log yet. Persisting it and serving it to t
 ## The gateway's safety net
 
 `Emx2Schema` still drops an ontology value that is not a term on its way out, with a warning, so a
-bad value costs one column rather than the row. What it catches today is the fields still translated
-by `CatalogueVocabulary` - the sequencing's - which nothing checks against the live lists before it. A resolved field only
-reaches it holding a live term.
+bad value costs one column rather than the row. Every field the uploader fills is resolved now, so a
+value only reaches it holding a live term; the net is there for a field added to a payload without
+being added to `OntologyFields`.
 
 It checks against the same lists the resolver was built from - one read per run, held until the run
 ends - so it does not notice a term removed from the ontology during a run. The catalogue rejects that
@@ -187,3 +228,12 @@ the catalogue holds.
 
 Moving the sample's fields re-sends nothing: every rule and term is unchanged, so every sample
 payload is too.
+
+Moving the sequencing's fields re-sends, once, every sequencing payload that carried a value the
+gateway was dropping - above all the preparations with `KAPA HyperPlus Kit` (2,075) or
+`TruSight Oncology 500 Assay` (2,038), now without them - and every one whose panel lists its genes
+out of alphabetical order, since the gene lists are now ordered like every other array field. Published
+terms do not change: the dropped values never reached the catalogue, and the genes are the same genes.
+This also fixes the kit re-send bug - a raw kit name used to be fingerprinted and then dropped, so a
+term arriving for it later never re-sent the preparation; now a kit that starts resolving changes the
+fingerprint.

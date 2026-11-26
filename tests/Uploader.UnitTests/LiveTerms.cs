@@ -6,7 +6,7 @@ namespace Uploader.UnitTests;
 /// <summary>
 /// Small hand-written stand-ins for the catalogue's live term lists. They hold every term a test
 /// expects to see published, so a value outside them is a miss exactly as it would be against the real
-/// catalogue. A field nothing resolves into yet - the sequencing's - has an empty list.
+/// catalogue.
 /// </summary>
 internal static class LiveTerms
 {
@@ -38,6 +38,27 @@ internal static class LiveTerms
 
     public static readonly string[] Availabilities = ["Available", "Depleted"];
 
+    /// <summary>
+    /// Fixture spellings: no rule translates a kit, so a kit is published only when the source already
+    /// spells it as a term, and a test's kit has to be in here to be.
+    /// </summary>
+    public static readonly string[] LibraryPreparationKits = ["KitA", "KAPA HyperPlus"];
+
+    public static readonly string[] TargetEnrichmentKits = ["Enrich", "KAPA HyperCap"];
+
+    /// <summary>HGNC symbols, without the star; both gene lists read the same ontology.</summary>
+    public static readonly string[] Genes = ["ALK", "BRCA1", "BRCA2", "EGFR", "TP53"];
+
+    public static readonly string[] Platforms = ["Illumina platform", "Ion Torrent platform", "PacBio platform"];
+
+    public static readonly string[] InstrumentModels = ["Illumina NextSeq 550", "NextSeq 500", "MiSeq"];
+
+    public static readonly string[] SequencingMethods = ["Illumina Sequencing"];
+
+    public static readonly string[] DataFormats = ["BAI", "BAM", "FASTQ", "PDF", "VCF"];
+
+    public static readonly string[] ReferenceGenomes = ["GRCh37", "GRCh38"];
+
     /// <summary>The lists above, with <paramref name="overrides"/> replacing a field's list.</summary>
     public static TermLists Lists(params (OntologyField Field, string[] Terms)[] overrides)
     {
@@ -51,6 +72,15 @@ internal static class LiveTerms
         lists[OntologyFields.StorageConditions] = new HashSet<string>(StorageConditions);
         lists[OntologyFields.Availability] = new HashSet<string>(Availabilities);
         lists[OntologyFields.ManagingBiobank] = new HashSet<string>(Institutes);
+        lists[OntologyFields.LibraryPreparationKit] = new HashSet<string>(LibraryPreparationKits);
+        lists[OntologyFields.TargetEnrichmentKit] = new HashSet<string>(TargetEnrichmentKits);
+        lists[OntologyFields.FullySequencedGenes] = new HashSet<string>(Genes);
+        lists[OntologyFields.PartiallySequencedGenes] = new HashSet<string>(Genes);
+        lists[OntologyFields.SequencingPlatform] = new HashSet<string>(Platforms);
+        lists[OntologyFields.SequencingInstrumentModel] = new HashSet<string>(InstrumentModels);
+        lists[OntologyFields.SequencingMethod] = new HashSet<string>(SequencingMethods);
+        lists[OntologyFields.DataFormatsStored] = new HashSet<string>(DataFormats);
+        lists[OntologyFields.ReferenceGenomeUsed] = new HashSet<string>(ReferenceGenomes);
 
         foreach (var (field, terms) in overrides)
         {

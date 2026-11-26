@@ -53,7 +53,7 @@ public sealed class CataloguePayloadLeakTests : IDisposable
             CataloguePatientMapper.ToPayload(Patient(), patientPseudonym, StudyId, LiveTerms.Resolver(), []),
             CatalogueSampleMapper.ToPayload(
                 Sample(), samplePseudonym, patientPseudonym, Biobank, LiveTerms.Resolver(), []),
-            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym),
+            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym, LiveTerms.Resolver(), []),
         };
 
         foreach (var payload in payloads)
@@ -87,7 +87,7 @@ public sealed class CataloguePayloadLeakTests : IDisposable
                 Sample(), samplePseudonym, patientPseudonym, Biobank, LiveTerms.Resolver(), []),
             Emx2Client.PayloadOptions);
         var sequencingJson = JsonSerializer.Serialize(
-            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym), Emx2Client.PayloadOptions);
+            CatalogueSequencingMapper.ToPayload(Sequencing(), samplePseudonym, LiveTerms.Resolver(), []), Emx2Client.PayloadOptions);
 
         Assert.Contains(patientPseudonym, patientJson, StringComparison.Ordinal);
         Assert.Contains(samplePseudonym, sampleJson, StringComparison.Ordinal);
