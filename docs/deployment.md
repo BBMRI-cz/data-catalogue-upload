@@ -157,7 +157,9 @@ is an anonymous POST that anyone able to reach it can fire.
 
 The uploader's `/admin/sync` is unauthenticated too, and it writes to the real catalogue. That is why
 `compose.uploader.yml` publishes it on `127.0.0.1:8003` with no bind variable to widen it: trigger a
-sync from the uploader's own machine, over SSH from anywhere else.
+sync from the uploader's own machine, over SSH from anywhere else. `/admin/ontology/unmapped` is on
+the same port, so it is loopback-only as well; whoever reads it for the mapping student does so from
+that machine or through an SSH tunnel.
 
 On a single locked-down host that is containable. Across a network it is not. At minimum:
 
@@ -238,7 +240,8 @@ curl -s http://127.0.0.1:8003/admin/sync
     "deleted": 0,
     "skipped": 0,
     "failed": 0,
-    "source_unavailable": 0
+    "source_unavailable": 0,
+    "unmapped": 29
   }
 }
 ```
@@ -262,6 +265,7 @@ curl -s http://127.0.0.1:8003/admin/sync
 | `skipped` | aggregates unchanged since the last run, or not eligible to publish |
 | `failed` | a payload the catalogue rejected, or a source that answered with something unreadable |
 | `source_unavailable` | a configured source that could not be reached at all |
+| `unmapped` | distinct values left out because no ontology term was found for them - not a failure, the rest of the row still went out |
 
 `failed` and `source_unavailable` are deliberately separate: the first means fix a payload, the
 second means chase an outage. A source with no URL is not deployed, is never contacted, and is
@@ -270,6 +274,31 @@ counted in neither — radiology and WSI are blank by design, because no such se
 An aggregate is a patient, a sample or a sequencing run, so the counters exceed the patient count.
 A run that ends with `failed` or `source_unavailable` above zero is also logged at error level
 (`docker compose -f compose.uploader.yml logs uploader`).
+
+The values behind `unmapped` are served, with how many catalogue rows hold each, for the
+ontology-mapping student to propose mappings for:
+
+```bash
+curl -s http://127.0.0.1:8003/admin/ontology/unmapped
+```
+
+```json
+[
+  {
+    "field": "SamplePreparation.libraryPreparationKit",
+    "value": "KAPA HyperPlus Kit",
+    "context": {},
+    "count": 2075,
+    "first_seen_at": "2026-10-26T02:00:04+00:00"
+  }
+]
+```
+
+It is read from the uploader's database, so it answers between runs - `[]` before the first. A run
+that heard from every source replaces the list; one that a source did not answer only adds to it, so
+an outage does not empty it. Each item is a field, a value as the source served it, its context, a
+count and the first sighting - never an identifier. [`ontology-mapping.md`](ontology-mapping.md)
+covers how values get there and how a mapping takes them off.
 
 ### The schedule, and why it runs in-process
 
@@ -386,8 +415,8 @@ run that reaches the end. Start one with `POST /admin/sync`, or leave it to the 
 
 ## 11. Known gaps
 
-- Neither source API authenticates callers, and neither does the uploader's `/admin/sync`. Section 6
-  is the mitigation, not a fix.
+- Neither source API authenticates callers, and neither does the uploader's `/admin/sync` or
+  `/admin/ontology/unmapped`. Section 6 is the mitigation, not a fix.
 - `Clinical.diagnosis` goes out empty until ICD-10 terms are loaded into the catalogue's `Diagnosis`
   ontology, which is the schema owner's decision.
 - Radiology and whole-slide imaging have no source service. Their URLs are blank, they are never

@@ -6,7 +6,8 @@ student's approved table plugs in. Specified in
 ([#119](https://github.com/BBMRI-cz/data-catalogue-upload/issues/119)), then the sample's
 ([#120](https://github.com/BBMRI-cz/data-catalogue-upload/issues/120)), then the sequencing's
 ([#121](https://github.com/BBMRI-cz/data-catalogue-upload/issues/121)), which retired the old
-`CatalogueVocabulary`.
+`CatalogueVocabulary`; the unmapped list is kept and served since
+[#122](https://github.com/BBMRI-cz/data-catalogue-upload/issues/122).
 
 **The rule: every ontology value is resolved while its payload is built, before the payload is
 fingerprinted.** An EMX2 ontology column is a foreign key, so a value that is not already a term
@@ -187,8 +188,70 @@ mapping table had no answer or answered a term the live list does not have; a ma
 carries its context (`Biospecimens.storageConditions 'PS' (sampleType: genome, label: Whole blood with
 DNA stabiliser)`), since the code alone does not say which material it is.
 
-The list is not kept beyond the run's log yet. Persisting it and serving it to the student at
-`GET /admin/ontology/unmapped`, with a count in the run summary, is #122.
+### The unmapped list
+
+At the end of a run its misses are written to the uploader's `unmapped_value` table
+(`IUnmappedValueRepository`, `SqlUnmappedValueRepository`), one row per field, value and context - the
+mapping table's own key - with:
+
+- **`count`**, the number of catalogue rows in the run whose field held the value. A row counts once
+  even when its array field holds the value twice: two samples of one patient with the same diagnosis
+  are one `Clinical` row, and two files of one role are one `Analysis` row. The resolver does this by
+  resolving each distinct element of an array once.
+- **`first_seen_at`**, when a run first met the value, kept for as long as the value stays on the list.
+- **the last run** (`LastRunId`) that met it, whose count `count` is.
+
+How the run writes it depends on whether it heard from every source:
+
+- **A run every source answered** - for every patient, the biobank, sequencing, WSI and radiology
+  sources that are deployed - met every value there is, so it **replaces** the list: a value it did
+  not meet has left the sources and drops off, and one still present keeps its `first_seen_at`. That
+  holds even when the run met no value at all, which empties the list. A patient the run skipped as unreadable or
+  invalid has no rows in it - the run deletes that patient from the catalogue as missing - so its
+  values are not counted either, and the list keeps matching what the catalogue holds.
+- **A run a source did not answer** for some patient - unreachable, or answering something
+  unreadable - **only adds and updates**: the values that source would have served are hidden, not
+  gone, so a sequencing outage does not empty the sequencing entries while the student's job reads
+  them.
+- **A run that stops before its first patient** (the study, the term lists, the mapping table or the
+  patient list could not be had) met nothing and leaves the list as it was.
+
+The context is stored as one JSON column holding the keys that are set (`{}` for none): it is part of
+the key and only ever read back whole.
+
+### `GET /admin/ontology/unmapped`
+
+Serves the list as the student's input, in the exchange format proposed to the student (it may
+change once the format is confirmed):
+
+```json
+[
+  {
+    "field": "Biospecimens.storageConditions",
+    "value": "PS",
+    "context": { "sample_type": "genome", "label": "Whole blood with DNA stabiliser" },
+    "count": 412,
+    "first_seen_at": "2026-11-23T02:00:04.117+00:00"
+  },
+  {
+    "field": "SamplePreparation.libraryPreparationKit",
+    "value": "KAPA HyperPlus Kit",
+    "context": {},
+    "count": 2075,
+    "first_seen_at": "2026-11-23T02:00:04.117+00:00"
+  }
+]
+```
+
+Items are sorted by field, then by count, descending, so within each term list the values most rows
+hold come first; ties go by value. `context` holds only the keys that are set: the material code's
+`sample_type` and `label` (no `label` for a code the biobank API does not know), and nothing for every
+other field. It is read from the table, so it answers between runs and before the first one (`[]`).
+Like `/admin/sync` it is on the uploader's port 8003, which is published on loopback only.
+
+**The run summary** counts the distinct values a run left unmapped - by field, value and context, the
+same values it logs a warning for - as `Unmapped`, stored in `sync_run` and served as `unmapped` in
+`GET /admin/sync`'s `last_run`.
 
 ## The gateway's safety net
 

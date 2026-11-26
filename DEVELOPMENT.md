@@ -119,12 +119,16 @@ curl http://localhost:8002/admin/ingest            # {"running": false, "last_ru
 # uploader sync service (http://localhost:8003; syncs Mon/Wed/Fri 02:00 UTC, and on demand)
 RUN_MIGRATIONS=true ASPNETCORE_URLS=http://localhost:8003 dotnet run --project src/Uploader/Uploader.Host
 curl -X POST http://localhost:8003/admin/sync      # 202 started, 409 one is already running
-curl http://localhost:8003/admin/sync              # {"running": false, "last_run": {"uploaded": ..., "failure": null}}
+curl http://localhost:8003/admin/sync              # {"running": false, "last_run": {"uploaded": ..., "unmapped": ..., "failure": null}}
+curl http://localhost:8003/admin/ontology/unmapped # [{"field": ..., "value": ..., "context": {...}, "count": ..., "first_seen_at": ...}]
 ```
 
 All three triggers return at once and run in the background; the `GET` beside each reports the
 latest run - `finished_at` null with `running` false means it was cut short (a crash or a restart),
-and `failure` says why a run could not do anything at all.
+and `failure` says why a run could not do anything at all. `GET /admin/ontology/unmapped` serves the
+values the runs could not fill an ontology field from, read from the uploader's `unmapped_value`
+table, so it answers without a run; [`docs/ontology-mapping.md`](docs/ontology-mapping.md) covers
+how a run writes it.
 
 ## Tests
 
@@ -155,6 +159,7 @@ docker compose -f compose.uploader.yml up -d --build     # uploader-db :5432 + u
 curl -X POST http://localhost:8001/admin/ingest           # ingest on demand
 curl -X POST http://localhost:8003/admin/sync             # sync on demand
 curl http://localhost:8003/admin/sync                     # how the latest sync went
+curl http://localhost:8003/admin/ontology/unmapped        # values no ontology term was found for
 ```
 
 The three stacks are three separate Compose projects on three separate networks even on one host, so
