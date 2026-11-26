@@ -1,4 +1,5 @@
 using ErrorOr;
+using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Domain;
 using Uploader.Domain.Common;
@@ -39,10 +40,14 @@ namespace Uploader.Application.Mapping;
 /// <c>PercentageTr20</c> and <c>AlgorithmsUsed</c>.
 /// </para>
 /// <para>
-/// <b>Ontology columns carried raw</b>: the kits are the source's own strings, because there is no
-/// code list to translate them from the way there is for a material code. The gateway checks each
-/// against the live ontology and drops the ones that are not terms, which costs a column rather than
-/// the row.
+/// <b>Ontology columns</b> go to the run's <see cref="TermResolver"/> exactly as the source served
+/// them, before the payload is fingerprinted: the kit names, each gene symbol with its star, the
+/// platform, the instrument serial (not the served model), each analysis file's role and the
+/// pipeline's reference-genome alias, all with an empty <see cref="TermContext"/>. The star is the one
+/// thing read here, because it decides which gene list a symbol is placed in; taking it off is the
+/// mapping table's job. The sequencing method is computed rather than served
+/// (<see cref="SequencingMapping.SequencingMethod"/>) and only checked against the live list. A value
+/// the resolver cannot place is left out of a row that still goes out.
 /// </para>
 /// </summary>
 public static class CatalogueSequencingMapper
@@ -63,12 +68,20 @@ public static class CatalogueSequencingMapper
         SequencingAggregate.Create(id.Value, ownerId);
 
     /// <param name="samplePseudonym">The owning sample's pseudonym, which keys the payload.</param>
-    public static CatalogueSequencingPayload ToPayload(SequencingDto dto, string samplePseudonym) =>
+    /// <param name="misses">Where the values the resolver could not place are recorded.</param>
+    public static CatalogueSequencingPayload ToPayload(
+        SequencingDto dto,
+        string samplePseudonym,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses) =>
         new()
         {
             ExternalId = samplePseudonym,
             SampleId = samplePseudonym,
-            SamplePreparations = [.. Pairs(dto).Select(pair => ToPreparation(pair.Sample, pair.Run, samplePseudonym))],
+            SamplePreparations =
+            [
+                .. Pairs(dto).Select(pair => ToPreparation(pair.Sample, pair.Run, samplePseudonym, terms, misses)),
+            ],
         };
 
     /// <summary>
@@ -94,11 +107,13 @@ public static class CatalogueSequencingMapper
     private static SamplePreparationRecord ToPreparation(
         SequencingSampleDto sample,
         SequencingRunDto run,
-        string samplePseudonym)
+        string samplePseudonym,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
         var preparationId = SequencingMapping.Identifier(SamplePrepModule, sample.SampleId, run.RunId);
         var library = run.LibraryPreparation;
-        var (fullySequenced, partiallySequenced) = SplitGenes(library?.Panel?.Genes);
+        var (fullySequenced, partiallySequenced) = SplitGenes(library?.Panel?.Genes, terms, misses);
 
         return new SamplePreparationRecord
         {
@@ -109,41 +124,36 @@ public static class CatalogueSequencingMapper
             // than the material, and the id is derived so it cannot drift from the row it names.
             BelongsToBiospecimen = BiobankMapping.BiospecimenIdentifier(samplePseudonym),
             InputAmount = library?.InputAmount,
-            LibraryPreparationKit = library?.LibraryPrepKit,
+            LibraryPreparationKit = terms.Resolve(
+                OntologyFields.LibraryPreparationKit, library?.LibraryPrepKit, misses),
             PcrFree = library?.PcrFree,
-            TargetEnrichmentKit = library?.TargetEnrichmentKit,
+            TargetEnrichmentKit = terms.Resolve(
+                OntologyFields.TargetEnrichmentKit, library?.TargetEnrichmentKit, misses),
 
             FullySequencedGenes = fullySequenced,
             PartiallySequencedGenes = partiallySequenced,
             UmisPresent = library?.UmiPresent,
             IntendedInsertSize = library?.IntendedInsertSize,
             IntendedReadLength = library?.IntendedReadLength,
-            Sequencing = ToSequencingRecord(sample, run, preparationId),
+            Sequencing = ToSequencingRecord(sample, run, preparationId, terms, misses),
         };
     }
 
     /// <summary>
     /// The libraries table marks a gene whose coding regions are all covered with a star
     /// ("Genes (*all coding regions covered)"), and the sequencing API keeps the star in the symbol.
-    /// A starred gene is fully sequenced, the rest partially; the star comes off, because
-    /// <c>BRCA1*</c> is not an HGNC term and the catalogue would drop it.
+    /// That placement is ours: a starred gene is fully sequenced, the rest partially. The symbol goes to
+    /// the resolver as served, star and all - <c>BRCA1*</c> is not an HGNC term, and taking the star
+    /// off is the mapping table's job. A list left empty is left out of the row.
     /// </summary>
     private static (IReadOnlyList<string>? Fully, IReadOnlyList<string>? Partially) SplitGenes(
-        IReadOnlyList<string>? genes)
+        IReadOnlyList<string>? genes,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
-        var fully = new List<string>();
-        var partially = new List<string>();
-
-        foreach (var gene in genes ?? [])
-        {
-            var symbol = gene.TrimEnd('*');
-            if (symbol.Length == 0)
-            {
-                continue; // a stray star, not a gene
-            }
-
-            (symbol.Length < gene.Length ? fully : partially).Add(symbol);
-        }
+        var starred = (genes ?? []).ToLookup(gene => gene.TrimEnd().EndsWith('*'));
+        var fully = terms.ResolveAll(OntologyFields.FullySequencedGenes, starred[true], misses);
+        var partially = terms.ResolveAll(OntologyFields.PartiallySequencedGenes, starred[false], misses);
 
         return (fully.Count == 0 ? null : fully, partially.Count == 0 ? null : partially);
     }
@@ -151,7 +161,9 @@ public static class CatalogueSequencingMapper
     private static SequencingRecord ToSequencingRecord(
         SequencingSampleDto sample,
         SequencingRunDto run,
-        string? preparationId)
+        string? preparationId,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
         // Quality is computed per analysis, while FAIR states it on the sequencing. The first analysis
         // that states a number wins; MMCI runs one analysis per run-sample, so this only arbitrates a
@@ -164,10 +176,14 @@ public static class CatalogueSequencingMapper
             SequencingIdentifier = sequencingId,
             BelongsToSamplePreparation = preparationId,
             SequencingDate = run.RunDate,
-            SequencingPlatform = CatalogueVocabulary.SequencingPlatform(run.Platform),
-            SequencingInstrumentModel = CatalogueVocabulary.SequencingInstrumentModel(run.InstrumentId),
+            SequencingPlatform = terms.Resolve(OntologyFields.SequencingPlatform, run.Platform, misses),
 
-            SequencingMethod = CatalogueVocabulary.SequencingMethod,
+            // The serial, not the served instrument_model: that is the folder the run was filed under
+            // (NextSeq), and only the serial's prefix tells the 500 from the 550.
+            SequencingInstrumentModel = terms.Resolve(
+                OntologyFields.SequencingInstrumentModel, run.InstrumentId, misses),
+            SequencingMethod = terms.Resolve(
+                OntologyFields.SequencingMethod, SequencingMapping.SequencingMethod, misses),
 
             // FAIR types the median depth as an integer; the source keeps the fraction it was given
             // (a mean over the region of interest) and leaves the rounding to whoever needs a whole
@@ -186,14 +202,16 @@ public static class CatalogueSequencingMapper
                 run.EstimatedYield,
                 run.CompletionStatus,
                 run.ErrorDescription),
-            Analyses = ToAnalyses(sample, run, sequencingId),
+            Analyses = ToAnalyses(sample, run, sequencingId, terms, misses),
         };
     }
 
     private static List<AnalysisRecord> ToAnalyses(
         SequencingSampleDto sample,
         SequencingRunDto run,
-        string? sequencingId)
+        string? sequencingId,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
         var analyses = run.Analyses ?? [];
         var baseId = SequencingMapping.Identifier(AnalysisModule, sample.SampleId, run.RunId);
@@ -205,18 +223,25 @@ public static class CatalogueSequencingMapper
                 // A run-sample analysed more than once needs the extra analyses told apart; the first
                 // keeps the plain identifier so the common case reads as the previous uploader's.
                 index == 0 || baseId is null ? baseId : $"{baseId}_{index}",
-                sequencingId)),
+                sequencingId,
+                terms,
+                misses)),
         ];
     }
 
-    private static AnalysisRecord ToAnalysis(AnalysisDto dto, string? analysisId, string? sequencingId)
+    private static AnalysisRecord ToAnalysis(
+        AnalysisDto dto,
+        string? analysisId,
+        string? sequencingId,
+        TermResolver terms,
+        ICollection<UnmappedValue> misses)
     {
         var files = dto.Files ?? [];
 
         // The role says what a file is for and is a closed set; the source's own `format` is free
         // text. Only the role can be turned into an ontology term reliably, so it is what the
-        // format list is built from.
-        var formats = CatalogueVocabulary.DataFormats(files.Select(file => file.Role));
+        // format list is built from - several roles collapse onto one format.
+        var formats = terms.ResolveAll(OntologyFields.DataFormatsStored, files.Select(file => file.Role), misses);
 
         return new AnalysisRecord
         {
@@ -224,7 +249,7 @@ public static class CatalogueSequencingMapper
             BelongsToSequencing = sequencingId,
             DataFormatsStored = formats.Count == 0 ? null : formats,
             AlgorithmsUsed = null,
-            ReferenceGenomeUsed = CatalogueVocabulary.ReferenceGenome(dto.ReferenceGenome),
+            ReferenceGenomeUsed = terms.Resolve(OntologyFields.ReferenceGenomeUsed, dto.ReferenceGenome, misses),
             BioinformaticProtocolUsed = dto.PipelineName,
         };
     }

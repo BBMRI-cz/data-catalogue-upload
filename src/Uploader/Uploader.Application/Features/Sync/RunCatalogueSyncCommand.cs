@@ -315,7 +315,7 @@ internal sealed class RunCatalogueSyncCommandHandler
         foreach (var (dto, sequencing) in assembled.Sequencings)
         {
             sequencingPayloads[sequencing] = CatalogueSequencingMapper.ToPayload(
-                dto, pseudonyms.Sample(sequencing.SampleId));
+                dto, pseudonyms.Sample(sequencing.SampleId), terms, misses);
         }
 
         return new PatientPayloads(

@@ -67,7 +67,7 @@ public sealed class FingerprintTests
             new() { Samples = [new SequencingSampleDto { SampleId = "p0001", Runs = runs }] };
 
         Assert.NotEqual(
-            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first), "mmci_sample_S1")),
-            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first, second), "mmci_sample_S1")));
+            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first), "mmci_sample_S1", LiveTerms.Resolver(), [])),
+            Fingerprint.Of(CatalogueSequencingMapper.ToPayload(Sequenced(first, second), "mmci_sample_S1", LiveTerms.Resolver(), [])));
     }
 }

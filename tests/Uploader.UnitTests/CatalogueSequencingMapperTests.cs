@@ -1,3 +1,4 @@
+using Uploader.Application.Abstractions;
 using Uploader.Application.Dtos;
 using Uploader.Application.Mapping;
 using Uploader.Domain.Common;
@@ -10,7 +11,9 @@ namespace Uploader.UnitTests;
 /// that are carried, the ones deliberately left behind, and the identifiers. The recorded-payload half
 /// lives in <c>Uploader.IntegrationTests.SequencingFetchTests</c>; these start from a built DTO. The
 /// sample pseudonym is the fake map's <c>mmci_sample_&lt;id&gt;</c>, so an assertion on the biospecimen
-/// reference states both that it was substituted and which sample it was substituted from.
+/// reference states both that it was substituted and which sample it was substituted from. The
+/// ontology values go through a real <see cref="TermResolver"/> over <see cref="LiveTerms"/> and
+/// today's rules.
 /// </summary>
 public sealed class CatalogueSequencingMapperTests
 {
@@ -100,9 +103,38 @@ public sealed class CatalogueSequencingMapperTests
         var prep = PreparationWithGenes("BRCA1*", "TP53", "ALK*");
 
         // The libraries table stars a gene whose coding regions are all covered. The star is not part
-        // of the HGNC symbol, so it comes off - "BRCA1*" would be dropped by the catalogue.
-        Assert.Equal(["BRCA1", "ALK"], prep.FullySequencedGenes);
+        // of the HGNC symbol, so the mapping table takes it off - "BRCA1*" is not a term. Each list is
+        // ordered, so the fingerprint does not follow the libraries table's order.
+        Assert.Equal(["ALK", "BRCA1"], prep.FullySequencedGenes);
         Assert.Equal(["TP53"], prep.PartiallySequencedGenes);
+    }
+
+    /// <summary>
+    /// The star decides the list, so a starred gene reaches the resolver as served - star and all - and
+    /// a miss is recorded that way, under the list it was placed in.
+    /// </summary>
+    [Fact]
+    public void AGeneThatIsNotATermIsLeftOutAndRecordedAsServed()
+    {
+        var misses = new List<UnmappedValue>();
+        var run = Run("R1") with
+        {
+            LibraryPreparation = new LibraryPreparationDto
+            {
+                Panel = new PanelDto { Genes = ["BRCA1*", "NOTAGENE1*", "TP53", "NOTAGENE2"] },
+            },
+        };
+
+        var prep = MapOne(run, misses);
+
+        Assert.Equal(["BRCA1"], prep.FullySequencedGenes);
+        Assert.Equal(["TP53"], prep.PartiallySequencedGenes);
+        Assert.Equal(
+            [
+                new UnmappedValue(OntologyFields.FullySequencedGenes, "NOTAGENE1*", TermContext.Empty),
+                new UnmappedValue(OntologyFields.PartiallySequencedGenes, "NOTAGENE2", TermContext.Empty),
+            ],
+            misses);
     }
 
     [Fact]
@@ -230,6 +262,65 @@ public sealed class CatalogueSequencingMapperTests
         Assert.Equal(["BAM", "VCF"], analysis.DataFormatsStored);
     }
 
+    /// <summary>
+    /// <c>other</c> is the sequencing API's escape hatch for an artifact it does not recognise, so it
+    /// has no format on purpose and is not reported; a role nobody has mapped is. An analysis with no
+    /// format left leaves the list out of the row.
+    /// </summary>
+    [Fact]
+    public void AFileRoleWithNoFormatIsLeftOutAndOnlyAnUnknownOneIsRecorded()
+    {
+        var misses = new List<UnmappedValue>();
+        var run = Run("R1") with
+        {
+            Analyses =
+            [
+                new AnalysisDto
+                {
+                    PipelineName = "NextGENe",
+                    Files =
+                    [
+                        new SequencingFileDto { Role = "other", Path = "/a.txt" },
+                        new SequencingFileDto { Role = "cram", Path = "/b.cram" },
+                    ],
+                },
+            ],
+        };
+
+        var analysis = Assert.Single(MapOne(run, misses).Sequencing!.Analyses);
+
+        Assert.Null(analysis.DataFormatsStored);
+        Assert.Equal([new UnmappedValue(OntologyFields.DataFormatsStored, "cram", TermContext.Empty)], misses);
+    }
+
+    /// <summary>The pipelines write aliases; the ontology carries the builds.</summary>
+    [Theory]
+    [InlineData("hg19", "GRCh37")]
+    [InlineData("GRCh38", "GRCh38")]   // already a term, used as served
+    public void AReferenceGenomeAliasBecomesItsBuild(string alias, string term)
+    {
+        var run = Run("R1") with { Analyses = [new AnalysisDto { PipelineName = "NextGENe", ReferenceGenome = alias }] };
+
+        Assert.Equal(term, Assert.Single(MapOne(run).Sequencing!.Analyses).ReferenceGenomeUsed);
+    }
+
+    [Fact]
+    public void AReferenceGenomeNoRuleKnowsIsLeftOutAndRecorded()
+    {
+        var misses = new List<UnmappedValue>();
+        var run = Run("R1") with
+        {
+            Analyses = [new AnalysisDto { PipelineName = "NextGENe", ReferenceGenome = "T2T-CHM13" }],
+        };
+
+        var analysis = Assert.Single(MapOne(run, misses).Sequencing!.Analyses);
+
+        Assert.Null(analysis.ReferenceGenomeUsed);
+        Assert.Equal("NextGENe", analysis.BioinformaticProtocolUsed);
+        Assert.Equal(
+            [new UnmappedValue(OntologyFields.ReferenceGenomeUsed, "T2T-CHM13", TermContext.Empty)], misses);
+    }
+
     [Fact]
     public void RunSampleFilesAreDropped()
     {
@@ -286,6 +377,37 @@ public sealed class CatalogueSequencingMapperTests
     }
 
     [Fact]
+    public void AKitThatIsALiveTermIsCarriedAsServed()
+    {
+        var misses = new List<UnmappedValue>();
+
+        var prep = MapOne(WithKits("KAPA HyperPlus", "KAPA HyperCap"), misses);
+
+        Assert.Equal("KAPA HyperPlus", prep.LibraryPreparationKit);
+        Assert.Equal("KAPA HyperCap", prep.TargetEnrichmentKit);
+        Assert.Empty(misses);
+    }
+
+    /// <summary>
+    /// The two kit names MMCI's libraries table writes that the catalogue has no term for. They used to
+    /// be fingerprinted and then dropped by the gateway, so a term arriving later never re-sent the
+    /// preparation; now they are left out before the fingerprint and reported.
+    /// </summary>
+    [Theory]
+    [InlineData("KAPA HyperPlus Kit")]
+    [InlineData("TruSight Oncology 500 Assay")]
+    public void AKitThatIsNotATermIsLeftOutAndRecorded(string kit)
+    {
+        var misses = new List<UnmappedValue>();
+
+        var prep = MapOne(WithKits(kit, "KAPA HyperCap"), misses);
+
+        Assert.Null(prep.LibraryPreparationKit);
+        Assert.Equal("KAPA HyperCap", prep.TargetEnrichmentKit);   // the rest of the row still goes out
+        Assert.Equal(new UnmappedValue(OntologyFields.LibraryPreparationKit, kit, TermContext.Empty), Assert.Single(misses));
+    }
+
+    [Fact]
     public void MissingLibraryPreparationLeavesPrepFieldsNull()
     {
         var prep = Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }).SamplePreparations);
@@ -318,6 +440,69 @@ public sealed class CatalogueSequencingMapperTests
         Assert.Null(sequencing.PercentageQ30);
         Assert.Null(sequencing.OtherQualityMetrics);
         Assert.Empty(sequencing.Analyses);
+    }
+
+    /// <summary>
+    /// The platform and the instrument serial go to the resolver as served: neither is a term, so the
+    /// mapping table turns them into one - the model from the serial's prefix, not from the served
+    /// <c>instrument_model</c> folder name.
+    /// </summary>
+    [Fact]
+    public void TheRunsPlatformAndSerialBecomeTerms()
+    {
+        var misses = new List<UnmappedValue>();
+        var run = Run("R1") with { Platform = "Illumina", InstrumentId = "NB552710", InstrumentModel = "NextSeq" };
+
+        var sequencing = MapOne(run, misses).Sequencing!;
+
+        Assert.Equal("Illumina platform", sequencing.SequencingPlatform);
+        Assert.Equal("Illumina NextSeq 550", sequencing.SequencingInstrumentModel);
+        Assert.Empty(misses);
+    }
+
+    /// <summary>
+    /// A NovaSeq serial and a vendor nobody has named a platform for: no rule decides them, so both are
+    /// left out of a row that still goes out, and reported.
+    /// </summary>
+    [Fact]
+    public void APlatformAndSerialNoRuleKnowsAreLeftOutAndRecorded()
+    {
+        var misses = new List<UnmappedValue>();
+        var run = Run("R1") with { RunDate = "2024-01-04", Platform = "Element", InstrumentId = "A00123" };
+
+        var sequencing = MapOne(run, misses).Sequencing!;
+
+        Assert.Null(sequencing.SequencingPlatform);
+        Assert.Null(sequencing.SequencingInstrumentModel);
+        Assert.Equal("2024-01-04", sequencing.SequencingDate);
+        Assert.Equal(
+            [
+                new UnmappedValue(OntologyFields.SequencingPlatform, "Element", TermContext.Empty),
+                new UnmappedValue(OntologyFields.SequencingInstrumentModel, "A00123", TermContext.Empty),
+            ],
+            misses);
+    }
+
+    /// <summary>
+    /// Worked out in our code rather than looked up - every MMCI run is Illumina sequencing by
+    /// synthesis - but still only sent as a live term: a catalogue that drops it shows it on the
+    /// unmapped list instead of rejecting the row.
+    /// </summary>
+    [Fact]
+    public void ASequencingMethodTheCatalogueDoesNotListIsAMiss()
+    {
+        var misses = new List<UnmappedValue>();
+        var terms = new TermResolver(
+            LiveTerms.Lists((OntologyFields.SequencingMethod, [])), new RuleMappingSnapshot());
+
+        var sequencing = Assert.Single(
+            Map(new SequencingDto { Samples = [Sample("p0001", Run("R1"))] }, misses, terms).SamplePreparations)
+            .Sequencing!;
+
+        Assert.Null(sequencing.SequencingMethod);
+        Assert.Equal(
+            [new UnmappedValue(OntologyFields.SequencingMethod, "Illumina Sequencing", TermContext.Empty)],
+            misses);
     }
 
     [Fact]
@@ -368,8 +553,24 @@ public sealed class CatalogueSequencingMapperTests
         Assert.Equal(BiospecimenPseudonym, Assert.Single(payload.SamplePreparations).BelongsToBiospecimen);
     }
 
-    private static CatalogueSequencingPayload Map(SequencingDto dto) =>
-        CatalogueSequencingMapper.ToPayload(dto, SamplePseudonym);
+    private static CatalogueSequencingPayload Map(
+        SequencingDto dto,
+        ICollection<UnmappedValue>? misses = null,
+        TermResolver? terms = null) =>
+        CatalogueSequencingMapper.ToPayload(dto, SamplePseudonym, terms ?? LiveTerms.Resolver(), misses ?? []);
+
+    private static SamplePreparationRecord MapOne(SequencingRunDto run, ICollection<UnmappedValue>? misses = null) =>
+        Assert.Single(Map(new SequencingDto { Samples = [Sample("p0001", run)] }, misses).SamplePreparations);
+
+    private static SequencingRunDto WithKits(string? libraryPrepKit, string? targetEnrichmentKit) =>
+        Run("R1") with
+        {
+            LibraryPreparation = new LibraryPreparationDto
+            {
+                LibraryPrepKit = libraryPrepKit,
+                TargetEnrichmentKit = targetEnrichmentKit,
+            },
+        };
 
     private static SequencingSampleDto Sample(string sampleId, params SequencingRunDto[] runs) =>
         new() { SampleId = sampleId, IdScheme = "mmci_predictive", Runs = runs };
