@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Mediator;
+using Uploader.Application.Features.Ontology;
 using Uploader.Application.Features.Sync;
 using Uploader.Host.Http;
 using Uploader.Host.Mapping;
@@ -23,6 +25,17 @@ internal static class AdminEndpoints
             var result = await sender.Send(new GetLatestSyncRunQuery(), cancellationToken);
             return result.Match(
                 latest => Results.Ok(SyncStatusResponseMapper.ToResponse(runner.IsRunning, latest)),
+                ErrorResults.Problem);
+        })
+        .WithTags("admin");
+
+        // The values the latest runs could not fill an ontology field from, for the ontology-mapping
+        // student. Read from the table, so it answers between runs and before the first one.
+        app.MapGet("/admin/ontology/unmapped", async (ISender sender, CancellationToken cancellationToken) =>
+        {
+            var result = await sender.Send(new GetUnmappedValuesQuery(), cancellationToken);
+            return result.Match(
+                list => Results.Ok(UnmappedValuesResponseMapper.ToResponse(list)),
                 ErrorResults.Problem);
         })
         .WithTags("admin");
@@ -52,3 +65,24 @@ public sealed record SyncRunResponse(
     int Failed,
     int SourceUnavailable,
     int Unmapped);
+
+/// <summary>
+/// One item of <c>GET /admin/ontology/unmapped</c>, in the exchange format proposed to the
+/// ontology-mapping student: the catalogue field as table and column, the value exactly as the source
+/// served it, the context it was looked up in, how many catalogue rows held it in the run that last
+/// met it, and when a run first did. It never carries an identifier or a record.
+/// </summary>
+public sealed record UnmappedValueResponse(
+    string Field,
+    string Value,
+    UnmappedContextResponse Context,
+    int Count,
+    DateTimeOffset FirstSeenAt);
+
+/// <summary>
+/// The context a value was looked up in, holding only the keys that are set: the sample type and the
+/// biobank's label for a material code, and nothing - <c>{}</c> - for every other field.
+/// </summary>
+public sealed record UnmappedContextResponse(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SampleType,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Label);
