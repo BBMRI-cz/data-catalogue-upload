@@ -41,6 +41,7 @@ public static class DependencyInjection
 
         services.AddScoped<ISyncStateRepository, SyncStateRepository>();
         services.AddScoped<ISyncRunRepository, SyncRunRepository>();
+        services.AddScoped<IUnmappedValueRepository, SqlUnmappedValueRepository>();
 
         AddSourceClient(services, HttpSourceDataGateway.BiobankClient, options.BiobankApiUrl);
         AddSourceClient(services, HttpSourceDataGateway.RadiologyClient, options.RadiologyApiUrl);

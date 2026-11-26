@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Uploader.Infrastructure.Persistence;
 
 namespace Uploader.IntegrationTests;
@@ -23,6 +24,25 @@ internal sealed class SqliteDatabase : IDisposable
 
         var context = new UploaderDbContext(options);
         context.Database.EnsureCreated();
+        return context;
+    }
+
+    /// <summary>
+    /// A context over the schema the migrations build, rather than one built from the model, so a test
+    /// can tell whether a migration creates what the repositories write.
+    /// </summary>
+    public UploaderDbContext NewMigratedContext()
+    {
+        var options = new DbContextOptionsBuilder<UploaderDbContext>()
+            .UseSqlite(_connection)
+
+            // The migrations are generated for Postgres, so the model as SQLite maps it always differs
+            // from their snapshot. Whether they match the model is checked against Npgsql instead.
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+
+        var context = new UploaderDbContext(options);
+        context.Database.Migrate();
         return context;
     }
 

@@ -17,6 +17,7 @@ public sealed class UploaderDbContext : DbContext
     public DbSet<WsiSyncStateEntity> WsiSyncStates => Set<WsiSyncStateEntity>();
     public DbSet<ImagingStudySyncStateEntity> ImagingStudySyncStates => Set<ImagingStudySyncStateEntity>();
     public DbSet<PseudonymEntity> Pseudonyms => Set<PseudonymEntity>();
+    public DbSet<UnmappedValueEntity> UnmappedValues => Set<UnmappedValueEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -89,6 +90,14 @@ public sealed class UploaderDbContext : DbContext
             // Two real ids sharing a pseudonym would merge two people in the catalogue, so the
             // database refuses it rather than trusting the generator never to repeat.
             builder.HasIndex(pseudonym => new { pseudonym.Kind, pseudonym.Pseudonym }).IsUnique();
+        });
+
+        modelBuilder.Entity<UnmappedValueEntity>(builder =>
+        {
+            builder.ToTable("unmapped_value");
+
+            // The mapping table's own key: one value can be unmapped in two fields, or in two contexts.
+            builder.HasKey(value => new { value.Field, value.Value, value.Context });
         });
     }
 
